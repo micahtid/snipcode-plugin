@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sample Product Page</title>
+<style>
+  :root {
+    --brand: #2b6cb0;
+    --ink: #1a202c;
+    --muted: #718096;
+    --radius: 10px;
+    --pad: 16px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; color: var(--ink); }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: var(--pad) 32px; background: #fff; border-bottom: 1px solid #e2e8f0;
+  }
+  header nav { display: flex; gap: 20px; }
+  header nav a { color: var(--muted); text-decoration: none; font-weight: 500; }
+  header nav a:hover { color: var(--brand); }
+  .login {
+    background: var(--brand); color: #fff; border: none;
+    padding: 10px 20px; border-radius: var(--radius); font-weight: 600;
+    cursor: pointer; transition: background 0.2s ease;
+  }
+  .login:hover { background: #1e4e8c; }
+  .hero {
+    padding: 64px 32px; text-align: center; background: #f7fafc;
+  }
+  .hero h1 { font-size: 40px; margin: 0 0 12px; }
+  .hero p { color: var(--muted); font-size: 18px; margin: 0; }
+  .cards {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+    max-width: 1080px; margin: 48px auto; padding: 0 32px;
+  }
+  .card {
+    border: 1px solid #e2e8f0; border-radius: var(--radius);
+    padding: 24px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .card h3 { margin: 0 0 8px; font-size: 20px; }
+  .card p { margin: 0; color: var(--muted); }
+  footer { padding: 32px; text-align: center; color: var(--muted); border-top: 1px solid #e2e8f0; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="logo">Acme</div>
+    <nav>
+      <a href="/features">Features</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/docs">Docs</a>
+    </nav>
+    <button id="login" class="login" type="submit">Log In</button>
+  </header>
+
+  <section class="hero">
+    <h1>Build faster with Acme</h1>
+    <p>The toolkit teams reach for.</p>
+  </section>
+
+  <main class="cards">
+    <article class="card"><h3>Fast</h3><p>Ship in minutes, not weeks.</p></article>
+    <article class="card"><h3>Simple</h3><p>An API you learn once.</p></article>
+    <article class="card"><h3>Reliable</h3><p>Battle-tested in production.</p></article>
+  </main>
+
+  <footer>© 2026 Acme, Inc.</footer>
+</body>
+</html>
