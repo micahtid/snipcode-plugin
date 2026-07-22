@@ -21,13 +21,17 @@
     "build": "npm run build:core && npm run build:node",
     "typecheck": "tsc -p core/tsconfig.json && tsc -p tsconfig.node.json",
     "gen:skill": "tsx cli/src/gen-skill.ts",
-    "test": "npm run build && tsx test/run.ts"
+    "test": "npm run build && tsx test/run.ts",
+    "test:fidelity": "npm run build && tsx test/fidelity.ts"
   },
   "dependencies": {
     "playwright": "^1.60.0"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
+    "@types/pngjs": "^6.0.5",
+    "pixelmatch": "^7.2.0",
+    "pngjs": "^7.0.0",
     "tsx": "^4.19.0",
     "typescript": "^5.6.2",
     "vite": "^7.0.0"
