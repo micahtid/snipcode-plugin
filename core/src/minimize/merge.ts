@@ -1,0 +1,304 @@
+/**
+ * minimize/merge.ts: merge identical rules into selector lists
+ *
+ * Pipeline position: minimize, after normalize and before relax
+ * Reads from Captured: page.viewport via the oracle, plus warnings on graceful skip
+ * Writes to Captured: nothing. It transforms the normalized stylesheet string.
+ *
+ * Why this exists: the reproduce phase gives every element its own generated class and
+ * rule, so a grid of eight cards styled the same emits the same declaration block eight
+ * times. Pruning and normalizing can also drive two rules that differed to the identical
+ * body. A human writes that body once against a selector list. This phase collapses every
+ * group of rules whose declaration block is now identical into one rule whose selector is
+ * the comma-joined list, in document order, and drops the duplicates.
+ *
+ * The merged resting rule takes the position of the last rule in its group, the latest
+ * cascade position the block held. Every such merge is verified by the computed-style oracle
+ * over exactly the elements the group's selectors match. So a cascade change from moving a
+ * block later, past some rule that overrides one of its properties, is caught, and that merge
+ * is reverted while the others stand.
+ *
+ * The withheld state and pseudo rules are merged too, but the resting oracle is blind to
+ * them, so their merge is accepted by construction under syntactic checks rather than by the
+ * oracle (see mergeWithheldRules). At rules stay out of scope. The transform is deterministic,
+ * groups are processed in selector order, and it only ever shrinks the stylesheet.
+ */
+import type { Captured } from '../types';
+import { withOracle, type RenderOracle } from './oracle';
+import { inScopeRule, serializeRules, WITHHELD } from './declarations';
+
+/**
+ * The dynamic pseudo-classes and every pseudo-element, stripped from a withheld selector to
+ * find the elements it targets. The remaining selector, its classes, attributes, and the
+ * data-snip markers, matches those elements at rest, so querying it locates the render a
+ * cascade reorder could touch. The dynamic-class alternatives are longest-first so
+ * `:focus-visible` is consumed whole rather than leaving a `-visible` fragment.
+ */
+const DYNAMIC_PSEUDO = /::[\w-]+(?:\([^)]*\))?|:(?:hover|focus-visible|focus-within|focus|active|visited|link|target)(?![-\w])/gi;
+
+/**
+ * Merges rules with identical declaration blocks into selector lists. It is graceful by
+ * contract, returning the input unchanged on any infrastructure failure. Each individual
+ * merge is oracle-verified and reverted if it is not render-neutral.
+ *
+ * @param css - the normalized stylesheet, after normalize
+ * @param captured - source of the viewport size. Warnings are appended here on skip.
+ * @param markup - the emitted root markup the stylesheet targets, mounted in the oracle
+ * @returns the merged stylesheet, or the input unchanged on any failure
+ */
+export async function mergeCss(css: string, captured: Captured, markup: string): Promise<string> {
+	return withOracle(css, captured, markup, 'merge: skipped', (oracle) => {
+		oracle.captureReference();
+		const topRules = Array.from(oracle.sheet.cssRules);
+
+		// Group the in-scope rules by their declaration block, keeping document order within
+		// each group. An emptied rule carries no block to share, so it is skipped.
+		const byBody = new Map<string, CSSStyleRule[]>();
+		for (const rule of topRules) {
+			const styleRule = inScopeRule(rule);
+			if (!styleRule || styleRule.style.length === 0) continue;
+			const body = styleRule.style.cssText;
+			const group = byBody.get(body);
+			if (group) group.push(styleRule);
+			else byBody.set(body, [styleRule]);
+		}
+
+		// Merge each group of two or more, in selector order for determinism.
+		const groups = [...byBody.values()].filter((g) => g.length >= 2);
+		groups.sort((a, b) => a[0]!.selectorText.localeCompare(b[0]!.selectorText));
+		for (const group of groups) mergeGroup(oracle, group);
+
+		// Extend the merge to the withheld state and pseudo rules, which the resting oracle
+		// cannot verify, under the syntactic checks in mergeWithheldRules.
+		mergeWithheldRules(oracle, topRules);
+
+		return serializeRules(topRules);
+	});
+}
+
+/**
+ * Merges one group of identical-body rules in place, reverting if the merge is not
+ * render-neutral. The last rule keeps the block and takes the comma-joined selector, and the
+ * earlier rules are emptied so serialize drops them. Verification is scoped to the
+ * elements the group's selectors match and their descendants, the only render a position
+ * change can affect.
+ *
+ * @param oracle - the mounted render
+ * @param group - the identical-body rules, in document order
+ */
+function mergeGroup(oracle: RenderOracle, group: CSSStyleRule[]): void {
+	const keeper = group[group.length - 1]!;
+	const savedSelector = keeper.selectorText;
+	const savedBodies = group.map((r) => r.style.cssText);
+
+	const affected = oracle.subtreeTargets(matchedElements(oracle, group));
+	keeper.selectorText = group.map((r) => r.selectorText).join(', ');
+	for (let i = 0; i < group.length - 1; i++) group[i]!.style.cssText = '';
+
+	if (!oracle.matchesSubset(affected)) {
+		keeper.selectorText = savedSelector;
+		group.forEach((r, i) => (r.style.cssText = savedBodies[i]!));
+	}
+}
+
+/** The elements any rule in the group matches, before the merge changes any selector. */
+function matchedElements(oracle: RenderOracle, group: CSSStyleRule[]): Element[] {
+	const seen = new Set<Element>();
+	for (const rule of group) {
+		try {
+			for (const el of Array.from(oracle.body.querySelectorAll(rule.selectorText))) seen.add(el);
+		} catch {
+			// An unsupported selector matches nothing here, and the subtree check still guards the rest.
+		}
+	}
+	return [...seen];
+}
+
+/** A top-level style rule with its position and the elements it participates in styling. */
+interface StyleRuleRef {
+	rule: CSSStyleRule;
+	pos: number;
+	withheld: boolean;
+	/** The elements it can style, its dynamic pseudos stripped, or null when undeterminable. */
+	targets: Set<Element> | null;
+}
+
+/**
+ * Merges the withheld state and pseudo rules with identical declaration blocks into selector
+ * lists, keeping the first rule's position and joining the selectors in document order. The
+ * resting oracle is blind to these rules, so a merge is accepted only by construction, when
+ * three syntactic checks hold. The bodies must be byte-identical (the grouping key). Each
+ * selector keeps its own specificity in a list, so joining changes none. And no rule the merge
+ * reorders a group member past may flip a cascade result (see safeToMergeWithheld). Two rules
+ * that touch disjoint properties, or that the element resolves by specificity or importance
+ * rather than source order, cannot flip, so most groups collapse. A group that could flip is
+ * left as written.
+ *
+ * @param oracle - the mounted render, used only to resolve which elements a selector targets
+ * @param topRules - the frame stylesheet's top-level rules, mutated in place
+ */
+function mergeWithheldRules(oracle: RenderOracle, topRules: CSSRule[]): void {
+	// Every top-level style rule, resting and withheld, with the elements it can style, so a
+	// group's merge is checked against every rule it would reorder past rather than assuming
+	// the withheld rules form one contiguous block.
+	const styleRules: StyleRuleRef[] = [];
+	for (let pos = 0; pos < topRules.length; pos++) {
+		const rule = topRules[pos]!;
+		if (rule.type !== CSSRule.STYLE_RULE) continue;
+		const styleRule = rule as CSSStyleRule;
+		if (styleRule.style.length === 0) continue;
+		const withheld = WITHHELD.test(styleRule.selectorText || '');
+		styleRules.push({ rule: styleRule, pos, withheld, targets: ruleTargets(oracle, styleRule.selectorText, withheld) });
+	}
+
+	// Group the withheld rules by declaration block, document order preserved within each group.
+	const byBody = new Map<string, StyleRuleRef[]>();
+	for (const ref of styleRules) {
+		if (!ref.withheld) continue;
+		const group = byBody.get(ref.rule.style.cssText);
+		if (group) group.push(ref);
+		else byBody.set(ref.rule.style.cssText, [ref]);
+	}
+
+	const groups = [...byBody.values()].filter((g) => g.length >= 2);
+	groups.sort((a, b) => a[0]!.rule.selectorText.localeCompare(b[0]!.rule.selectorText));
+	for (const group of groups) {
+		if (!safeToMergeWithheld(group, styleRules)) continue;
+		const keeper = group[0]!.rule;
+		keeper.selectorText = group.map((w) => w.rule.selectorText).join(', ');
+		for (let i = 1; i < group.length; i++) group[i]!.rule.style.cssText = ''; // Dropped by serialize.
+	}
+}
+
+/**
+ * Whether merging a withheld group is render-neutral. The group's selectors collapse onto the
+ * first member's position, so every later member's rule moves earlier, past the rules between
+ * its old position and the first. The move is safe when none of those intervening rules could
+ * flip a cascade result with a moving member (see couldFlip). An intervening rule that only
+ * shares an element but not a property, or that an element resolves by specificity or
+ * importance rather than source order, cannot flip and no longer vetoes.
+ *
+ * @param group - the identical-body withheld rules, in document order
+ * @param styleRules - every top-level style rule, to scan the positions the group spans
+ */
+function safeToMergeWithheld(group: StyleRuleRef[], styleRules: StyleRuleRef[]): boolean {
+	const first = group[0]!.pos;
+	const groupPositions = new Set(group.map((w) => w.pos));
+	for (const other of styleRules) {
+		if (other.pos <= first || groupPositions.has(other.pos)) continue;
+		// `other` sits after the keeper, and a group member moves past it only if that member's old
+		// position is later than `other`. Block the merge if any such move could flip a result.
+		for (const member of group) {
+			if (member.pos <= other.pos) continue;
+			if (couldFlip(member, other)) return false;
+		}
+	}
+	return true;
+}
+
+/**
+ * Whether reordering `member` before `other` could flip which rule wins for some element and
+ * property. It can only flip when all three of these hold. The two rules target a common
+ * element, they declare a common longhand at the same importance but a different value, and
+ * their selectors carry equal specificity for that element. Only then does source order, the
+ * one thing the reorder changes, decide the winner. If any fails, the winner is fixed by target,
+ * property, importance, or specificity regardless of order, so the move is safe. An
+ * undeterminable target set is treated as overlapping, staying conservative.
+ */
+function couldFlip(member: StyleRuleRef, other: StyleRuleRef): boolean {
+	if (!member.targets || !other.targets) return true;
+	if (!intersects(member.targets, other.targets)) return false;
+	if (!sharesDecidingProperty(member.rule.style, other.rule.style)) return false;
+	return specificitiesCanTie(member.rule.selectorText, other.rule.selectorText);
+}
+
+/**
+ * Whether two declaration blocks share a longhand that source order would decide between. That
+ * happens when both declare it, at the same importance, with different values. A matching value
+ * or a differing
+ * importance settles the property without reference to order, so it cannot flip. The cssom
+ * stores each block as expanded longhands with per-longhand priority, so a shorthand and a
+ * longhand that overlap, `background` against `background-color`, are compared correctly, and
+ * custom properties are included.
+ */
+function sharesDecidingProperty(a: CSSStyleDeclaration, b: CSSStyleDeclaration): boolean {
+	for (let i = 0; i < a.length; i++) {
+		const name = a.item(i);
+		const bValue = b.getPropertyValue(name);
+		if (bValue === '') continue; // `b` does not declare this longhand.
+		if (a.getPropertyValue(name) !== bValue && a.getPropertyPriority(name) === b.getPropertyPriority(name)) return true;
+	}
+	return false;
+}
+
+/** Whether some selector of each list shares a specificity, so an element could tie between them. */
+function specificitiesCanTie(a: string, b: string): boolean {
+	const bSpecs = splitSelectorList(b).map(specificity);
+	for (const sa of splitSelectorList(a)) {
+		const spec = specificity(sa);
+		if (bSpecs.some((sb) => sb[0] === spec[0] && sb[1] === spec[1] && sb[2] === spec[2])) return true;
+	}
+	return false;
+}
+
+/**
+ * The [id, class, type] specificity of one selector. The emitted stylesheet uses only simple
+ * compound selectors, classes, attributes, and pseudo-classes or pseudo-elements, with no
+ * functional pseudo-class like `:is()` whose weight depends on its argument, so a straight
+ * token count is exact. An id raises the first rank, a class, attribute, or pseudo-class the
+ * second, and a type or pseudo-element the third. Combinators contribute nothing.
+ */
+function specificity(selector: string): [number, number, number] {
+	let s = selector.trim();
+	let a = 0;
+	let b = 0;
+	let c = 0;
+	s = s.replace(/::[\w-]+/g, () => (c++, ' ')); // Pseudo-elements first, so their colons are not recounted.
+	s = s.replace(/#[\w-]+/g, () => (a++, ' '));
+	s = s.replace(/\[[^\]]*\]/g, () => (b++, ' '));
+	s = s.replace(/\.[\w-]+/g, () => (b++, ' '));
+	s = s.replace(/:[\w-]+(?:\([^)]*\))?/g, () => (b++, ' ')); // Pseudo-classes.
+	s.replace(/[a-zA-Z][\w-]*/g, () => (c++, ' ')); // Remaining bare identifiers are type selectors.
+	return [a, b, c];
+}
+
+/** Splits a selector list on its top-level commas, keeping bracket and paren spans intact. */
+function splitSelectorList(list: string): string[] {
+	const out: string[] = [];
+	let depth = 0;
+	let buf = '';
+	for (const ch of list) {
+		if (ch === '(' || ch === '[') depth++;
+		else if (ch === ')' || ch === ']') depth = Math.max(0, depth - 1);
+		if (ch === ',' && depth === 0) {
+			out.push(buf);
+			buf = '';
+		} else {
+			buf += ch;
+		}
+	}
+	if (buf.trim()) out.push(buf);
+	return out;
+}
+
+/**
+ * The elements a rule can style. A resting rule matches its selector directly. A withheld rule
+ * matches with its dynamic pseudos and pseudo-elements stripped, so the state or pseudo box's
+ * host element is found. Null when the remaining selector is empty or will not parse.
+ */
+function ruleTargets(oracle: RenderOracle, selector: string, withheld: boolean): Set<Element> | null {
+	const base = withheld ? selector.replace(DYNAMIC_PSEUDO, '').trim() : selector;
+	if (!base) return null;
+	try {
+		return new Set(Array.from(oracle.body.querySelectorAll(base)));
+	} catch {
+		return null;
+	}
+}
+
+/** Whether two element sets share a member. */
+function intersects(a: Set<Element>, b: Set<Element>): boolean {
+	const [small, large] = a.size <= b.size ? [a, b] : [b, a];
+	for (const el of small) if (large.has(el)) return true;
+	return false;
+}

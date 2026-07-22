@@ -1,0 +1,144 @@
+/**
+ * core/src/entry.ts: the injectable bundle entry.
+ *
+ * Vite bundles this to one self-contained iife the runner injects into a Playwright
+ * page. It hangs the three commands off window.__snipCore. The runner drives them
+ * over page.evaluate; each command returns a plain json-serializable object.
+ *
+ * extract owns the stateless re-resolution: it re-finds the element by selector in
+ * the freshly loaded page and, when the caller passed the text/rect the candidate
+ * recorded, verifies the match before snipping so a shifted page fails loudly rather
+ * than extracting the wrong node.
+ */
+import type { OutputFormat } from './types';
+import { harvestCandidates, type CandidateInventory, type CandidateRect } from './candidates';
+import { extractElement } from './pipeline';
+import { buildSchema, type SchemaResult } from './schema';
+
+/** What the caller recorded about the target at harvest time, for drift detection. */
+interface ExtractExpectation {
+	text?: string | null;
+	rect?: CandidateRect;
+}
+
+/** The outcome of one extract call. On failure ok is false and error carries a machine code. */
+interface ExtractOutcome {
+	ok: boolean;
+	error?: { code: string; message: string; actual?: { text: string | null; rect: CandidateRect; matches: number } };
+	selector: string;
+	/** Document-absolute rect of the resolved element, for the runner's screenshot crop. */
+	rect?: CandidateRect;
+	builderDetected?: boolean;
+	builder?: string | null;
+	html?: string;
+	css?: string;
+	output?: string;
+	files?: unknown;
+	warnings?: string[];
+}
+
+/** Center-distance tolerance (px) and size tolerance (fraction) for the drift check. */
+const RECT_SHIFT_PX = 40;
+const RECT_SIZE_TOLERANCE = 0.35;
+
+/** Document-absolute rect, folding in scroll, matching what candidates recorded. */
+function rectOf(el: Element): CandidateRect {
+	const r = el.getBoundingClientRect();
+	return {
+		x: Math.round(r.left + window.scrollX),
+		y: Math.round(r.top + window.scrollY),
+		w: Math.round(r.width),
+		h: Math.round(r.height),
+	};
+}
+
+/** Loose text of an element, normalized for comparison against a recorded snippet. */
+function normalizedText(el: Element): string {
+	return ((el as HTMLElement).innerText ?? el.textContent ?? '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * True when the resolved element is close enough to what the candidate recorded. Text
+ * is compared by prefix (the recording is capped, so exact equality would over-reject);
+ * rect is compared by center distance and relative size, tolerating layout jitter but
+ * catching a genuine page shift onto a different node.
+ */
+function matchesExpectation(el: Element, expect: ExtractExpectation): boolean {
+	if (expect.text) {
+		const actual = normalizedText(el);
+		const wanted = expect.text.replace(/…$/, '').trim();
+		if (wanted && !actual.startsWith(wanted.slice(0, 40))) return false;
+	}
+	if (expect.rect) {
+		const r = rectOf(el);
+		const dx = r.x + r.w / 2 - (expect.rect.x + expect.rect.w / 2);
+		const dy = r.y + r.h / 2 - (expect.rect.y + expect.rect.h / 2);
+		if (Math.hypot(dx, dy) > RECT_SHIFT_PX + Math.max(expect.rect.w, expect.rect.h)) return false;
+		const sizeDrift = Math.abs(r.w - expect.rect.w) / Math.max(1, expect.rect.w);
+		if (sizeDrift > RECT_SIZE_TOLERANCE && Math.abs(r.w - expect.rect.w) > RECT_SHIFT_PX) return false;
+	}
+	return true;
+}
+
+/** Resolve a selector to one element and snip it, with drift verification when expected data is given. */
+async function extract(selector: string, format: OutputFormat, expect?: ExtractExpectation): Promise<ExtractOutcome> {
+	let matched: Element[];
+	try {
+		matched = [...document.querySelectorAll(selector)];
+	} catch (err) {
+		return { ok: false, selector, error: { code: 'SELECTOR_INVALID', message: `invalid selector: ${(err as Error).message}` } };
+	}
+	if (matched.length === 0) {
+		return { ok: false, selector, error: { code: 'SELECTOR_NO_MATCH', message: `selector matched 0 elements: ${selector}` } };
+	}
+	const el = matched[0]!;
+	const warnings: string[] = [];
+	if (matched.length > 1) warnings.push(`selector matched ${matched.length} elements, extracting the first`);
+
+	if (expect && !matchesExpectation(el, expect)) {
+		return {
+			ok: false,
+			selector,
+			rect: rectOf(el),
+			error: {
+				code: 'PAGE_SHIFTED',
+				message: 'resolved element does not match the recorded candidate (page shifted); re-run candidates',
+				actual: { text: normalizedText(el).slice(0, 80) || null, rect: rectOf(el), matches: matched.length },
+			},
+		};
+	}
+
+	const rect = rectOf(el);
+	const result = await extractElement(el, '', format);
+	return {
+		ok: true,
+		selector,
+		rect,
+		builderDetected: result.builderDetected,
+		builder: result.builder,
+		html: result.html,
+		css: result.css,
+		output: result.output,
+		files: result.files,
+		warnings: [...warnings, ...result.warnings],
+	};
+}
+
+/** The api surface the runner drives. */
+interface SnipCore {
+	version: string;
+	candidates(): CandidateInventory;
+	extract(selector: string, format: OutputFormat, expect?: ExtractExpectation): Promise<ExtractOutcome>;
+	schema(format: OutputFormat): Promise<SchemaResult>;
+}
+
+const api: SnipCore = {
+	version: '0.1.0',
+	candidates: harvestCandidates,
+	extract,
+	schema: buildSchema,
+};
+
+(globalThis as unknown as { __snipCore: SnipCore }).__snipCore = api;
+
+export { api };

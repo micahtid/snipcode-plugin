@@ -1,0 +1,35 @@
+{
+  "name": "snipcode",
+  "version": "0.1.0",
+  "description": "Deterministic eyes and hands for AI agents: load a page, harvest its elements, extract any one into clean self-contained code, or read a whole-page design schema. Zero LLM calls, zero API keys.",
+  "type": "module",
+  "bin": {
+    "snipcode": "dist/cli/index.js"
+  },
+  "files": [
+    "dist",
+    "skill",
+    "instructions",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build:core": "vite build --config core/vite.config.ts",
+    "build:node": "vite build --config vite.node.config.ts",
+    "build": "npm run build:core && npm run build:node",
+    "typecheck": "tsc -p core/tsconfig.json && tsc -p tsconfig.node.json",
+    "gen:skill": "tsx cli/src/gen-skill.ts",
+    "test": "npm run build && tsx test/run.ts"
+  },
+  "dependencies": {
+    "playwright": "^1.60.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.2",
+    "vite": "^7.0.0"
+  }
+}

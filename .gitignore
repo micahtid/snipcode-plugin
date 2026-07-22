@@ -1,0 +1,7 @@
+node_modules/
+dist/
+snipcode-out/
+test/.out/
+test/.dbg*/
+*.log
+.DS_Store
