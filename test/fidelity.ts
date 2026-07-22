@@ -15,8 +15,7 @@ import { readFile, rm, mkdir } from 'node:fs/promises';
 import { existsSync, writeFileSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { chromium } from 'playwright';
-import { PNG } from 'pngjs';
-import pixelmatch from 'pixelmatch';
+import { mismatchRatio } from './pixels';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join, dirname, extname } from 'node:path';
 
@@ -53,36 +52,6 @@ function runCli(args: string[]): Promise<string> {
 	return new Promise((resolve) => {
 		execFile(process.execPath, [CLI, ...args], { maxBuffer: 64 * 1024 * 1024 }, (_e, stdout) => resolve(stdout));
 	});
-}
-
-/** Fraction of mismatched pixels over the overlapping top-left region of two pngs. */
-function mismatchRatio(a: Buffer, b: Buffer): number {
-	const pa = PNG.sync.read(a);
-	const pb = PNG.sync.read(b);
-	const w = Math.min(pa.width, pb.width);
-	const h = Math.min(pa.height, pb.height);
-	// Crop both to the shared region so pixelmatch gets matching dimensions.
-	const ca = cropTo(pa, w, h);
-	const cb = cropTo(pb, w, h);
-	const diff = new PNG({ width: w, height: h });
-	const bad = pixelmatch(ca.data, cb.data, diff.data, w, h, { threshold: 0.1 });
-	return bad / (w * h);
-}
-
-/** Crop a decoded png to the top-left w×h into a fresh RGBA buffer. */
-function cropTo(src: PNG, w: number, h: number): PNG {
-	const out = new PNG({ width: w, height: h });
-	for (let y = 0; y < h; y++) {
-		for (let x = 0; x < w; x++) {
-			const si = (src.width * y + x) << 2;
-			const di = (w * y + x) << 2;
-			out.data[di] = src.data[si]!;
-			out.data[di + 1] = src.data[si + 1]!;
-			out.data[di + 2] = src.data[si + 2]!;
-			out.data[di + 3] = src.data[si + 3]!;
-		}
-	}
-	return out;
 }
 
 async function main(): Promise<void> {

@@ -3,5 +3,7 @@ dist/
 snipcode-out/
 test/.out/
 test/.dbg*/
+test/.fidelity/
+test/.parity/
 *.log
 .DS_Store

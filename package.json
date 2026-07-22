@@ -22,7 +22,8 @@
     "typecheck": "tsc -p core/tsconfig.json && tsc -p tsconfig.node.json",
     "gen:skill": "tsx cli/src/gen-skill.ts",
     "test": "npm run build && tsx test/run.ts",
-    "test:fidelity": "npm run build && tsx test/fidelity.ts"
+    "test:fidelity": "npm run build && tsx test/fidelity.ts",
+    "test:parity": "npm run build && tsx test/parity.ts"
   },
   "dependencies": {
     "playwright": "^1.60.0"
