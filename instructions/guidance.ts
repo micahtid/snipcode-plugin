@@ -78,7 +78,6 @@ names (block__tag-n). Your judgment layer, all render-neutral, is:
   (button + button--primary), rename both and keep both; never collapse them into one.
 - Where an element's role is unambiguous and the change cannot alter rendering, promote its tag
   (a nav container to <nav>, a heading div to <h2>).
-- Add short grouping comments before rules in plain English.
 Never change declarations, sizes, colors, or geometry: those are already correct.`;
 
 /** Redesign guidance for the schema-reference flow. */
