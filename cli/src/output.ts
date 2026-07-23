@@ -10,16 +10,17 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { OutputFormat } from '../../core/src/types';
 
-/** The four agent-facing format names and how they map onto the pipeline's formats. */
+/**
+ * The four agent-facing format names and how they map onto the pipeline's formats. The
+ * core pipeline supports seven, since it is shared with the chrome extension, but the cli
+ * accepts only the four the guidance documents. An undocumented name is untested surface,
+ * so it is not accepted here.
+ */
 const FORMAT_ALIASES: Record<string, OutputFormat> = {
 	html: 'html',
 	jsx: 'jsx-tailwind',
-	'jsx-tailwind': 'jsx-tailwind',
-	'jsx-css': 'jsx-css',
 	tailwind: 'tailwind',
 	vue: 'vue',
-	'bem-css': 'bem-css',
-	'bem-scss': 'bem-scss',
 };
 
 /** Agent-facing format names shown in help. */

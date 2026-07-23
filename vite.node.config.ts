@@ -10,6 +10,11 @@
 import { defineConfig } from 'vite';
 import { fileURLToPath } from 'node:url';
 import { builtinModules } from 'node:module';
+import { readFileSync } from 'node:fs';
+
+// The version is read here and inlined into the bundle, so the cli reports exactly the
+// version npm installed rather than a hand-edited copy that can drift.
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
 
 const external = [
 	'playwright',
@@ -20,6 +25,9 @@ const external = [
 
 export default defineConfig({
 	publicDir: false,
+	define: {
+		__SNIPCODE_VERSION__: JSON.stringify(pkg.version),
+	},
 	build: {
 		outDir: fileURLToPath(new URL('./dist/cli', import.meta.url)),
 		emptyOutDir: true,

@@ -10,8 +10,11 @@ import { runCandidates, runExtract, runSchema, type Args } from './commands';
 import { emitError, FORMAT_NAMES } from './output';
 import { WORKFLOW, CANDIDATES, EXTRACT, SCHEMA, NAMING, REDESIGN } from '../../instructions/guidance';
 
-/** package version, kept in sync with package.json at build time. */
-const VERSION = '0.1.0';
+/**
+ * The package version. Substituted from package.json by the bundler, see
+ * vite.node.config.ts, so `snipcode --version` can never drift from what npm installed.
+ */
+const VERSION = __SNIPCODE_VERSION__;
 
 const HELP = `snipcode ${VERSION} — deterministic eyes and hands for AI agents
 

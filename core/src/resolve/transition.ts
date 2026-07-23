@@ -27,6 +27,7 @@
  * is unchanged, and it applies to the canonical clone so every output format ships the fix.
  */
 import type { Captured } from '../types';
+import { splitCommaList } from '../utils/css-split';
 
 /** The sub-lists css cycles across the property list; padded to its length before folding. */
 export const TIMING_LONGHANDS = ['transition-duration', 'transition-timing-function', 'transition-delay', 'transition-behavior'] as const;
@@ -72,19 +73,5 @@ export function resolveTransitionTiming(captured: Captured): void {
  * @param value - a transition sub-list value, possibly carrying nested function commas
  */
 export function splitTopLevelCommas(value: string): string[] {
-	const parts: string[] = [];
-	let depth = 0;
-	let buf = '';
-	for (const ch of value) {
-		if (ch === '(') depth++;
-		else if (ch === ')') depth = Math.max(0, depth - 1);
-		if (ch === ',' && depth === 0) {
-			if (buf.trim()) parts.push(buf.trim());
-			buf = '';
-		} else {
-			buf += ch;
-		}
-	}
-	if (buf.trim()) parts.push(buf.trim());
-	return parts;
+	return splitCommaList(value);
 }

@@ -10,7 +10,12 @@
  * never splitting on a semicolon inside a url, a function, or a quoted string, and both
  * need the same notion of which rules are in scope and how the surviving rules serialize.
  * Defining those once here keeps the phases from drifting apart on what they may touch.
+ *
+ * The splitting itself is not written here. It is the shared scan in utils/css-split.ts,
+ * which every phase and every emitter uses. This module only puts a minimize-shaped face
+ * on it, lowercasing the property so phase lookups are case insensitive.
  */
+import { parseDeclarations as parseCssDeclarations } from '../utils/css-split';
 
 /**
  * Selectors held out of every minimize phase: dynamic pseudo-classes, the measured-state
@@ -78,33 +83,5 @@ export interface Segment {
  * @param cssText - a rule's serialized declaration block, no braces
  */
 export function parseSegments(cssText: string): Segment[] {
-	const segs: Segment[] = [];
-	let depth = 0;
-	let quote = '';
-	let buf = '';
-	const flush = (): void => {
-		const text = buf.trim();
-		buf = '';
-		if (!text) return;
-		const colon = text.indexOf(':');
-		if (colon < 0) return;
-		segs.push({ prop: text.slice(0, colon).trim().toLowerCase(), decl: text, value: text.slice(colon + 1).trim() });
-	};
-	for (const ch of cssText) {
-		if (quote) {
-			if (ch === quote) quote = '';
-		} else if (ch === '"' || ch === "'") {
-			quote = ch;
-		} else if (ch === '(') {
-			depth++;
-		} else if (ch === ')') {
-			if (depth > 0) depth--;
-		} else if (ch === ';' && depth === 0) {
-			flush();
-			continue;
-		}
-		buf += ch;
-	}
-	flush();
-	return segs;
+	return parseCssDeclarations(cssText).map((d) => ({ prop: d.prop.toLowerCase(), decl: d.decl, value: d.value }));
 }

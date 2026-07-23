@@ -26,6 +26,7 @@
 import type { Captured } from '../types';
 import { withOracle, type RenderOracle } from './oracle';
 import { inScopeRule, serializeRules, WITHHELD } from './declarations';
+import { splitTopLevel } from '../utils/css-split';
 
 /**
  * The dynamic pseudo-classes and every pseudo-element, stripped from a withheld selector to
@@ -262,22 +263,15 @@ function specificity(selector: string): [number, number, number] {
 	return [a, b, c];
 }
 
-/** Splits a selector list on its top-level commas, keeping bracket and paren spans intact. */
+/**
+ * Splits a selector list on its top-level commas, keeping bracket, paren, and quoted spans
+ * intact, so a comma inside `:is(...)` or inside an attribute value stays put. Entries keep
+ * their surrounding whitespace, which the caller re-trims, and a trailing empty entry left by
+ * a trailing comma is dropped.
+ */
 function splitSelectorList(list: string): string[] {
-	const out: string[] = [];
-	let depth = 0;
-	let buf = '';
-	for (const ch of list) {
-		if (ch === '(' || ch === '[') depth++;
-		else if (ch === ')' || ch === ']') depth = Math.max(0, depth - 1);
-		if (ch === ',' && depth === 0) {
-			out.push(buf);
-			buf = '';
-		} else {
-			buf += ch;
-		}
-	}
-	if (buf.trim()) out.push(buf);
+	const out = splitTopLevel(list, ',', { brackets: true });
+	if (out[out.length - 1]?.trim() === '') out.pop();
 	return out;
 }
 

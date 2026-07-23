@@ -29,8 +29,9 @@
  *
  * The result is the readable form for html-shaped formats. The jsx and vue formats are
  * already indented by their own emitters and are skipped. See isHtmlShaped. The markup
- * walk mirrors convert/jsx.ts's, and like convert/clean.ts every step returns its input
- * unchanged if it will not parse.
+ * walk mirrors convert/jsx.ts's. The markup is parsed once and every step mutates that one
+ * document, so like convert/clean.ts the whole pass returns its input unchanged if the
+ * markup will not parse.
  *
  * Deciding what is reflowable needs each element's effective display, and white-space.
  * The html format carries those on the inline style. The class-based formats such as bem-css
@@ -41,7 +42,8 @@
  */
 import type { OutputFormat } from '../types';
 import { isInjected } from '../reconcile/match';
-import { composeDocument } from './html';
+import { composeDocument, escapeHtmlAttr } from './html';
+import { splitTopLevel } from '../utils/css-split';
 
 /** Html5 void elements: no closing tag, no children. */
 const VOID_TAGS = new Set([
@@ -96,42 +98,48 @@ export function isHtmlShaped(format: OutputFormat): boolean {
  * @returns the formatted markup, the formatted + merged stylesheet, and the composed document
  */
 export function assembleHtmlDocument(html: string, css: string, warnings: string[]): { html: string; css: string; document: string } {
-	const lifted = liftEmbeddedStyles(html);
+	// One parse feeds every step below, which then mutate that live document in place. All
+	// four steps parsed the same markup, so a single failure here is exactly the case where
+	// each of them would have bailed on its own: skip them all and leave the input as it is.
+	let doc: Document;
+	try {
+		doc = new DOMParser().parseFromString(html, 'text/html');
+	} catch {
+		warnings.push('format: markup unparseable, left unformatted');
+		return { html, css: formatCss(css).trim(), document: composeDocument(html, formatCss(css).trim()) };
+	}
+
+	const liftedCss = liftEmbeddedStyles(doc);
 	// Re-key the lifted pseudo and state rules from their numeric markers to the host
 	// element's class where that class is unique, so the output reads `.date-field::placeholder`
 	// and `.btn:hover .icon` rather than `[data-snip-pseudo="0"]::placeholder` and
 	// `[data-snip-state="0"]:hover [data-snip-state="1"]`, and the now-redundant marker
 	// attributes are dropped from the markup.
-	const keyedPseudo = keyMarkersToClasses(lifted.markup, lifted.css, 'data-snip-pseudo');
-	const keyed = keyMarkersToClasses(keyedPseudo.markup, keyedPseudo.css, 'data-snip-state');
-	const formattedHtml = formatHtmlMarkup(keyed.markup, css, warnings);
+	const keyedPseudo = keyMarkersToClasses(doc, liftedCss, 'data-snip-pseudo');
+	const keyedCss = keyMarkersToClasses(doc, keyedPseudo, 'data-snip-state');
+	const formattedHtml = formatHtmlMarkup(doc, css, warnings);
 	// The pseudo rules are already one-declaration-per-line from features/pseudo.ts and
 	// carry only a marker or a unique-class selector, so they are appended after the
 	// formatted class rules without re-parsing, which keeps them intact verbatim.
-	const mergedCss = [formatCss(css).trim(), keyed.css.trim()].filter(Boolean).join('\n\n');
+	const mergedCss = [formatCss(css).trim(), keyedCss.trim()].filter(Boolean).join('\n\n');
 	return { html: formattedHtml, css: mergedCss, document: composeDocument(formattedHtml, mergedCss) };
 }
 
 /**
- * Lifts every reconcile-injected <style> out of the markup, returning the markup
- * without those nodes plus their concatenated css. The pseudo handler appends a
+ * Lifts every reconcile-injected <style> out of the parsed markup, removing those nodes
+ * from the document and returning their concatenated css. The pseudo handler appends a
  * <style> of [data-snip-pseudo]::x rules inside the clone, so without this the output
  * carries css both before the markup, in the head block, and after it, in the injected node.
  *
- * @param html - the emitted markup
- * @returns the markup with <style> nodes removed, and their concatenated css
+ * @param doc - the parsed markup, mutated in place
+ * @returns the concatenated css of the removed <style> nodes
  */
-function liftEmbeddedStyles(html: string): { markup: string; css: string } {
-	try {
-		const doc = new DOMParser().parseFromString(html, 'text/html');
-		const styles = Array.from(doc.body.querySelectorAll('style'));
-		if (styles.length === 0) return { markup: html, css: '' };
-		const css = styles.map((s) => s.textContent ?? '').filter((t) => t.trim()).join('\n\n');
-		for (const style of styles) style.remove();
-		return { markup: doc.body.innerHTML, css };
-	} catch {
-		return { markup: html, css: '' };
-	}
+function liftEmbeddedStyles(doc: Document): string {
+	const styles = Array.from(doc.body.querySelectorAll('style'));
+	if (styles.length === 0) return '';
+	const css = styles.map((s) => s.textContent ?? '').filter((t) => t.trim()).join('\n\n');
+	for (const style of styles) style.remove();
+	return css;
 }
 
 /**
@@ -145,63 +153,52 @@ function liftEmbeddedStyles(html: string): { markup: string; css: string } {
  * marker, so a rule can never leak onto a sibling. Render-neutral: a unique class selects
  * exactly the marked element at the same specificity as the attribute selector.
  *
- * @param markup - the lifted markup, with the injected <style> already removed
+ * @param doc - the parsed markup, mutated in place to drop the redundant markers
  * @param css - the lifted rules, keyed by the marker attribute
  * @param attr - the marker attribute, data-snip-pseudo or data-snip-state
- * @returns the markup with redundant markers removed and the re-keyed css. Inputs are
- *   unchanged if the markup will not parse
+ * @returns the re-keyed css
  */
-function keyMarkersToClasses(markup: string, css: string, attr: string): { markup: string; css: string } {
-	if (!css.trim()) return { markup, css };
-	try {
-		const doc = new DOMParser().parseFromString(markup, 'text/html');
-		const marked = Array.from(doc.body.querySelectorAll(`[${attr}]`));
-		if (marked.length === 0) return { markup, css };
+function keyMarkersToClasses(doc: Document, css: string, attr: string): string {
+	if (!css.trim()) return css;
+	const marked = Array.from(doc.body.querySelectorAll(`[${attr}]`));
+	if (marked.length === 0) return css;
 
-		// A class identifies a single element when it is borne by exactly one element.
-		const classCounts = new Map<string, number>();
-		for (const el of doc.body.querySelectorAll('[class]')) {
-			for (const name of el.classList) classCounts.set(name, (classCounts.get(name) ?? 0) + 1);
-		}
-
-		let out = css;
-		for (const el of marked) {
-			const id = el.getAttribute(attr);
-			if (id === null) continue;
-			const unique = Array.from(el.classList).find((name) => classCounts.get(name) === 1 && BARE_IDENT.test(name));
-			if (!unique) continue; // Shared, unnamed, or unsafe class: keep the numeric marker
-			// Literal global replace keeps the regex-special `["]` characters intact.
-			out = out.split(`[${attr}="${id}"]`).join(`.${unique}`);
-			el.removeAttribute(attr);
-		}
-		return { markup: doc.body.innerHTML, css: out };
-	} catch {
-		return { markup, css };
+	// A class identifies a single element when it is borne by exactly one element.
+	const classCounts = new Map<string, number>();
+	for (const el of doc.body.querySelectorAll('[class]')) {
+		for (const name of el.classList) classCounts.set(name, (classCounts.get(name) ?? 0) + 1);
 	}
+
+	let out = css;
+	for (const el of marked) {
+		const id = el.getAttribute(attr);
+		if (id === null) continue;
+		const unique = Array.from(el.classList).find((name) => classCounts.get(name) === 1 && BARE_IDENT.test(name));
+		if (!unique) continue; // Shared, unnamed, or unsafe class: keep the numeric marker
+		// Literal global replace keeps the regex-special `["]` characters intact.
+		out = out.split(`[${attr}="${id}"]`).join(`.${unique}`);
+		el.removeAttribute(attr);
+	}
+	return out;
 }
 
 /**
  * Pretty-prints emitted html markup, indenting only where it is render-neutral.
  *
- * @param html - the emitted markup, one element with no injected style after liftEmbeddedStyles
+ * @param doc - the parsed markup, with the injected style already lifted out
  * @param css - the emitted stylesheet, read for class-based display, empty for html
- * @param warnings - appended to on a parse failure, after which the input is returned as-is
- * @returns the indented markup, or the input unchanged if it will not parse
+ * @param warnings - appended to when the markup holds no element, after which it is
+ *   re-serialized unformatted
+ * @returns the indented markup
  */
-export function formatHtmlMarkup(html: string, css: string, warnings: string[]): string {
-	try {
-		const doc = new DOMParser().parseFromString(html, 'text/html');
-		const roots = Array.from(doc.body.children);
-		if (roots.length === 0) {
-			warnings.push('format: markup unparseable, left unformatted');
-			return html;
-		}
-		const classStyle = classStyleMap(css);
-		return roots.map((el) => formatElement(el, 0, classStyle)).join('\n');
-	} catch {
+function formatHtmlMarkup(doc: Document, css: string, warnings: string[]): string {
+	const roots = Array.from(doc.body.children);
+	if (roots.length === 0) {
 		warnings.push('format: markup unparseable, left unformatted');
-		return html;
+		return doc.body.innerHTML;
 	}
+	const classStyle = classStyleMap(css);
+	return roots.map((el) => formatElement(el, 0, classStyle)).join('\n');
 }
 
 /**
@@ -268,36 +265,21 @@ function formatCssRule(rule: CSSRule, depth: number): string {
 
 /**
  * Splits a serialized declaration block ("a: b; c: d;") into one indented `prop: value;`
- * line each. Splits on top-level semicolons only, so a `;` inside a url(), function, or
- * string, such as a data uri or a quoted family, never splits a declaration.
+ * line each, using the shared top-level scan in utils/css-split.ts, so a `;` inside a url(),
+ * a function, or a string, such as a data uri or a quoted family, never splits a declaration.
+ * Each segment is emitted verbatim rather than rebuilt from its property and value, so a
+ * descriptor body with no colon, which a declaration parse would drop, still survives.
  *
  * @param block - the cssom-serialized declaration block, with no braces
  * @param depth - the indent depth for each line
  */
 function declarationLines(block: string, depth: number): string {
 	const pad = '\t'.repeat(depth);
-	const decls: string[] = [];
-	let current = '';
-	let parens = 0;
-	let quote: string | null = null;
-	for (const ch of block) {
-		if (quote) {
-			current += ch;
-			if (ch === quote) quote = null;
-			continue;
-		}
-		if (ch === '"' || ch === "'") quote = ch;
-		else if (ch === '(') parens++;
-		else if (ch === ')') parens--;
-		else if (ch === ';' && parens === 0) {
-			if (current.trim()) decls.push(`${pad}${current.trim()};`);
-			current = '';
-			continue;
-		}
-		current += ch;
-	}
-	if (current.trim()) decls.push(`${pad}${current.trim()};`);
-	return decls.join('\n');
+	return splitTopLevel(block, ';')
+		.map((decl) => decl.trim())
+		.filter(Boolean)
+		.map((decl) => `${pad}${decl};`)
+		.join('\n');
 }
 
 /**
@@ -450,12 +432,11 @@ function isInline(el: Element, classStyle: Map<string, ClassStyle>): boolean {
 	return restingValue(el, 'display', classStyle, (s) => s.display).startsWith('inline');
 }
 
-/** Build the attribute string for an open tag, escaping & and " like a serializer. */
+/** Build the attribute string for an open tag, escaping like a serializer. See escapeHtmlAttr. */
 function attrs(el: Element): string {
 	const parts: string[] = [];
 	for (const attr of Array.from(el.attributes)) {
-		const value = attr.value.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
-		parts.push(`${attr.name}="${value}"`);
+		parts.push(`${attr.name}="${escapeHtmlAttr(attr.value)}"`);
 	}
 	return parts.length ? ' ' + parts.join(' ') : '';
 }

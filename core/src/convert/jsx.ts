@@ -21,6 +21,7 @@ import type { Captured } from '../types';
 import { emitTailwind } from './tailwind';
 import { emitBem } from './bem';
 import type { HtmlOutput } from './html';
+import { parseDeclarations } from '../utils/css-split';
 
 /**
  * The html attributes that rename to a non-camelCase react prop. This is the
@@ -113,14 +114,14 @@ function jsxAttrName(name: string): string {
 	return name;
 }
 
-/** Convert an inline style string to react style-object entries. */
+/**
+ * Convert an inline style string to react style-object entries. The shared top-level split
+ * keeps a `;` or `:` inside a url(data:...;base64,) or any other function with its value, so a
+ * data-uri background becomes one entry rather than several broken ones.
+ */
 function styleToObject(style: string): string {
 	const entries: string[] = [];
-	for (const decl of style.split(';')) {
-		const idx = decl.indexOf(':');
-		if (idx < 0) continue;
-		const prop = decl.slice(0, idx).trim();
-		const value = decl.slice(idx + 1).trim();
+	for (const { prop, value } of parseDeclarations(style)) {
 		if (!prop) continue;
 		// Custom properties keep their literal name and must be quoted as a key.
 		const key = prop.startsWith('--') ? `'${prop}'` : camelCase(prop);

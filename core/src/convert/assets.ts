@@ -28,6 +28,8 @@
  * What lifts is faithful. What would not stays put.
  */
 import type { AssetFile } from '../types';
+import { escapeHtmlAttr } from './html';
+import { parseDeclarations } from '../utils/css-split';
 
 /** The color an icon falls back to when nothing in its ancestry sets one. */
 const DEFAULT_COLOR = '#000000';
@@ -201,8 +203,14 @@ function buildImgTag(svg: string, name: string, box: SvgBox | undefined): string
 	const style = imgStyle(el, box);
 	const alt = el.getAttribute('aria-label') ?? el.querySelector('title')?.textContent ?? '';
 	const hidden = el.getAttribute('aria-hidden') === 'true' ? ' aria-hidden="true"' : '';
-	return `<img src="${name}"${style ? ` style="${escapeAttr(style)}"` : ''}${hidden} alt="${escapeAttr(alt)}">`;
+	return `<img src="${name}"${style ? ` style="${escapeHtmlAttr(style)}"` : ''}${hidden} alt="${escapeHtmlAttr(alt)}">`;
 }
+
+/**
+ * The inline props an extracted <img> must not copy: paint is already baked into the svg
+ * file, and size, display, and baseline come from the computed box instead.
+ */
+const BAKED_IMG_PROPS = new Set(['fill', 'stroke', 'color', 'width', 'height', 'display', 'vertical-align']);
 
 /**
  * The box styles the <img> needs to lay out exactly where the inline svg did, minus the
@@ -214,13 +222,13 @@ function buildImgTag(svg: string, name: string, box: SvgBox | undefined): string
  */
 function imgStyle(el: Element, box: SvgBox | undefined): string {
 	const decls: string[] = [];
-	for (const part of (el.getAttribute('style') ?? '').split(';')) {
-		const colon = part.indexOf(':');
-		if (colon === -1) continue;
-		const prop = part.slice(0, colon).trim().toLowerCase();
+	// The shared top-level split keeps a `;` inside a url(data:...;base64,) or any other
+	// function with its value, so a data-uri background survives the copy intact.
+	for (const { prop, value } of parseDeclarations(el.getAttribute('style') ?? '')) {
+		const name = prop.toLowerCase();
 		// Paint is baked into the file. Size, display, and baseline come from the computed box.
-		if (!prop || ['fill', 'stroke', 'color', 'width', 'height', 'display', 'vertical-align'].includes(prop)) continue;
-		decls.push(`${prop}: ${part.slice(colon + 1).trim()}`);
+		if (!name || BAKED_IMG_PROPS.has(name)) continue;
+		decls.push(`${name}: ${value}`);
 	}
 	if (box) {
 		if (box.display !== 'inline') decls.push(`display: ${box.display}`);
@@ -374,7 +382,3 @@ function isTopLevelSvg(svg: Element): boolean {
 	return true;
 }
 
-/** Escapes the characters unsafe inside a double-quoted html attribute value. */
-function escapeAttr(value: string): string {
-	return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-}

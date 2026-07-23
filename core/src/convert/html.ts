@@ -68,6 +68,19 @@ export function composeDocument(html: string, css: string): string {
 	return `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<style>\n${sheet}\n</style>\n</head>\n<body>\n${html}\n</body>\n</html>`;
 }
 
+/**
+ * Escapes the characters that are unsafe inside a double-quoted html attribute value:
+ * `&` so an existing entity is not doubled or a stray ampersand re-read as one, `"` so the
+ * value cannot close its own quote, and `<` so a value can never be mistaken for a tag by a
+ * lenient parser. Shared by every emitter that hand-writes an attribute rather than letting
+ * the serializer do it, so all of them agree on one escape set.
+ *
+ * @param value - the raw attribute value
+ */
+export function escapeHtmlAttr(value: string): string {
+	return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
 /** Serialize one @font-face with its family, src, and all descriptors. */
 function fontFaceText(font: Captured['fonts'][number]): string {
 	const descriptors = Object.entries(font.descriptors)

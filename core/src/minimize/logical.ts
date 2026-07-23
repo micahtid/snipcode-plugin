@@ -23,6 +23,7 @@
 import type { Captured } from '../types';
 import { withOracle } from './oracle';
 import { inScopeRule, parseSegments, serializeRules } from './declarations';
+import { splitTopLevel } from '../utils/css-split';
 
 /**
  * Logical longhands and one-value directionals mapped to their horizontal-tb ltr physical name.
@@ -149,18 +150,5 @@ function splitPair(value: string): [string, string] {
 
 /** Splits a value on top-level whitespace, keeping function arguments and their spaces intact. */
 function topLevelParts(value: string): string[] {
-	const parts: string[] = [];
-	let depth = 0;
-	let buf = '';
-	for (const ch of value) {
-		if (ch === '(') depth++;
-		else if (ch === ')') depth = Math.max(0, depth - 1);
-		if (depth === 0 && /\s/.test(ch)) {
-			if (buf) { parts.push(buf); buf = ''; }
-		} else {
-			buf += ch;
-		}
-	}
-	if (buf) parts.push(buf);
-	return parts;
+	return splitTopLevel(value, /\s/).filter(Boolean);
 }

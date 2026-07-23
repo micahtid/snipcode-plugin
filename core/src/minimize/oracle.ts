@@ -30,7 +30,7 @@
  * the verdict is deterministic.
  */
 import type { Captured } from '../types';
-import { createSizedFrame } from '../reconcile/standalone';
+import { createSizedFrame } from '../reconcile/frame';
 
 /** One computed-style target: an element box, or one of its generated pseudo boxes. */
 interface Target {
