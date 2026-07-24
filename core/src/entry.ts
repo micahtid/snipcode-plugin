@@ -129,7 +129,7 @@ interface SnipCore {
 	version: string;
 	candidates(): CandidateInventory;
 	extract(selector: string, format: OutputFormat, expect?: ExtractExpectation): Promise<ExtractOutcome>;
-	schema(format: OutputFormat): Promise<SchemaResult>;
+	schema(): SchemaResult;
 }
 
 const api: SnipCore = {

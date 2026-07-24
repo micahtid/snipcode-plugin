@@ -71,7 +71,7 @@ export interface Driver {
 	page: Page;
 	candidates(): Promise<unknown>;
 	extract(selector: string, format: string, expect?: unknown): Promise<ExtractOutcome>;
-	schema(format: string): Promise<unknown>;
+	schema(): Promise<unknown>;
 	fullScreenshot(): Promise<Buffer>;
 	elementScreenshot(selector: string): Promise<Buffer | null>;
 }
@@ -133,11 +133,8 @@ export async function withPage<T>(url: string, opts: LoadOptions, fn: (driver: D
 						),
 					[selector, format, expect] as const,
 				),
-			schema: (format) =>
-				page.evaluate(
-					(fmt) => (window as unknown as { __snipCore: { schema(f: string): Promise<unknown> } }).__snipCore.schema(fmt),
-					format,
-				),
+			schema: () =>
+				page.evaluate(() => (window as unknown as { __snipCore: { schema(): unknown } }).__snipCore.schema()),
 			fullScreenshot: () => fullPage(page),
 			elementScreenshot: (selector) => elementCrop(page, selector),
 		};

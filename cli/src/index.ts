@@ -8,7 +8,7 @@
  */
 import { runCandidates, runExtract, runSchema, type Args } from './commands';
 import { emitError, FORMAT_NAMES } from './output';
-import { WORKFLOW, CANDIDATES, EXTRACT, SCHEMA, NAMING, REDESIGN } from '../../instructions/guidance';
+import { WORKFLOW, CANDIDATES, EXTRACT, SCHEMA, NAMING, REDESIGN, RULES } from '../../instructions/guidance';
 
 /**
  * The package version. Substituted from package.json by the bundler, see
@@ -16,7 +16,7 @@ import { WORKFLOW, CANDIDATES, EXTRACT, SCHEMA, NAMING, REDESIGN } from '../../i
  */
 const VERSION = __SNIPCODE_VERSION__;
 
-const HELP = `snipcode ${VERSION} — deterministic eyes and hands for AI agents
+const HELP = `snipcode ${VERSION}: deterministic eyes and hands for AI agents
 
 ${WORKFLOW}
 
@@ -27,7 +27,7 @@ Commands:
 
 Options:
   --selector "<css>"     (extract) the element to snip
-  --format <fmt>         (extract, schema) one of: ${FORMAT_NAMES.join(', ')}  [default html]
+  --format <fmt>         (extract) one of: ${FORMAT_NAMES.join(', ')}  [default html]
   --out <dir>            output directory for files  [default ./snipcode-out]
   --expect-text "<t>"    (extract) recorded candidate text, for drift verification
   --expect-rect "<json>" (extract) recorded candidate rect {x,y,w,h}, for drift verification
@@ -44,6 +44,8 @@ ${SCHEMA}
 ${NAMING}
 
 ${REDESIGN}
+
+${RULES}
 `;
 
 /** Parse argv (after the command + url) into the flag bag. Value flags consume the next token. */

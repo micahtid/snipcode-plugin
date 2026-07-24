@@ -2,6 +2,35 @@
   "name": "snipcode",
   "version": "0.1.0",
   "description": "Deterministic eyes and hands for AI agents: load a page, harvest its elements, extract any one into clean self-contained code, or read a whole-page design schema. Zero LLM calls, zero API keys.",
+  "license": "MIT",
+  "author": {
+    "name": "micahtid",
+    "url": "https://github.com/micahtid"
+  },
+  "homepage": "https://snipcode.micahtid.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/micahtid/snip-code-cli.git"
+  },
+  "bugs": "https://github.com/micahtid/snip-code-cli/issues",
+  "keywords": [
+    "claude-code",
+    "claude-code-plugin",
+    "ai-agent",
+    "agent-tools",
+    "component-extraction",
+    "css-extraction",
+    "design-tokens",
+    "design-system",
+    "html-to-react",
+    "html-to-tailwind",
+    "html-to-vue",
+    "web-to-code",
+    "code-generation",
+    "browser-automation",
+    "playwright",
+    "cli"
+  ],
   "type": "module",
   "bin": {
     "snipcode": "dist/cli/index.js"
@@ -19,6 +48,7 @@
     "build:core": "vite build --config core/vite.config.ts",
     "build:node": "vite build --config vite.node.config.ts",
     "build": "npm run build:core && npm run build:node",
+    "prepublishOnly": "npm run typecheck && npm run build",
     "typecheck": "tsc -p core/tsconfig.json && tsc -p tsconfig.node.json",
     "gen:skill": "tsx cli/src/gen-skill.ts",
     "test": "npm run build && tsx test/run.ts",

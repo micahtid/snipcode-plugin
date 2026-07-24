@@ -1,14 +1,26 @@
 {
   "name": "snipcode",
-  "displayName": "SnipCode",
   "version": "0.1.0",
   "description": "Extract a component from any live web page into clean self-contained code, or read a whole-page design schema. Deterministic, zero LLM calls.",
   "author": {
-    "name": "micah",
+    "name": "micahtid",
     "url": "https://github.com/micahtid"
   },
-  "homepage": "https://github.com/micahtid/snip-code-cli",
+  "homepage": "https://snipcode.micahtid.com",
   "repository": "https://github.com/micahtid/snip-code-cli",
   "license": "MIT",
-  "keywords": ["web", "scraping", "component", "extraction", "design", "css", "html"]
+  "keywords": [
+    "component extraction",
+    "design tokens",
+    "design system",
+    "design schema",
+    "clone component",
+    "redesign",
+    "web to code",
+    "html",
+    "react",
+    "tailwind",
+    "vue",
+    "css"
+  ]
 }

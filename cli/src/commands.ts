@@ -8,7 +8,7 @@
  */
 import { withPage, PageBlockedError, type ExtractOutcome } from '../../runner/src/browser';
 import { emit, emitError, ensureOutDir, writeOut, dataUrlToBuffer, normalizeFormat } from './output';
-import { renderSchemaMd } from './schema-md';
+import { renderSchemaMd, type SchemaStamp } from './schema-md';
 import { INLINE } from '../../instructions/guidance';
 import type { SchemaResult } from '../../core/src/schema';
 
@@ -116,31 +116,31 @@ export async function runExtract(args: Args): Promise<void> {
 	}
 }
 
-/** schema: whole-page design reference plus a full-page screenshot. */
+/** schema: whole-page design reference. */
 export async function runSchema(args: Args): Promise<void> {
-	let format: string;
-	try {
-		format = normalizeFormat(args.format);
-	} catch (err) {
-		emitError('BAD_FORMAT', (err as Error).message);
-		return;
-	}
 	const outDir = ensureOutDir(args.out);
 	try {
 		await withPage(args.url, { headless: !args.headed }, async (driver) => {
-			const result = (await driver.schema(format)) as SchemaResult;
-			const shot = await driver.fullScreenshot();
-			const shotPath = writeOut(outDir, 'screenshot.png', shot);
-			const jsonPath = writeOut(outDir, 'schema.json', JSON.stringify(result.schema, null, 2));
-			const mdPath = writeOut(outDir, 'schema.md', renderSchemaMd(result));
+			const result = (await driver.schema()) as SchemaResult;
+			// Stamp every schema output with the version and time it was generated, so an agent
+			// can tell a fresh run from a stale file an older version left on disk.
+			const stamp: SchemaStamp = { by: 'snipcode', version: __SNIPCODE_VERSION__, at: new Date().toISOString() };
+			// The schema command no longer writes a full-page screenshot: the tokens and layout
+			// blueprint are the whole reference, and the extension proved the first-generation
+			// schema needs no visual iteration. Re-enable by uncommenting these two lines and the
+			// `screenshot` field below if a visual reference is wanted again.
+			// const shot = await driver.fullScreenshot();
+			// const shotPath = writeOut(outDir, 'screenshot.png', shot);
+			const jsonPath = writeOut(outDir, 'schema.json', JSON.stringify({ generated: stamp, ...result.schema }, null, 2));
+			const mdPath = writeOut(outDir, 'schema.md', renderSchemaMd(result, stamp));
 			emit({
 				url: args.url,
+				generated: stamp,
 				schema: jsonPath,
 				markdown: mdPath,
-				screenshot: shotPath,
+				// screenshot: shotPath,
 				tokens: result.schema.tokens,
 				sections: result.schema.sections,
-				voice: result.voice.map((v) => ({ role: v.role, selector: v.selector, warnings: v.warnings })),
 				guidance: INLINE.schema,
 			});
 		});

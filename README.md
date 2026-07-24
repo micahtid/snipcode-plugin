@@ -29,7 +29,7 @@ Snip the matched element to a single self-contained artifact (markup + styleshee
 
 ### `snipcode schema <url> [--out dir]`
 
-Whole-page design reference: design tokens (colors, fonts, spacing, radii, shadows), a layout blueprint, and a few real component extractions for voice. Writes `schema.json`, `schema.md`, and a screenshot.
+Whole-page design reference: design tokens (colors, fonts, spacing, radii, shadows) and a layout blueprint. Writes `schema.json` and `schema.md`, each stamped with the snipcode version and generation time so a stale file is easy to spot.
 
 ## Architecture
 
@@ -48,7 +48,7 @@ skill/         Claude Code plugin manifest + skill file
 A Claude Code skill wraps the CLI so an agent picks it up automatically. The skill file is generated from `instructions/` (one source of guidance, reused in the skill, `--help`, and JSON output):
 
 ```bash
-npm run gen:skill              # regenerate skill/skills/snipcode/SKILL.md
+npm run gen:skill              # regenerate skill/skills/{snip,schema}/SKILL.md
 claude --plugin-dir ./skill    # load the plugin locally for testing
 ```
 
