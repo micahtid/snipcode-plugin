@@ -45,10 +45,15 @@ one representative element.
 
 ## Your job for a redesign
 
-When redesigning with a page as reference, the schema is the design contract. Use its exact token
-values (colors, type scale, spacing rhythm, radii, shadows), never substitutes or "improved"
-alternatives, and follow its structural patterns (section order, column counts, max-widths). What
-stays yours is composition: the copy, the content, and how sections are assembled for the new page.
+When redesigning with a page as reference, the schema is a hard contract, not a soft starting point.
+Follow it exactly. Use its exact token values (colors, type scale, spacing rhythm, radii, shadows),
+never substitutes or "improved" alternatives. Reproduce its layout as measured: the section order,
+the column counts, the max widths, and the way each section stacks. A section the schema marks
+single-column stays a single column. It does not become two columns side by side just because that
+is the common pattern for that kind of section. Do not add elements the schema does not show, even
+familiar ones like a small label above a heading, and do not drop or reorder what it does show. Make
+no assumptions from convention. The only part that is yours is the words: the copy and content that
+fill the structure the schema gives you.
 
 ## Rules
 

@@ -104,10 +104,15 @@ names (block__tag-n). Your judgment layer, all render-neutral, is:
 Never change declarations, sizes, colors, or geometry: those are already correct.`;
 
 /** Redesign guidance for the schema-reference flow. */
-export const REDESIGN = `When redesigning with a page as reference, the schema is the design contract. Use its exact token
-values (colors, type scale, spacing rhythm, radii, shadows), never substitutes or "improved"
-alternatives, and follow its structural patterns (section order, column counts, max-widths). What
-stays yours is composition: the copy, the content, and how sections are assembled for the new page.`;
+export const REDESIGN = `When redesigning with a page as reference, the schema is a hard contract, not a soft starting point.
+Follow it exactly. Use its exact token values (colors, type scale, spacing rhythm, radii, shadows),
+never substitutes or "improved" alternatives. Reproduce its layout as measured: the section order,
+the column counts, the max widths, and the way each section stacks. A section the schema marks
+single-column stays a single column. It does not become two columns side by side just because that
+is the common pattern for that kind of section. Do not add elements the schema does not show, even
+familiar ones like a small label above a heading, and do not drop or reorder what it does show. Make
+no assumptions from convention. The only part that is yours is the words: the copy and content that
+fill the structure the schema gives you.`;
 
 /** The standard placeholder icon for an empty image slot, referenced by RULES rule 5. */
 export const PLACEHOLDER_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>`;
@@ -142,5 +147,5 @@ has content, keep it as it is and change only what they ask you to change.
 export const INLINE: Record<'candidates' | 'extract' | 'schema', string> = {
 	candidates: 'Pick a target, then: snipcode extract <url> --selector "<selector>" --expect-text "<text>". See CANDIDATES.',
 	extract: 'Output is deterministic and pixel-correct; your job is semantic naming and tags. See NAMING. If builderDetected, rebuild from element.png. See EXTRACT.',
-	schema: 'The schema is the design contract: use its exact token values, no substitutes. See REDESIGN and RULES.',
+	schema: 'The schema is a hard contract: match its tokens and layout exactly, and add nothing it does not show. See REDESIGN and RULES.',
 };
