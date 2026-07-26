@@ -11,28 +11,72 @@
  * changes, a card with its inner layout, the nav with its position and blur. The decorative
  * and responsive passes cover the rest of the page's visual language, the gradients, blobs,
  * illustration mix, and breakpoint behavior, which is the part a token list always misses.
+ *
+ * A blueprint is what an agent actually reads, so every value in one crosses the same gate the
+ * token list does. They are two paths to the same reader, and a radius that printed as
+ * 3.35544e+07px in a button spec beside a clean 9999px in the token list is the schema
+ * disagreeing with itself.
  */
-import { classNameOf } from './classify';
-import { groupBy, isTransparentColor, normalizeColor, paddingShorthand, type WalkedElement } from './shared';
+import { classNameOf, isElementVisible } from './classify';
+import { contentChildren, contentRoot } from './geometry';
+import { hexToRgb, oklabDistance, rgbToOklab } from './oklab';
+import { effectiveBackground, groupBy, isTransparentColor, normalizeColor, paddingShorthand, paintedShadow, radiusShorthand, type WalkedElement } from './shared';
 import type { ButtonBlueprint, CardBlueprint, DecorativeInfo, NavBlueprint, ResponsiveInfo, StateRule } from './types';
 
-/** Extracts the top button variants with their full visual spec and hover/active states. */
+/** How many of a card's blocks the inner-layout string names. */
+const MAX_CARD_PARTS = 6;
+/** Smallest box, in px, that reads as a clickable control rather than a stray styled node. */
+const MIN_BUTTON_WIDTH = 40;
+const MIN_BUTTON_HEIGHT = 20;
+/** Largest box that is still a control rather than a linked card or banner. */
+const MAX_BUTTON_HEIGHT = 120;
+const MAX_BUTTON_WIDTH_SHARE = 0.5;
+/** How many button variants one page reports. */
+const MAX_BUTTON_VARIANTS = 4;
+/** Floor on the contrast term, so a large low-contrast button still ranks on its size. */
+const CONTRAST_FLOOR = 0.25;
+/** How many of the nav's links are probed against the sheets, and how far up from each one. */
+const MAX_NAV_LINK_PROBES = 12;
+const MAX_NAV_LINK_CLIMB = 4;
+
+/**
+ * Extracts the top button variants with their full visual spec and hover/active states.
+ *
+ * The candidate pool is every button and every anchor, and the gate decides which of them is
+ * a button. Matching on class names instead, looking for "btn" or "cta", finds nothing on a
+ * page whose classes are utility soup or hashed, which is most framework builds; what a button
+ * looks like is the only thing that reads the same everywhere. A candidate must be rendered,
+ * padded, big enough to hit but small enough not to be a card, and carrying a label or an icon.
+ *
+ * Ranking the survivors is by prominence, the area a button occupies weighted by how far its
+ * fill sits from what is behind it, rather than by how many times its fingerprint recurred.
+ * Frequency alone picked out whatever tiny unstyled node a framework repeated most, and
+ * reported a zero-padding grey box as the page's primary button.
+ */
 export function extractButtonBlueprints(walked: WalkedElement[], states: StateRule[]): ButtonBlueprint[] {
-	const buttons = walked.filter((el) => el.role === 'button');
+	const buttons = walked.filter((el) => el.role === 'button' || el.tag === 'a' || el.tag === 'button');
 	if (buttons.length === 0) return [];
 
 	const groups = groupBy(buttons, (btn) => btn.fingerprint);
-	const sorted = Array.from(groups.entries()).sort((a, b) => b[1].length - a[1].length).slice(0, 4);
+	const ranked: Array<{ rep: WalkedElement; score: number }> = [];
+	for (const group of groups.values()) {
+		const rep = group.find((btn) => isPlausibleButton(btn.element));
+		if (!rep) continue;
+		ranked.push({ rep, score: prominence(rep.element) });
+	}
+	if (ranked.length === 0) return [];
+	const sorted = ranked.sort((a, b) => b.score - a.score).slice(0, MAX_BUTTON_VARIANTS);
 
 	const pageBg = normalizeColor(window.getComputedStyle(document.body).backgroundColor) || '#ffffff';
 	const blueprints: ButtonBlueprint[] = [];
 
 	for (let i = 0; i < sorted.length; i++) {
-		const rep = sorted[i]![1][0]!;
+		const rep = sorted[i]!.rep;
 		const computed = window.getComputedStyle(rep.element);
 		const bg = normalizeColor(computed.backgroundColor) || 'transparent';
 		const color = normalizeColor(computed.color) || '#000000';
-		const shadow = computed.boxShadow !== 'none' ? computed.boxShadow : '';
+		const painted = paintedShadow(computed.boxShadow);
+		const shadow = painted !== 'none' ? painted : '';
 		const border = computed.borderWidth !== '0px' && computed.borderStyle !== 'none' ? `${computed.borderWidth} ${computed.borderStyle} ${computed.borderColor}` : 'none';
 
 		const btnClasses = Array.from(rep.element.classList);
@@ -68,7 +112,7 @@ export function extractButtonBlueprints(walked: WalkedElement[], states: StateRu
 			variant,
 			bg,
 			color,
-			borderRadius: computed.borderRadius,
+			borderRadius: radiusShorthand(computed.borderRadius),
 			padding: paddingShorthand(computed),
 			fontWeight: parseInt(computed.fontWeight) || 400,
 			fontSize: computed.fontSize,
@@ -92,14 +136,55 @@ export function extractButtonBlueprints(walked: WalkedElement[], states: StateRu
 		}
 	}
 
+	// Two fingerprints can describe the same button, for example the same control rendered at
+	// two widths. Reporting it twice under two variant names invents a distinction the page
+	// does not make, so identical specs collapse to the more prominent one.
+	const distinct: ButtonBlueprint[] = [];
+	const specs = new Set<string>();
+	for (const bp of blueprints) {
+		const spec = [bp.bg, bp.color, bp.borderRadius, bp.padding, bp.fontWeight, bp.fontSize, bp.border, bp.shadow].join('|');
+		if (specs.has(spec)) continue;
+		specs.add(spec);
+		distinct.push(bp);
+	}
+
 	// Disambiguate any variant names that collided.
 	const seen = new Set<string>();
-	for (const bp of blueprints) {
+	for (const bp of distinct) {
 		if (seen.has(bp.variant)) bp.variant = `${bp.variant}-${seen.size}`;
 		seen.add(bp.variant);
 	}
 
-	return blueprints;
+	return distinct;
+}
+
+/** A candidate a person could actually click: rendered, hit-sized, padded, and labelled. */
+function isPlausibleButton(el: Element): boolean {
+	if (!isElementVisible(el)) return false;
+
+	const rect = el.getBoundingClientRect();
+	if (rect.width < MIN_BUTTON_WIDTH || rect.height < MIN_BUTTON_HEIGHT) return false;
+	// An anchor wrapping a whole card is not a button, however padded it is.
+	if (rect.height > MAX_BUTTON_HEIGHT || rect.width > window.innerWidth * MAX_BUTTON_WIDTH_SHARE) return false;
+
+	const computed = window.getComputedStyle(el);
+	const padding = ['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft']
+		.reduce((sum, side) => sum + (parseFloat(computed[side as 'paddingTop']) || 0), 0);
+	if (padding <= 0) return false;
+
+	const labelled = (el.textContent || '').trim().length > 0 || el.querySelector('svg, img') !== null;
+	return labelled;
+}
+
+/** How much of the page a button claims: its area, weighted by how far its fill stands out. */
+function prominence(el: Element): number {
+	const rect = el.getBoundingClientRect();
+	const own = hexToRgb(effectiveBackground(el));
+	const behind = hexToRgb(effectiveBackground(el.parentElement));
+	const contrast = own && behind
+		? oklabDistance(rgbToOklab(own.r, own.g, own.b), rgbToOklab(behind.r, behind.g, behind.b))
+		: 0;
+	return rect.width * rect.height * (CONTRAST_FLOOR + contrast);
 }
 
 /** Extracts the top card variants with their visual spec, hover state, and inner layout. */
@@ -122,8 +207,8 @@ export function extractCardBlueprints(walked: WalkedElement[], states: StateRule
 
 		blueprints.push({
 			bg: normalizeColor(computed.backgroundColor) || '#ffffff',
-			borderRadius: computed.borderRadius,
-			shadow: computed.boxShadow !== 'none' ? computed.boxShadow : 'none',
+			borderRadius: radiusShorthand(computed.borderRadius),
+			shadow: paintedShadow(computed.boxShadow),
 			border: computed.borderWidth !== '0px' && computed.borderStyle !== 'none' ? `${computed.borderWidth} ${computed.borderStyle} ${computed.borderColor}` : 'none',
 			padding: paddingShorthand(computed),
 			hover,
@@ -134,11 +219,18 @@ export function extractCardBlueprints(walked: WalkedElement[], states: StateRule
 	return blueprints;
 }
 
-/** Describes a card's inner layout as an ordered "image + heading + text" string. */
+/**
+ * Describes a card's inner layout as an ordered "image + heading + text" string.
+ *
+ * Both the card and each of its children are unwrapped first. Reading direct children alone
+ * made every framework card report "body + body", since its real content sits one or more
+ * hashed divs below whatever the class-name match landed on.
+ */
 function detectCardInnerLayout(el: Element): string {
 	const parts: string[] = [];
-	for (let i = 0; i < Math.min(el.children.length, 6); i++) {
-		const child = el.children[i]!;
+	const root = contentRoot(el);
+	for (let i = 0; i < Math.min(root.children.length, MAX_CARD_PARTS); i++) {
+		const child = contentRoot(root.children[i]!);
 		const tag = child.tagName.toLowerCase();
 		const classList = classNameOf(child);
 		if (tag === 'img' || tag === 'picture' || tag === 'video' || /image|thumbnail|cover/.test(classList)) parts.push('image');
@@ -146,24 +238,42 @@ function detectCardInnerLayout(el: Element): string {
 		else if (tag === 'p') parts.push('text');
 		else if (tag === 'svg' || /icon/.test(classList)) parts.push('icon');
 		else if (tag === 'button' || /btn|button/.test(classList)) parts.push('button');
-		else if (child.children.length > 0) parts.push('body');
+		else if (child.children.length > 0) parts.push(namedByContent(child));
 	}
 	return parts.length > 0 ? parts.join(' + ') : 'unknown';
 }
 
-/** Extracts the page navigation's spec: bg, position, blur, border, layout, and link count. */
-export function extractNavBlueprint(): NavBlueprint | null {
-	const nav = document.querySelector('nav') || document.querySelector('header nav') || document.querySelector('[role="navigation"]');
-	if (!nav) return null;
+/** Names a card sub-block by the first content it holds, so a group reads better than "body". */
+function namedByContent(el: Element): string {
+	if (el.querySelector('h1, h2, h3, h4, h5, h6')) return 'heading';
+	if (el.querySelector('img, picture, video')) return 'image';
+	if (el.querySelector('svg')) return 'icon';
+	if (el.querySelector('button, a[class*="btn"], a[class*="button"]')) return 'button';
+	if (el.querySelector('p')) return 'text';
+	return 'body';
+}
 
-	const computed = window.getComputedStyle(nav);
-	const links = nav.querySelectorAll('a');
+/**
+ * Extracts the page navigation's spec: bg, position, blur, border, layout, and link count.
+ *
+ * The bar itself is chosen in geometry.ts, by geometry rather than by document order, since
+ * what a reader means by the nav is the bar at the top and not whichever `nav` element a
+ * framework emitted first.
+ */
+export function extractNavBlueprint(bar: Element | null): NavBlueprint | null {
+	if (!bar) return null;
+
+	const computed = window.getComputedStyle(bar);
+	const links = bar.querySelectorAll('a');
 	const border = computed.borderBottomWidth !== '0px' && computed.borderBottomStyle !== 'none' ? `${computed.borderBottomWidth} ${computed.borderBottomStyle} ${computed.borderBottomColor}` : 'none';
 
 	let layout = 'unknown';
-	if (nav.children.length >= 2) {
-		const hasLogo = nav.querySelector('[class*="logo"], a:first-child img, a:first-child svg');
-		const hasCta = nav.querySelector('[class*="cta"], [class*="btn"], button');
+	// Read the row that actually holds the bar's parts, not the bar element, whose only child
+	// on a framework page is another wrapper.
+	const row = contentRoot(bar);
+	if (contentChildren(row).length >= 2) {
+		const hasLogo = bar.querySelector('[class*="logo"], a:first-child img, a:first-child svg');
+		const hasCta = bar.querySelector('[class*="cta"], [class*="btn"], button');
 		const hasLinks = links.length >= 3;
 		if (hasLogo && hasLinks && hasCta) layout = 'logo-left + links-center + cta-right';
 		else if (hasLogo && hasLinks) layout = 'logo-left + links-right';
@@ -172,14 +282,25 @@ export function extractNavBlueprint(): NavBlueprint | null {
 	}
 
 	return {
+		tag: bar.tagName.toLowerCase(),
 		bg: normalizeColor(computed.backgroundColor) || 'transparent',
 		position: computed.position,
 		height: computed.height,
-		blur: computed.backdropFilter !== 'none' || (computed as CSSStyleDeclaration & { webkitBackdropFilter?: string }).webkitBackdropFilter !== 'none',
+		blur: hasBackdropBlur(computed),
 		border,
 		layout,
 		linkCount: links.length,
 	};
+}
+
+/**
+ * True when a backdrop filter is actually declared. The prefixed property is absent from the
+ * computed style in most engines, and testing an absent property against 'none' is true, which
+ * reported every nav on every page as blurred.
+ */
+function hasBackdropBlur(computed: CSSStyleDeclaration): boolean {
+	const prefixed = (computed as CSSStyleDeclaration & { webkitBackdropFilter?: string }).webkitBackdropFilter;
+	return [computed.backdropFilter, prefixed].some((value) => typeof value === 'string' && value !== '' && value !== 'none');
 }
 
 /** Detects the page's decorative language: blobs, gradients, illustration style, accents. */
@@ -245,24 +366,129 @@ export function extractDecorativeInfo(): DecorativeInfo {
 	return { hasBlobs, hasGradientBgs, hasPatterns, illustrationStyle, svgRatio, photoRatio, backgroundEffects: Array.from(backgroundEffects), accentTreatments: Array.from(accentTreatments) };
 }
 
-/** Reads the page's responsive behavior from its media queries. */
-export function extractResponsiveInfo(rules: CSSRule[]): ResponsiveInfo {
+/**
+ * Reads the page's responsive behavior from its media queries.
+ *
+ * Both behaviors report `unknown` when no rule provides evidence, exactly as an unmeasurable
+ * layout does. They used to default to `unchanged` and `stack`, so a page that hides its nav
+ * links behind a hamburger was described, confidently and wrongly, as one whose navigation does
+ * not change. A silent fallback under a hard contract costs more than an honest gap.
+ */
+export function extractResponsiveInfo(rules: CSSRule[], navBar: Element | null): ResponsiveInfo {
 	const breakpoints = new Set<string>();
-	let mobileNavStyle = 'unchanged';
-	let gridCollapseBehavior = 'stack';
+	let gridCollapseBehavior = 'unknown';
 
 	for (const rule of rules) {
 		if (!(rule instanceof CSSMediaRule)) continue;
-		const media = rule.conditionText || rule.media?.mediaText || '';
-		const widthMatch = media.match(/(?:max|min)-width:\s*(\d+(?:\.\d+)?(?:px|em|rem))/);
-		if (widthMatch) breakpoints.add(widthMatch[1]!);
+		const width = breakpointOf(rule.conditionText || rule.media?.mediaText || '');
+		if (width) breakpoints.add(width);
 
 		const ruleText = Array.from(rule.cssRules || []).map((r) => (r instanceof CSSStyleRule ? r.cssText : '')).join(' ');
-		if (/nav.*display:\s*none|\.nav-links.*display:\s*none|\.menu.*display:\s*none/.test(ruleText)) mobileNavStyle = 'hamburger';
 		if (/grid-template-columns:\s*1fr\b/.test(ruleText)) gridCollapseBehavior = 'stack';
 		else if (/overflow-x:\s*(?:auto|scroll)/.test(ruleText)) gridCollapseBehavior = 'scroll';
 		else if (/grid-template-columns:\s*repeat\(2/.test(ruleText)) gridCollapseBehavior = 'reduce-columns';
 	}
 
-	return { breakpoints: Array.from(breakpoints).sort((a, b) => parseFloat(a) - parseFloat(b)).slice(0, 5), mobileNavStyle, gridCollapseBehavior };
+	return {
+		breakpoints: Array.from(breakpoints).sort((a, b) => toPx(a) - toPx(b)).slice(0, 5),
+		mobileNavStyle: navHiddenOnMobile(rules, navBar) ? 'hamburger' : 'unknown',
+		gridCollapseBehavior,
+	};
+}
+
+/**
+ * True when the page's own nav links are hidden at mobile widths, which means a hamburger.
+ *
+ * The test is per element, not per selector text. A utility build never emits a rule that
+ * mentions "nav", so matching rule text for `nav ... display: none` found nothing on the builds
+ * that most need reading; it matched only pages that happened to name their selectors the way
+ * the regex expected. Asking each real link element whether a rule matches it works whatever the
+ * selector is called, and `el.matches` handles the escaped utility selectors natively.
+ *
+ * Two shapes count. A link hidden under a max-width condition is the plain case. A link shown
+ * only above a min-width is the utility case, `class="hidden md:flex"`, and it counts only when
+ * some unconditioned rule really does hide that same element, so a media query that merely
+ * switches a visible display for another one is not read as a hamburger.
+ */
+function navHiddenOnMobile(rules: CSSRule[], navBar: Element | null): boolean {
+	if (!navBar) return false;
+	const links = navLinkNodes(navBar);
+	if (links.length === 0) return false;
+
+	const hiddenByBase = (el: Element): boolean =>
+		rules.some((rule) => rule instanceof CSSStyleRule && rule.style.getPropertyValue('display').trim() === 'none' && matchesSafely(el, rule.selectorText));
+
+	for (const rule of rules) {
+		if (!(rule instanceof CSSMediaRule)) continue;
+		const bound = widthBound(rule.conditionText || rule.media?.mediaText || '');
+		if (!bound) continue;
+
+		for (const inner of Array.from(rule.cssRules || [])) {
+			if (!(inner instanceof CSSStyleRule)) continue;
+			const display = inner.style.getPropertyValue('display').trim();
+			if (bound === 'max' && display !== 'none') continue;
+			if (bound === 'min' && (display === '' || display === 'none')) continue;
+			for (const link of links) {
+				if (!matchesSafely(link, inner.selectorText)) continue;
+				if (bound === 'max' || hiddenByBase(link)) return true;
+			}
+		}
+	}
+	return false;
+}
+
+/** The nav's links and the boxes that hold them, which is what a build hides at mobile widths. */
+function navLinkNodes(bar: Element): Element[] {
+	const out = new Set<Element>();
+	for (const link of Array.from(bar.querySelectorAll('a')).slice(0, MAX_NAV_LINK_PROBES)) {
+		let current: Element | null = link;
+		for (let i = 0; i < MAX_NAV_LINK_CLIMB && current && current !== bar; i++) {
+			out.add(current);
+			current = current.parentElement;
+		}
+	}
+	return Array.from(out);
+}
+
+/** Whether a media condition turns on below a width or above one. Both notations are read. */
+function widthBound(media: string): 'min' | 'max' | null {
+	if (/max-width:/.test(media)) return 'max';
+	if (/min-width:/.test(media)) return 'min';
+	if (/width\s*>=?\s*\d/.test(media)) return 'min';
+	if (/width\s*<=?\s*\d/.test(media)) return 'max';
+	if (/\d\s*<=?\s*width/.test(media)) return 'min';
+	if (/\d\s*>=?\s*width/.test(media)) return 'max';
+	return null;
+}
+
+/** Element.matches over a selector a sheet may have authored in a syntax this engine rejects. */
+function matchesSafely(el: Element | null, selector: string): boolean {
+	if (!el || !selector) return false;
+	try {
+		return el.matches(selector);
+	} catch {
+		return false; // A selector this engine cannot parse matches nothing.
+	}
+}
+
+/**
+ * The width a media condition turns on at, in whichever notation it was authored.
+ *
+ * Both notations have to be read. Every current utility framework emits the range form,
+ * `(width >= 40rem)`, and matching only `min-width:` reported that such a page declares no
+ * breakpoints at all.
+ */
+function breakpointOf(media: string): string | null {
+	const LENGTH = '(\\d+(?:\\.\\d+)?(?:px|em|rem))';
+	const legacy = media.match(new RegExp(`(?:max|min)-width:\\s*${LENGTH}`));
+	if (legacy) return legacy[1]!;
+	const range = media.match(new RegExp(`width\\s*[<>]=?\\s*${LENGTH}`)) ?? media.match(new RegExp(`${LENGTH}\\s*[<>]=?\\s*width`));
+	return range ? range[1]! : null;
+}
+
+/** A css length in px, so breakpoints authored in rem and px still sort against each other. */
+function toPx(value: string): number {
+	const n = parseFloat(value);
+	if (isNaN(n)) return 0;
+	return /r?em$/.test(value) ? n * 16 : n;
 }

@@ -15,11 +15,18 @@
  * dom directly.
  */
 
-/** One color the page uses, with the css contexts it appears in and a usage count. */
+/**
+ * One color the page uses, with a total usage count and the parts of an element it paints.
+ *
+ * `contexts` is ranked by weight and trimmed: a context that accounts for a trivial share of
+ * the color's uses is left out, so the list reads as what the color is for rather than as
+ * every place it was ever seen. `usage` carries the raw per-context counts behind that call.
+ */
 export interface ColorEntry {
 	value: string;
-	contexts: string[];
+	contexts: string[]; // "text" | "background" | "border", most used first.
 	count: number;
+	usage?: Record<string, number>;
 }
 
 /** One font family, with the sizes and weights it renders in and an inferred usage. */
@@ -68,15 +75,37 @@ export type LayoutPattern =
 	| 'horizontal-scroll' | 'single-column' | 'split'
 	| 'unknown';
 
+/**
+ * A section's repeated items, measured rather than named.
+ *
+ * A label alone is not rebuildable: "logos, horizontal-scroll" gives no count, no item size,
+ * and nothing to reproduce, so an agent invents a layout. The count is what the dom holds, with
+ * a seamless marquee's duplicated track collapsed to its distinct run.
+ */
+export interface SectionItems {
+	count: number;
+	width: number;
+	height: number;
+	shape: string[]; // One item's make-up in the catalog's vocabulary, e.g. ["icon", "heading", "text"].
+}
+
 /** One top-level section's composition: type, layout, and the elements it contains. */
 export interface SectionBlueprint {
 	type: SectionType;
 	tag: string;
 	layout: LayoutPattern;
+	/**
+	 * False when the layout could not be measured from the rendered boxes. The layout is then
+	 * 'unknown' and must be reported as unknown, never as a default: under a hard contract a
+	 * silent fallback is worse than an honest gap.
+	 */
+	layoutMeasured: boolean;
 	alignment: 'left' | 'center' | 'right';
 	background: string; // Bg color or "transparent".
 	elements: string[]; // Ordered, e.g. ["badge", "heading", "subtext", "button-pair", "image"].
+	items?: SectionItems; // Set only when the section repeats: a grid, a scroll track, a row cluster.
 	gridColumns?: number;
+	columnRatio?: string; // Width split of a two-column row, e.g. "58/42".
 	maxWidth?: string;
 	gap?: string;
 	padding?: string;
@@ -118,6 +147,7 @@ export interface CardBlueprint {
 
 /** The page navigation's spec. */
 export interface NavBlueprint {
+	tag: string; // The bar's element, e.g. "header"; an inner "nav" means no bar was found.
 	bg: string;
 	position: string;
 	height: string;
@@ -139,11 +169,16 @@ export interface DecorativeInfo {
 	accentTreatments: string[];
 }
 
-/** The page's responsive behavior, read from media queries. */
+/**
+ * The page's responsive behavior, read from media queries.
+ *
+ * Both behaviors report "unknown" when no rule provides evidence, exactly as an unmeasurable
+ * layout does. A default here reads as a measurement and is not one.
+ */
 export interface ResponsiveInfo {
 	breakpoints: string[];
-	mobileNavStyle: string; // "hamburger", "bottom-tab", "hidden", "unchanged".
-	gridCollapseBehavior: string; // "stack", "scroll", "reduce-columns".
+	mobileNavStyle: string; // "hamburger" or "unknown".
+	gridCollapseBehavior: string; // "stack", "scroll", "reduce-columns", or "unknown".
 }
 
 /** The complete compressed design-system schema for one page. */

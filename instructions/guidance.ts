@@ -111,8 +111,15 @@ the column counts, the max widths, and the way each section stacks. A section th
 single-column stays a single column. It does not become two columns side by side just because that
 is the common pattern for that kind of section. Do not add elements the schema does not show, even
 familiar ones like a small label above a heading, and do not drop or reorder what it does show. Make
-no assumptions from convention. The only part that is yours is the words: the copy and content that
-fill the structure the schema gives you.`;
+no assumptions from convention. An items count is a count: a section that reports 15 items gets 15,
+at the size given, not a tidier number. The only part that is yours is the words: the copy and
+content that fill the structure the schema gives you.
+
+Read the gaps as gaps. A section typed \`content\`, a layout marked \`unknown (not measured)\`, and a
+responsive field reading \`unknown\` are all the schema saying it did not measure that, not saying
+the page is plain. Fill those with your own judgment, and do not read a type label as permission to
+build the section the label usually implies: the element list and the item counts are the measured
+facts, and the label is a name on top of them.`;
 
 /** The standard placeholder icon for an empty image slot, referenced by RULES rule 5. */
 export const PLACEHOLDER_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>`;

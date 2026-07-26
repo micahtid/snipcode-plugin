@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Nimbus</title>
+<style>
+  /* A framework build's shape, reproduced deliberately: an app root, long chains of
+     single-child wrappers, hashed structural class names, a preflight reset that sets a
+     border color on every element at zero width, a gradient hero, and hairline borders.
+     sample.html keeps covering the hand-written case. */
+  *, ::before, ::after { box-sizing: border-box; border-width: 0; border-style: solid; border-color: #2d2d2d; }
+  body { margin: 0; font-family: system-ui, sans-serif; color: #2d2d2d; background: #ffffff; }
+  img { display: block; max-width: 100%; }
+  a { color: inherit; text-decoration: none; }
+
+  /* Wrapper chain: transparent, unpadded, one child each. */
+  ._a1f2, ._b3c4, ._d5e6, ._f7a8, ._c2d3, ._e4f5, ._a6b7, ._d8e9 { }
+  ._c0d1 { min-height: 100vh; }
+
+  /* Header bar. */
+  ._h1a2 {
+    position: sticky; top: 0; background: #ffffff;
+    border-bottom-width: 1px; border-bottom-color: rgba(45, 45, 45, 0.08);
+  }
+  ._h3b4 { display: flex; align-items: center; justify-content: space-between; gap: 24px; max-width: 1200px; margin: 0 auto; padding: 18px 32px; }
+  .logo { font-weight: 700; font-size: 20px; }
+  /* No display of its own: what shows this row is the utility pair in the second sheet, which
+     is how a current build writes "hidden on mobile, a row above the breakpoint". */
+  .nav-links { gap: 28px; font-size: 15px; color: #6b6b6b; }
+
+  /* The placeholder shadow layers a utility build stacks so a variant can switch one on.
+     They paint nothing, and reporting them says the button is elevated when it is flat. */
+  .btn-primary { display: inline-block; background: #ff6b4a; color: #ffffff; padding: 14px 26px; border-radius: 10px; font-weight: 600; font-size: 15px; box-shadow: rgba(0, 0, 0, 0) 0 0 0 0, rgba(0, 0, 0, 0) 0 0 0 0; }
+  .btn-ghost { display: inline-block; background: transparent; color: #2d2d2d; padding: 14px 22px; border-radius: 10px; border-width: 1px; border-color: rgba(45, 45, 45, 0.16); font-weight: 600; font-size: 15px; }
+
+  /* Gradient hero, stacked and centered. */
+  ._q3f8 { background-image: linear-gradient(135deg, #ff6b4a 0%, #ffd0c2 100%); text-align: center; }
+  ._q5g9 { max-width: 900px; margin: 0 auto; padding: 112px 32px; }
+  ._q5g9 h1 { font-size: 52px; line-height: 1.1; margin: 0 0 20px; }
+  ._q5g9 p { font-size: 19px; color: #4a4a4a; margin: 0 0 36px; }
+  ._q7h1 { display: inline-flex; gap: 16px; }
+
+  /* Two-column section. */
+  ._k7d2 { background: #ffffff; }
+  ._k9e3 { display: grid; grid-template-columns: 7fr 5fr; gap: 48px; align-items: center; max-width: 1200px; margin: 0 auto; padding: 96px 32px; }
+  ._k9e3 h2 { font-size: 36px; margin: 0 0 16px; }
+  ._k9e3 p { font-size: 17px; color: #6b6b6b; margin: 0; }
+  ._k2f4 img { width: 100%; height: 260px; border-radius: 16px; }
+
+  /* Three-column grid of hairline-bordered cards. */
+  ._m4n5 { background: #fbfbfb; }
+  ._m6p7 { max-width: 1200px; margin: 0 auto; padding: 96px 32px; }
+  ._m6p7 h2 { font-size: 36px; margin: 0 0 40px; }
+  ._m8q9 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+  ._m8q9 > * {
+    background: #ffffff; border-radius: 14px; padding: 28px;
+    border-width: 1px; border-color: rgba(45, 45, 45, 0.08);
+    box-shadow: rgba(0, 0, 0, 0) 0 0 0 0, rgba(0, 0, 0, 0.06) 0 4px 12px -2px;
+  }
+  ._m8q9 h3 { font-size: 20px; margin: 12px 0 8px; }
+  ._m8q9 p { font-size: 15px; color: #6b6b6b; margin: 0; }
+  ._m8q9 svg { width: 28px; height: 28px; color: #ff6b4a; }
+
+  /* A section with nothing measurable in it: its only child paints no box. */
+  ._r1s2 { min-height: 96px; background: #f5f5f5; }
+  ._r3t4 { display: block; width: 0; height: 0; }
+
+  /* A logo marquee: a track wider than the section, animated through a fixed window. Its
+     items are boxes in a row, but they are not the section's columns. */
+  ._w1x2 { background: #ffffff; padding: 40px 0; overflow: hidden; }
+  ._w3y4 { display: flex; gap: 56px; width: 2400px; align-items: center; }
+  ._w3y4 > * { width: 120px; height: 36px; background: #e8e8e8; border-radius: 6px; }
+
+  /* The same marquee written for a seamless loop: the whole run is duplicated so the track has
+     no visible seam. The dom holds twelve boxes and the page shows six brands. */
+  ._x1y2 { background: #ffffff; padding: 40px 0; overflow: hidden; }
+  ._x3z4 { display: flex; gap: 56px; width: 2400px; align-items: center; }
+  ._x3z4 > * { width: 120px; height: 36px; background: #f0f0f0; border-radius: 6px; font-size: 13px; text-align: center; line-height: 36px; }
+
+  ._u5v6 { padding: 48px 32px; text-align: center; color: #6b6b6b; border-top-width: 1px; border-top-color: #2d2d2d; }
+  /* Four different side colors: the shorthand for this element serializes as four colors,
+     which is not a color and must never enter the palette as one. */
+  ._z9q1 { height: 8px; max-width: 240px; margin: 0 auto 24px; border-width: 2px; border-top-color: #4f46e5; border-right-color: #22d3ee; border-bottom-color: #f43f5e; border-left-color: #facc15; }
+
+  @media (max-width: 900px) {
+    ._k9e3 { grid-template-columns: 1fr; }
+    ._m8q9 { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 640px) {
+    ._q5g9 { padding: 64px 20px; }
+  }
+</style>
+<style>
+  /* What a current utility build emits: everything wrapped in @layer, responsive variants in
+     the range notation, and state variants under escaped class names. Read only at the top
+     level, in the old notation, and matched without unescaping, this whole block is invisible. */
+  @layer theme, utilities;
+  @layer utilities {
+    /* The nav row is hidden by an unconditioned utility and shown again above the breakpoint,
+       which is a hamburger written the way a utility build writes one. No rule here mentions
+       "nav" at all, so matching rule text for it finds nothing; asking the link element which
+       rules match it finds both halves. */
+    .hidden { display: none; }
+    @media (width >= 48rem) {
+      ._m8q9 { gap: 32px; }
+      .md\:flex { display: flex; }
+    }
+    .btn-primary:hover { background: #e85c3d; }
+    .hover\:underline-x:hover { text-decoration: underline; }
+  }
+</style>
+<script>
+  // The cross-origin stylesheet the harness serves from a second origin. Its href arrives as a
+  // query parameter because the port is ephemeral. The page context cannot read this sheet, so
+  // the breakpoint it declares only reaches the schema through the Host.
+  (function () {
+    var href = new URLSearchParams(location.search).get('css');
+    if (!href) return;
+    var link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = href;
+    document.head.appendChild(link);
+  })();
+</script>
+</head>
+<body>
+<div class="_a1f2"><div class="_b3c4"><div class="_c0d1">
+
+  <header class="_h1a2">
+    <div class="_d5e6"><div class="_f7a8">
+      <div class="_h3b4">
+        <div class="logo">Nimbus</div>
+        <nav class="nav-links hidden md:flex"><a href="/product">Product</a><a href="/docs" class="hover:underline-x">Docs</a><a href="/pricing">Pricing</a></nav>
+        <a class="btn-primary" href="/start">Get started</a>
+      </div>
+    </div></div>
+  </header>
+
+  <section class="_q3f8">
+    <div class="_c2d3"><div class="_e4f5">
+      <div class="_q5g9">
+        <h1>Ship the interface you drew</h1>
+        <p>Nimbus turns a design file into a running page, and keeps the two in step after launch.</p>
+        <div class="_q7h1">
+          <a class="btn-primary" href="/start">Start free</a>
+          <a class="btn-ghost" href="/demo">Book a demo</a>
+        </div>
+      </div>
+    </div></div>
+  </section>
+
+  <section class="_k7d2">
+    <div class="_a6b7"><div class="_d8e9">
+      <div class="_k9e3">
+        <div class="_k1e4">
+          <h2>One source of truth</h2>
+          <p>Every component in the page maps back to a token, so a change to the scale reaches every screen at once instead of one at a time.</p>
+        </div>
+        <div class="_k2f4">
+          <img alt="Editor" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 640 320'%3E%3Crect width='640' height='320' fill='%23f0efee'/%3E%3C/svg%3E">
+        </div>
+      </div>
+    </div></div>
+  </section>
+
+  <section class="_m4n5">
+    <div class="_m6p7">
+      <h2>Built for teams that ship</h2>
+      <!-- Tagged <article>, not <div>: the card heuristic has to answer before the tag map, or a
+           semantically tagged card classifies as a section and never reaches a card blueprint. -->
+      <div class="_m8q9">
+        <article class="_m1a1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h16M12 4v16"/></svg>
+          <h3>Tokens first</h3>
+          <p>Colors, type, and spacing resolve from one scale.</p>
+        </article>
+        <article class="_m2a2">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg>
+          <h3>Live preview</h3>
+          <p>See a change in the running page before you commit it.</p>
+        </article>
+        <article class="_m3a3">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12l5 5 9-9"/></svg>
+          <h3>Reviewable diffs</h3>
+          <p>Design changes read like code changes in review.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- Fifteen logos on one track. The count is the whole run, not the part inside the window. -->
+  <section class="_w1x2">
+    <div class="_w3y4">
+      <img alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 36'%3E%3Crect width='120' height='36' fill='%23e8e8e8'/%3E%3C/svg%3E">
+      <img alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 36'%3E%3Crect width='120' height='36' fill='%23e8e8e8'/%3E%3C/svg%3E">
+      <img alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 36'%3E%3Crect width='120' height='36' fill='%23e8e8e8'/%3E%3C/svg%3E">
+      <img alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 36'%3E%3Crect width='120' height='36' fill='%23e8e8e8'/%3E%3C/svg%3E">
+      <img alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 36'%3E%3Crect width='120' height='36' fill='%23e8e8e8'/%3E%3C/svg%3E">
+      <img alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 36'%3E%3Crect width='120' height='36' fill='%23e8e8e8'/%3E%3C/svg%3E">
+      <img alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 36'%3E%3Crect width='120' height='36' fill='%23e8e8e8'/%3E%3C/svg%3E">
+      <img alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 36'%3E%3Crect width='120' height='36' fill='%23e8e8e8'/%3E%3C/svg%3E">
+      <img alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 36'%3E%3Crect width='120' height='36' fill='%23e8e8e8'/%3E%3C/svg%3E">
+      <img alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 36'%3E%3Crect width='120' height='36' fill='%23e8e8e8'/%3E%3C/svg%3E">
+      <img alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 36'%3E%3Crect width='120' height='36' fill='%23e8e8e8'/%3E%3C/svg%3E">
+      <img alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 36'%3E%3Crect width='120' height='36' fill='%23e8e8e8'/%3E%3C/svg%3E">
+      <img alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 36'%3E%3Crect width='120' height='36' fill='%23e8e8e8'/%3E%3C/svg%3E">
+      <img alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 36'%3E%3Crect width='120' height='36' fill='%23e8e8e8'/%3E%3C/svg%3E">
+      <img alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 36'%3E%3Crect width='120' height='36' fill='%23e8e8e8'/%3E%3C/svg%3E">
+    </div>
+  </section>
+
+  <!-- Six brands, each written twice so the loop is seamless. The run, not the dom count, is
+       what a rebuild has to reproduce. -->
+  <section class="_x1y2">
+    <div class="_x3z4">
+      <span>Northwind</span><span>Contoso</span><span>Fabrikam</span><span>Tailspin</span><span>Proseware</span><span>Litware</span>
+      <span>Northwind</span><span>Contoso</span><span>Fabrikam</span><span>Tailspin</span><span>Proseware</span><span>Litware</span>
+    </div>
+  </section>
+
+  <section class="_r1s2"><span class="_r3t4"></span></section>
+
+  <footer class="_u5v6">
+    <div class="_z9q1"></div>
+    <span>© 2026 Nimbus</span>
+  </footer>
+
+</div></div></div>
+</body>
+</html>

@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Meridian</title>
+<style>
+  /* The shapes framework.html does not cover, each one a place where a guess used to outrank a
+     measurement: a compact type scale, a nav with no landmark tag, stats written in two scripts,
+     scroll-reveal content held at opacity 0, radii a browser serializes strangely, a section
+     long enough to exhaust the walk's budget, and no media queries at all. */
+  *, ::before, ::after { box-sizing: border-box; }
+  /* A compact base. Every threshold that reads type has to come off this number, not off 32px. */
+  body { margin: 0; font-family: system-ui, sans-serif; font-size: 13px; color: #333333; background: #ffffff; }
+  a { color: inherit; text-decoration: none; }
+
+  /* A nav bar with no header, no nav, and no role: a div bar, which is all its geometry needs. */
+  .topbar { position: sticky; top: 0; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 14px 32px; background: #ffffff; }
+  .topbar-links { display: flex; gap: 20px; font-size: 13px; }
+
+  /* A hero with no call to action: a heading and a line, which is how a blog or a doc opens. */
+  .hero { padding: 72px 32px; text-align: center; background: #f7f7f9; }
+  .hero-wrap { max-width: 760px; margin: 0 auto; }
+  /* Twice the base and no more. At a fixed 32px floor this heading does not exist. */
+  .hero h1 { font-size: 26px; margin: 0 0 12px; }
+  .hero p { font-size: 15px; color: #666666; margin: 0; }
+
+  .band { padding: 56px 32px; }
+  .row { display: flex; gap: 32px; max-width: 960px; margin: 0 auto; }
+  .row > * { flex: 1; text-align: center; }
+  .figure { font-size: 30px; font-weight: 700; }
+  .caption { font-size: 13px; color: #666666; }
+
+  /* Scroll-reveal: in flow, opacity 0, an opacity transition declared. It is authored to appear,
+     so it is content. The overlay below is hidden the same way and is not: it is out of flow. */
+  .reveal { opacity: 0; transition: opacity 400ms ease; }
+  .reveal p { color: #0b7a5a; }
+  .overlay { position: absolute; opacity: 0; transition: opacity 400ms ease; }
+  .overlay p { color: #b3126a; }
+
+  /* A pill, authored the way a browser serializes one, and a corner shorthand. Neither is one
+     value of the kind the radius token expects, and both used to enter the list verbatim. The
+     button carries the same pill into the component blueprint, which is a second path to the
+     same reader and used to print the raw number beside the token list's clean one. */
+  .pill { width: 200px; height: 40px; background: #eeeef2; border-radius: 33554432px; }
+  .sheet { width: 200px; height: 60px; background: #eeeef2; border-radius: 32px 32px 0px 0px; }
+  .pill-btn { display: inline-block; margin-top: 16px; padding: 10px 22px; background: #333333; color: #ffffff; border: 0; font-size: 13px; border-radius: 33554432px; }
+
+  /* A dated archive, shaped the way a plain blog writes one: the list is the section. One
+     column, every entry opening with its date. Number-led text without a row is a list, not a
+     stats band. */
+  .archive { list-style: none; margin: 0; padding: 40px 32px; }
+  .archive li { display: flex; gap: 12px; padding: 6px 0; }
+  .archive .when { width: 4em; color: #999999; }
+
+  /* Long enough that one budget bucket for the whole page runs out inside it. */
+  .filler span { font-size: 11px; color: #dddddd; }
+
+  .closing { padding: 56px 32px; }
+  .closing h2 { font-size: 20px; margin: 0 0 8px; }
+  .closing p { color: #7b3fa0; margin: 0; }
+</style>
+</head>
+<body>
+<div id="root"><div class="shell">
+
+  <div class="topbar">
+    <div class="brand">Meridian</div>
+    <div class="topbar-links"><a href="/docs">Docs</a><a href="/guides">Guides</a><a href="/api">API</a></div>
+  </div>
+
+  <section class="hero">
+    <div class="hero-wrap">
+      <h1>Notes on building for the long run</h1>
+      <!-- The same digits the stats bands below are made of. Searching a section's whole text for
+           numbers is what voted a hero into `stats`; the reading is on measured items now, and
+           this section has none. -->
+      <p>Read at 1,900+ universities by 34,000 students, with 98% coming back.</p>
+    </div>
+  </section>
+
+  <section class="band stats">
+    <div class="row">
+      <div><div class="figure">1,900+</div><div class="caption">Universities</div></div>
+      <div><div class="figure">34,000</div><div class="caption">Students</div></div>
+      <div><div class="figure">98%</div><div class="caption">Placement</div></div>
+    </div>
+  </section>
+
+  <!-- The same band in Devanagari. The text shapes are unicode classes, so it classifies from
+       the same rule rather than from a hand-listed set of Latin digits. -->
+  <section class="band stats-deva" lang="hi">
+    <div class="row">
+      <div><div class="figure">१,९००+</div><div class="caption">विश्वविद्यालय</div></div>
+      <div><div class="figure">३४,०००</div><div class="caption">छात्र</div></div>
+      <div><div class="figure">९८%</div><div class="caption">नियुक्ति</div></div>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="reveal"><p>Held at opacity zero until it scrolls into view, and in flow the whole time.</p></div>
+    <div class="overlay"><p>A tooltip, hidden the same way and taken out of flow.</p></div>
+  </section>
+
+  <section class="band radii">
+    <div class="pill"></div>
+    <div class="sheet"></div>
+    <button class="pill-btn" type="button">Subscribe</button>
+  </section>
+
+  <ul class="archive">
+    <li><span class="when">07/26</span><a href="/a">Agentic test processes and other notes</a></li>
+    <li><span class="when">10/24</span><a href="/b">Steve Ballmer was an underrated CEO</a></li>
+    <li><span class="when">08/24</span><a href="/c">How good can you be without knowing words</a></li>
+    <li><span class="when">06/24</span><a href="/d">A discussion of discussions on bias</a></li>
+    <li><span class="when">05/24</span><a href="/e">What the report got wrong</a></li>
+    <li><span class="when">03/24</span><a href="/f">How web bloat impacts slow devices</a></li>
+  </ul>
+
+  <section class="band filler" id="filler"></section>
+
+  <section class="closing">
+    <h2>Colophon</h2>
+    <p>Set in the system stack, on a thirteen pixel base.</p>
+  </section>
+
+</div></div>
+<script>
+  // Fills the page well past the walk's element budget. A page whose sections all share one
+  // bucket spends the whole budget in here and never reaches the closing section; one whose
+  // budget is split per section spends this section's share and moves on.
+  (function () {
+    var host = document.getElementById('filler');
+    for (var i = 0; i < 4000; i++) {
+      var span = document.createElement('span');
+      span.textContent = '.';
+      host.appendChild(span);
+    }
+  })();
+</script>
+</body>
+</html>

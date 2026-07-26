@@ -139,8 +139,16 @@ export async function runSchema(args: Args): Promise<void> {
 				schema: jsonPath,
 				markdown: mdPath,
 				// screenshot: shotPath,
+				// Echo every measured block, not just tokens and sections: an agent that reads
+				// the payload instead of the files should see the same schema the files carry.
 				tokens: result.schema.tokens,
 				sections: result.schema.sections,
+				contentPatterns: result.schema.contentPatterns,
+				buttons: result.schema.buttons,
+				cards: result.schema.cards,
+				nav: result.schema.nav,
+				decorative: result.schema.decorative,
+				responsive: result.schema.responsive,
 				guidance: INLINE.schema,
 			});
 		});

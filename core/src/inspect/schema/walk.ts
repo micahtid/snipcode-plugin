@@ -7,13 +7,23 @@
  *
  * Why this exists: every later schema pass reads the same sample of the page, so the sample
  * is taken once, here. Sampling is the interesting part: a naive walk of a long page spends
- * its whole budget in the first section, so the budget is split across the top-level
- * sections in proportion to their size. The dedup pass at the bottom then collapses runs of
- * identical siblings, which is what keeps a fifty-row list from filling the structure tree.
+ * its whole budget in the first section, so the budget is split across the page's sections in
+ * proportion to their size. The dedup pass at the bottom then collapses runs of identical
+ * siblings, which is what keeps a fifty-row list from filling the structure tree.
+ *
+ * The sections come from discovery, not from body's children. On an app-root page body has one
+ * child, so splitting across its children gave the whole page a single bucket and the
+ * stratification, whose entire purpose is to stop the first section from crowding out the rest,
+ * did nothing at all. Discovery already reaches through the wrapper; the walk reuses its answer.
+ *
+ * Depth is counted in levels of structure, not in dom nodes. A framework build separates a
+ * section from its content by a chain of single-child divs, and charging each link a level
+ * spends the whole depth budget before the walk reaches anything worth recording.
  */
 import { computeFingerprint } from './fingerprint';
 import { classifyElement, isElementVisible, SKIP_TAGS } from './classify';
-import { groupBy, isTransparentColor, normalizeColor, type WalkedElement } from './shared';
+import { hasDirectText } from './geometry';
+import { groupBy, gradientStops, isTransparentColor, normalizeColor, type PseudoColor, type WalkedElement } from './shared';
 import type { ComponentPattern } from './types';
 
 /** Selectors for third-party widgets, such as chat, cookie, and analytics, to skip during the walk. */
@@ -24,15 +34,28 @@ const THIRD_PARTY_BLOCKLIST = [
 	'[class*="tawk"]', '[id*="chatlio"]',
 ];
 
+/** Elements the walk records in total, across every section. */
+const MAX_ELEMENTS = 1500;
+/** Levels of structure the walk records, wrapper chains not counted. */
+const MAX_DEPTH = 6;
+/** Smallest budget any one section gets, so a short section is never sampled down to nothing. */
+const MIN_SECTION_BUDGET = 10;
+/**
+ * Extra share of its budget a section may spend on its over-budget tail sample. The tail is what
+ * keeps a very long section from being represented only by its opening, and bounding it is what
+ * stops that same section from eating the share belonging to the sections after it.
+ */
+const TAIL_SHARE = 0.25;
+
 /**
  * Walks the visible dom, capturing each element's role, fingerprint, and tree
- * position. Sampling is stratified: each top-level section gets a share of the
+ * position. Sampling is stratified: each discovered section gets a share of the
  * element budget proportional to its size, so a long section cannot crowd out the
- * rest. Once a section exceeds its budget it is sampled every third element.
+ * rest. Once a section exceeds its budget it is sampled every third element, up to
+ * a bounded tail.
  */
-export function walkDOM(): WalkedElement[] {
+export function walkDOM(sectionRoots: Element[]): WalkedElement[] {
 	const elements: WalkedElement[] = [];
-	const MAX_ELEMENTS = 1500;
 
 	const isThirdParty = (el: Element): boolean => {
 		for (const selector of THIRD_PARTY_BLOCKLIST) {
@@ -45,30 +68,30 @@ export function walkDOM(): WalkedElement[] {
 		return el.ownerDocument !== document; // Inside an iframe.
 	};
 
-	// First pass: size each top-level section so the budget can be split proportionally.
-	const topSections: Array<{ el: Element; count: number }> = [];
-	for (let i = 0; i < document.body.children.length; i++) {
-		const child = document.body.children[i]!;
-		if (SKIP_TAGS.has(child.tagName.toLowerCase())) continue;
-		topSections.push({ el: child, count: child.querySelectorAll('*').length });
-	}
-	const totalElements = topSections.reduce((s, sec) => s + sec.count, 0);
+	// First pass: size each section so the budget can be split proportionally. The floors come
+	// out of the pool before the split, so the shares plus their tails cannot sum past the cap
+	// and leave the walk's global stop, rather than the split, deciding who gets sampled.
+	const sized = sectionRoots.map((el) => ({ el, count: el.querySelectorAll('*').length }));
+	const totalElements = sized.reduce((sum, sec) => sum + sec.count, 0);
+	const pool = Math.max(0, MAX_ELEMENTS / (1 + TAIL_SHARE) - MIN_SECTION_BUDGET * sized.length);
 
 	const sectionBudgets = new Map<Element, number>();
-	for (const sec of topSections) {
-		const proportion = totalElements > 0 ? sec.count / totalElements : 1 / topSections.length;
-		sectionBudgets.set(sec.el, Math.max(10, Math.round(MAX_ELEMENTS * proportion)));
+	for (const sec of sized) {
+		const proportion = totalElements > 0 ? sec.count / totalElements : 1 / Math.max(1, sized.length);
+		sectionBudgets.set(sec.el, MIN_SECTION_BUDGET + Math.round(pool * proportion));
 	}
 
-	const sectionCounts = new Map<Element, number>();
-	const findTopSection = (el: Element): Element | null => {
+	const sectionRootSet = new Set(sectionRoots);
+	const sectionSeen = new Map<Element, number>();
+	const sectionRecorded = new Map<Element, number>();
+	const findSection = (el: Element): Element | null => {
 		let current: Element | null = el;
-		while (current && current.parentElement !== document.body) current = current.parentElement;
+		while (current && !sectionRootSet.has(current)) current = current.parentElement;
 		return current;
 	};
 
 	const walk = (parent: Element, depth: number): void => {
-		if (depth > 6) return;
+		if (depth > MAX_DEPTH) return;
 
 		for (let i = 0; i < parent.children.length; i++) {
 			const el = parent.children[i]!;
@@ -76,19 +99,25 @@ export function walkDOM(): WalkedElement[] {
 			if (isThirdParty(el)) continue;
 			if (!isElementVisible(el)) continue;
 
-			const topSection = findTopSection(el) || el;
-			const currentCount = sectionCounts.get(topSection) || 0;
-			const budget = sectionBudgets.get(topSection) || MAX_ELEMENTS;
+			// A single-child wrapper is one step along a chain, not a level of structure.
+			const next = el.children.length === 1 && !hasDirectText(el) ? depth : depth + 1;
+			const section = findSection(el) || el;
+			const seen = sectionSeen.get(section) || 0;
+			const recorded = sectionRecorded.get(section) || 0;
+			const budget = sectionBudgets.get(section) ?? MAX_ELEMENTS;
 
-			// Over budget: keep descending but sample only every third element.
-			if (currentCount >= budget && currentCount % 3 !== 0) {
-				sectionCounts.set(topSection, currentCount + 1);
-				walk(el, depth + 1);
+			// Over budget: keep descending but sample only every third element, and stop
+			// recording once the tail allowance is spent.
+			const overBudget = seen >= budget && (seen % 3 !== 0 || recorded >= budget * (1 + TAIL_SHARE));
+			if (overBudget) {
+				sectionSeen.set(section, seen + 1);
+				walk(el, next);
 				continue;
 			}
 
 			if (elements.length >= MAX_ELEMENTS) return;
-			sectionCounts.set(topSection, currentCount + 1);
+			sectionSeen.set(section, seen + 1);
+			sectionRecorded.set(section, recorded + 1);
 
 			const { fingerprint, properties } = computeFingerprint(el);
 			const walked: WalkedElement = {
@@ -104,7 +133,7 @@ export function walkDOM(): WalkedElement[] {
 			if (pseudoColors.length > 0) walked.pseudoColors = pseudoColors;
 
 			elements.push(walked);
-			walk(el, depth + 1);
+			walk(el, next);
 		}
 	};
 
@@ -112,9 +141,9 @@ export function walkDOM(): WalkedElement[] {
 	return elements;
 }
 
-/** Colors painted by an element's ::before / ::after content, when it has content. */
-function extractPseudoColors(el: Element): string[] {
-	const colors: string[] = [];
+/** Colors painted by an element's ::before / ::after content, tagged with what they paint. */
+function extractPseudoColors(el: Element): PseudoColor[] {
+	const colors: PseudoColor[] = [];
 	for (const pseudo of ['::before', '::after'] as const) {
 		try {
 			const style = window.getComputedStyle(el, pseudo);
@@ -124,12 +153,13 @@ function extractPseudoColors(el: Element): string[] {
 			const bg = style.backgroundColor;
 			if (bg && !isTransparentColor(bg)) {
 				const normalized = normalizeColor(bg);
-				if (normalized) colors.push(normalized);
+				if (normalized) colors.push({ value: normalized, group: 'background' });
 			}
+			for (const stop of gradientStops(style.backgroundImage)) colors.push({ value: stop, group: 'background' });
 			const color = style.color;
 			if (color && !isTransparentColor(color)) {
 				const normalized = normalizeColor(color);
-				if (normalized) colors.push(normalized);
+				if (normalized) colors.push({ value: normalized, group: 'text' });
 			}
 		} catch {
 			// Cross-origin or unsupported pseudo, skip.

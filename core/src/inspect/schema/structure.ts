@@ -33,7 +33,10 @@ export function extractStates(rules: CSSRule[], walked: WalkedElement[]): StateR
 		if (!stateMatch) continue;
 		const state = stateMatch[0].slice(1) as StateRule['state'];
 
-		const baseSelector = selector.replace(/:(?:hover|focus|active|focus-visible)/g, '').trim();
+		// Drop the css escapes before matching. A utility class named "hover:bg-x" is written
+		// `.hover\:bg-x` in the sheet but reads back as "hover:bg-x" off the element, so an
+		// unescaped comparison matched nothing at all on a utility-class page.
+		const baseSelector = selector.replace(/:(?:hover|focus|active|focus-visible)/g, '').replace(/\\/g, '').trim();
 		let matches = false;
 		for (const cls of walkedSelectors) {
 			if (baseSelector.includes(cls)) {

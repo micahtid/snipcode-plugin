@@ -6,6 +6,9 @@
  * grid/flex, column counts, and max-widths. The schema is the whole payload; component
  * samples are deliberately excluded so schema.md stays small enough for an agent to
  * read in one pass. An agent that wants a concrete sample runs extract on one element.
+ *
+ * Async because the extractor recovers cross-origin stylesheets through the Host, which is
+ * where a cdn-served site keeps its hover rules and breakpoints.
  */
 import type { PageSchema } from './inspect/schema/types';
 import { extractPageSchema } from './inspect/schema/extract';
@@ -17,6 +20,6 @@ export interface SchemaResult {
 }
 
 /** Builds the whole-page schema: design tokens and layout from the inspector. */
-export function buildSchema(): SchemaResult {
-	return { schema: optimizeSchema(extractPageSchema()) };
+export async function buildSchema(): Promise<SchemaResult> {
+	return { schema: optimizeSchema(await extractPageSchema()) };
 }

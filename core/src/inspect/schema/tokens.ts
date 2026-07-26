@@ -11,13 +11,33 @@
  * perceptually, the spacing is fitted to a base unit, and the type sizes are fitted to a
  * modular scale. The consistency score at the bottom reads those fits back out as the
  * fragmentation the redesign prompt should know about.
+ *
+ * Every collector here reads a computed style, and a computed style serializes whatever the
+ * cascade produced, which is not always one value of the kind being asked for. Nothing in this
+ * file decides that for itself: each candidate crosses validateToken in shared.ts, so a corner
+ * shorthand, a pill radius, or a two-axis gap is handled once rather than at each call site
+ * that happens to meet it first.
  */
 import { hexToRgb, oklabDistance, rgbToOklab, type Oklab } from './oklab';
-import { isTransparentColor, normalizeColor, type WalkedElement } from './shared';
+import {
+	byLength, compositeOver, effectiveBackground, gradientStops, isTranslucent,
+	parseRgba, validateToken, type ColorGroup, type WalkedElement,
+} from './shared';
 import type { ColorEntry, FontEntry } from './types';
 
-const COLOR_PROPS = ['color', 'background-color', 'border-color', 'border-top-color', 'border-right-color', 'border-bottom-color', 'border-left-color'];
-const SPACING_PROPS = ['padding-top', 'padding-right', 'padding-bottom', 'padding-left', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left', 'gap'];
+// row-gap and column-gap, never the `gap` shorthand: with two different gaps the shorthand
+// serializes as "40px 64px", which is not a length. The token gate would reject that anyway,
+// but reading the two axes separately keeps both real values instead of losing the pair.
+const SPACING_PROPS =['padding-top', 'padding-right', 'padding-bottom', 'padding-left', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left', 'row-gap', 'column-gap'];
+/** The four border sides, read one at a time. The shorthand is never read: it is not a color. */
+const BORDER_SIDES = ['top', 'right', 'bottom', 'left'] as const;
+/** A context below this share of a color's uses is noise, not a role, and is not reported. */
+const TRIVIAL_CONTEXT_SHARE = 0.1;
+/** How many of each token kind collection carries out, before the optimizer's own caps. */
+const MAX_COLORS = 30;
+const MAX_SPACING = 20;
+const MAX_RADII = 10;
+const MAX_SHADOWS = 8;
 
 /** Known modular type-scale ratios, fitted against the page's font sizes. */
 const MODULAR_SCALES: Array<{ name: string; ratio: number }> = [
@@ -38,75 +58,120 @@ export interface SpacingAnalysis {
 	offGrid: string[];
 }
 
-/** Collects the page's colors, from paint props and pseudo-element colors, Oklab-clustered. */
+/** One collected color before clustering: its uses, split by the part of the element it paints. */
+interface RawColor {
+	value: string;
+	count: number;
+	groups: Map<ColorGroup, number>;
+	/** True when the color carries alpha, so it paints over whatever is behind it. */
+	alpha: boolean;
+	/** The hex this color resolves to on screen, which is where it sits for clustering. */
+	clusterHex: string;
+}
+
+/**
+ * Collects the page's colors, weighted by what each one paints.
+ *
+ * Three things make the result honest. A border color counts only when the side it belongs to
+ * actually paints, so a framework reset that sets `border-color` on every element with zero
+ * width no longer turns the page's text ink into a border token. Identical sides count once
+ * per element rather than four times. And a gradient's stops are read out of background-image,
+ * which is the only place a brand accent lives on a page that paints it as a gradient.
+ */
 export function collectColors(walked: WalkedElement[]): ColorEntry[] {
-	const colorMap = new Map<string, { contexts: Set<string>; count: number }>();
-	const add = (value: string, context: string): void => {
-		const existing = colorMap.get(value);
-		if (existing) {
-			existing.contexts.add(context);
-			existing.count++;
-		} else {
-			colorMap.set(value, { contexts: new Set([context]), count: 1 });
+	const colorMap = new Map<string, RawColor>();
+	const add = (raw: string, group: ColorGroup, el: Element): void => {
+		const value = validateToken('color', raw)[0];
+		if (!value) return;
+		let record = colorMap.get(value);
+		if (!record) {
+			const alpha = isTranslucent(value);
+			record = { value, count: 0, groups: new Map(), alpha, clusterHex: paintedHex(value, alpha, el) };
+			colorMap.set(value, record);
 		}
+		record.count++;
+		record.groups.set(group, (record.groups.get(group) ?? 0) + 1);
 	};
 
 	for (const el of walked) {
 		const computed = window.getComputedStyle(el.element);
-		for (const prop of COLOR_PROPS) {
-			const value = computed.getPropertyValue(prop).trim();
-			if (!value || isTransparentColor(value)) continue;
-			const normalized = normalizeColor(value);
-			if (normalized) add(normalized, prop);
-		}
-		for (const pc of el.pseudoColors ?? []) add(pc, 'pseudo');
+		add(computed.color, 'text', el.element);
+		add(computed.backgroundColor, 'background', el.element);
+		for (const side of paintingBorderColors(computed)) add(side, 'border', el.element);
+		for (const stop of gradientStops(computed.backgroundImage)) add(stop, 'background', el.element);
+		for (const pseudo of el.pseudoColors ?? []) add(pseudo.value, pseudo.group, el.element);
 	}
 
-	const rawEntries = Array.from(colorMap.entries())
-		.map(([value, data]) => ({ value, contexts: Array.from(data.contexts), count: data.count }))
-		.sort((a, b) => b.count - a.count);
+	const raw = Array.from(colorMap.values()).sort((a, b) => b.count - a.count);
+	return clusterColorsOklab(raw).slice(0, MAX_COLORS);
+}
 
-	return clusterColorsOklab(rawEntries).slice(0, 30);
+/** Where a color lands on screen: itself when opaque, composited over its backdrop when not. */
+function paintedHex(value: string, alpha: boolean, el: Element): string {
+	if (!alpha) return value;
+	const rgba = parseRgba(value);
+	if (!rgba) return value;
+	return compositeOver(rgba, effectiveBackground(el));
 }
 
 /**
- * Clusters colors by Oklab perceptual distance, merging below 0.04, keeping the
- * most frequent member as the representative and a frequency-weighted centroid.
- * Non-hex colors, for example rgba with alpha, are kept as singleton clusters.
+ * The distinct colors of the border sides that actually paint. A side with zero width or no
+ * style still reports a color, and counting those is what made a page's ink read as a border.
  */
-function clusterColorsOklab(colors: ColorEntry[]): ColorEntry[] {
-	if (colors.length <= 1) return colors;
+function paintingBorderColors(computed: CSSStyleDeclaration): string[] {
+	const out = new Set<string>();
+	for (const side of BORDER_SIDES) {
+		const style = computed.getPropertyValue(`border-${side}-style`);
+		if (!style || style === 'none' || style === 'hidden') continue;
+		if (!(parseFloat(computed.getPropertyValue(`border-${side}-width`)) > 0)) continue;
+		const color = computed.getPropertyValue(`border-${side}-color`).trim();
+		if (color) out.add(color);
+	}
+	return Array.from(out);
+}
 
+/**
+ * Clusters colors by Oklab perceptual distance, merging below 0.04, keeping the most frequent
+ * member as the representative and a frequency-weighted centroid.
+ *
+ * Translucent colors cluster only against other translucent colors, positioned by the hex they
+ * composite to. That gives a hairline like rgba(45,45,45,0.08) a real place in color space
+ * instead of the zeroed position every alpha value used to share, while stopping the near-white
+ * it paints from folding it into the page background and erasing it.
+ */
+function clusterColorsOklab(colors: RawColor[]): ColorEntry[] {
 	interface ColorCluster {
-		representative: ColorEntry;
+		representative: RawColor;
 		lab: Oklab;
 		totalCount: number;
-		contexts: Set<string>;
-		members: ColorEntry[];
+		groups: Map<ColorGroup, number>;
+		members: RawColor[];
+		alpha: boolean;
 	}
 	const clusters: ColorCluster[] = [];
 	const threshold = 0.04;
 
 	for (const color of colors) {
-		const rgb = hexToRgb(color.value);
+		const rgb = hexToRgb(color.clusterHex);
 		if (!rgb) {
-			clusters.push({ representative: color, lab: { L: 0, a: 0, b: 0 }, totalCount: color.count, contexts: new Set(color.contexts), members: [color] });
+			clusters.push({ representative: color, lab: { L: 0, a: 0, b: 0 }, totalCount: color.count, groups: new Map(color.groups), members: [color], alpha: color.alpha });
 			continue;
 		}
 
 		const lab = rgbToOklab(rgb.r, rgb.g, rgb.b);
 		let merged = false;
 		for (const cluster of clusters) {
+			if (cluster.alpha !== color.alpha) continue;
 			if (oklabDistance(lab, cluster.lab) >= threshold) continue;
 			cluster.members.push(color);
 			cluster.totalCount += color.count;
-			color.contexts.forEach((c) => cluster.contexts.add(c));
+			for (const [group, count] of color.groups) cluster.groups.set(group, (cluster.groups.get(group) ?? 0) + count);
 			if (color.count > cluster.representative.count) cluster.representative = color;
 
 			const totalWeight = cluster.members.reduce((s, m) => s + m.count, 0);
 			let wL = 0, wA = 0, wB = 0;
 			for (const m of cluster.members) {
-				const mRgb = hexToRgb(m.value);
+				const mRgb = hexToRgb(m.clusterHex);
 				if (!mRgb) continue;
 				const mLab = rgbToOklab(mRgb.r, mRgb.g, mRgb.b);
 				wL += mLab.L * m.count;
@@ -117,12 +182,31 @@ function clusterColorsOklab(colors: ColorEntry[]): ColorEntry[] {
 			merged = true;
 			break;
 		}
-		if (!merged) clusters.push({ representative: color, lab, totalCount: color.count, contexts: new Set(color.contexts), members: [color] });
+		if (!merged) clusters.push({ representative: color, lab, totalCount: color.count, groups: new Map(color.groups), members: [color], alpha: color.alpha });
 	}
 
 	return clusters
-		.map((c) => ({ value: c.representative.value, contexts: Array.from(c.contexts), count: c.totalCount }))
+		.map((c) => ({
+			value: c.representative.value,
+			contexts: weightedContexts(c.groups),
+			count: c.totalCount,
+			usage: Object.fromEntries(c.groups),
+		}))
 		.sort((a, b) => b.count - a.count);
+}
+
+/**
+ * Ranks a color's contexts by how much of its use each accounts for, dropping the trivial
+ * ones. A color used four hundred times as text and twice as a border is a text color; a flat
+ * list that gave both equal standing is what made a redesign outline every card in body ink.
+ */
+export function weightedContexts(groups: Map<ColorGroup, number> | Record<string, number>): string[] {
+	const entries = groups instanceof Map ? Array.from(groups.entries()) : Object.entries(groups);
+	const total = entries.reduce((sum, [, count]) => sum + count, 0);
+	if (total <= 0) return [];
+	const ranked = entries.slice().sort((a, b) => b[1] - a[1]);
+	const kept = ranked.filter(([, count], i) => i === 0 || count / total >= TRIVIAL_CONTEXT_SHARE);
+	return kept.map(([group]) => group);
 }
 
 /** Collects the font families used, with their sizes, weights, and inferred usage. */
@@ -131,18 +215,20 @@ export function collectFonts(walked: WalkedElement[]): FontEntry[] {
 	for (const el of walked) {
 		const computed = window.getComputedStyle(el.element);
 		const family = computed.fontFamily.split(',')[0]!.trim().replace(/["']/g, '');
+		const sizes = validateToken('font-size', computed.fontSize);
+		const weight = parseInt(computed.fontWeight) || 400;
 		const existing = fontMap.get(family);
 		if (existing) {
-			existing.sizes.add(computed.fontSize);
-			existing.weights.add(parseInt(computed.fontWeight) || 400);
+			for (const size of sizes) existing.sizes.add(size);
+			existing.weights.add(weight);
 			existing.roles.add(el.role);
 		} else {
-			fontMap.set(family, { sizes: new Set([computed.fontSize]), weights: new Set([parseInt(computed.fontWeight) || 400]), roles: new Set([el.role]) });
+			fontMap.set(family, { sizes: new Set(sizes), weights: new Set([weight]), roles: new Set([el.role]) });
 		}
 	}
 	return Array.from(fontMap.entries()).map(([family, data]) => ({
 		family,
-		sizes: Array.from(data.sizes).sort((a, b) => parseFloat(a) - parseFloat(b)),
+		sizes: Array.from(data.sizes).sort(byLength),
 		weights: Array.from(data.weights).sort((a, b) => a - b),
 		usage: inferFontUsage(data.roles),
 	}));
@@ -162,31 +248,35 @@ export function collectSpacing(walked: WalkedElement[]): string[] {
 	for (const el of walked) {
 		const computed = window.getComputedStyle(el.element);
 		for (const prop of SPACING_PROPS) {
-			const value = computed.getPropertyValue(prop).trim();
-			if (value && value !== '0px' && value !== 'normal' && value !== 'auto') spacingSet.add(value);
+			for (const value of validateToken('spacing', computed.getPropertyValue(prop))) spacingSet.add(value);
 		}
 	}
-	return Array.from(spacingSet).sort((a, b) => parseFloat(a) - parseFloat(b)).slice(0, 20);
+	return Array.from(spacingSet).sort(byLength).slice(0, MAX_SPACING);
 }
 
-/** Collects distinct non-default values of one abbreviated fingerprint property. */
-export function collectValues(walked: WalkedElement[], propAbbr: string): string[] {
+/**
+ * Collects the distinct corner radii, sorted ascending.
+ *
+ * Everything the gate does shows up here: a corner shorthand enters as its distinct corner
+ * values rather than as the one string "32px 32px 0px 0px", and a pill, which a browser
+ * serializes as a radius of 3.35544e+07px, enters as the 9999px a page would author for the
+ * same shape.
+ */
+export function collectRadii(walked: WalkedElement[]): string[] {
 	const values = new Set<string>();
 	for (const el of walked) {
-		const val = el.properties[propAbbr];
-		if (val && val !== '0px' && val !== 'none') values.add(val);
+		for (const radius of validateToken('radius', el.properties['br'] ?? '')) values.add(radius);
 	}
-	return Array.from(values).slice(0, 10);
+	return Array.from(values).sort(byLength).slice(0, MAX_RADII);
 }
 
-/** Collects the distinct box-shadow values seen. */
+/** Collects the distinct box-shadow values that actually paint. */
 export function collectShadows(walked: WalkedElement[]): string[] {
 	const shadows = new Set<string>();
 	for (const el of walked) {
-		const val = el.properties['bs'];
-		if (val && val !== 'none') shadows.add(val);
+		for (const shadow of validateToken('shadow', el.properties['bs'] ?? '')) shadows.add(shadow);
 	}
-	return Array.from(shadows).slice(0, 8);
+	return Array.from(shadows).slice(0, MAX_SHADOWS);
 }
 
 /** Detects the spacing base unit (4/5/6/8/10) and how much spacing sits on that grid. */

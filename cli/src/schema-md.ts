@@ -4,6 +4,15 @@
  * schema.json is the machine payload; schema.md is the human/prompt-facing summary an
  * agent can drop straight into a redesign prompt. Pure formatting over the schema the
  * inspector produced, defensive about optional fields so a thin page still renders.
+ *
+ * Everything the inspector measures renders here, one line each. The component blueprints
+ * used to be extracted and then dropped, so a card spec that said `border: none` sat in
+ * schema.json while the agent reading schema.md invented borders. Data that never reaches
+ * the reader may as well not have been measured.
+ *
+ * An unmeasured layout renders as `unknown (not measured)`, never as a default. The schema is
+ * a hard contract, so a value it did not measure has to read as a gap and hand the decision
+ * back to the agent's judgment.
  */
 import type { PageSchema } from '../../core/src/inspect/schema/types';
 import type { SchemaResult } from '../../core/src/schema';
@@ -38,6 +47,8 @@ export function renderSchemaMd(result: SchemaResult, stamp: SchemaStamp): string
 	push();
 	renderSections(schema, push);
 	push();
+
+	renderComponents(schema, push);
 
 	return `${lines.join('\n')}\n`;
 }
@@ -85,11 +96,85 @@ function renderSections(schema: PageSchema, push: (s?: string) => void): void {
 		return;
 	}
 	for (const s of sections) {
-		const bits: string[] = [s.layout];
-		if (s.gridColumns) bits.push(`${s.gridColumns} cols`);
+		// layoutMeasured is optional only for a schema.json an older version wrote; a missing
+		// flag is treated as measured so an old file still renders its layout.
+		const measured = s.layoutMeasured !== false;
+		const bits: string[] = [measured ? s.layout : 'unknown (not measured)'];
+		if (measured && s.gridColumns) bits.push(`${s.gridColumns} cols`);
+		if (measured && s.columnRatio) bits.push(`split ${s.columnRatio}`);
 		if (s.maxWidth) bits.push(`max ${s.maxWidth}`);
 		if (s.gap) bits.push(`gap ${s.gap}`);
 		push(`- **${s.type}** (${s.tag}, ${s.alignment}): ${bits.join(', ')}`);
+		const box: string[] = [`bg ${s.background}`];
+		if (s.padding) box.push(`padding ${s.padding}`);
+		push(`  - ${box.join(' · ')}`);
 		if (s.elements?.length) push(`  - elements: ${s.elements.join(' · ')}`);
+		// A repeating section is only rebuildable as numbers: how many items, how big one is,
+		// and what it holds. The label on top of them barely matters once these are stated.
+		if (s.items) {
+			const shape = s.items.shape?.length ? ` (${s.items.shape.join(' + ')})` : '';
+			push(`  - items: ${s.items.count} × ~${s.items.width}x${s.items.height}${shape}`);
+		}
 	}
+}
+
+/** Renders the component blueprints and the page's decorative and responsive language. */
+function renderComponents(schema: PageSchema, push: (s?: string) => void): void {
+	const buttons = schema.buttons ?? [];
+	const cards = schema.cards ?? [];
+	const nav = schema.nav;
+	const decorative = schema.decorative;
+	const breakpoints = schema.responsive?.breakpoints ?? [];
+	if (!buttons.length && !cards.length && !nav && !decorative && !breakpoints.length) return;
+
+	push('## Components');
+	push();
+
+	if (nav) {
+		const bits = [`bg ${nav.bg}`, nav.position, `height ${nav.height}`];
+		if (nav.border && nav.border !== 'none') bits.push(`border ${nav.border}`);
+		if (nav.blur) bits.push('backdrop blur');
+		push(`**Nav** (${nav.tag ?? 'nav'}): ${bits.join(', ')}`);
+		push(`- ${nav.layout}, ${nav.linkCount} links`);
+		push();
+	}
+
+	if (buttons.length) {
+		push('**Buttons**');
+		push();
+		for (const b of buttons) {
+			const bits = [`bg ${b.bg}`, `text ${b.color}`, `radius ${b.borderRadius}`, `padding ${b.padding}`, `${b.fontWeight} ${b.fontSize}`];
+			if (b.border && b.border !== 'none') bits.push(`border ${b.border}`);
+			if (b.shadow) bits.push(`shadow ${b.shadow}`);
+			push(`- **${b.variant}** (${b.styleTag}): ${bits.join(', ')}`);
+			const hover = Object.entries(b.hover ?? {});
+			if (hover.length) push(`  - hover: ${hover.slice(0, 4).map(([k, v]) => `${k} ${v}`).join(', ')}`);
+		}
+		push();
+	}
+
+	if (cards.length) {
+		push('**Cards**');
+		push();
+		for (const c of cards) {
+			const bits = [`bg ${c.bg}`, `radius ${c.borderRadius}`, `border ${c.border}`, `shadow ${c.shadow}`, `padding ${c.padding}`];
+			push(`- ${bits.join(', ')}`);
+			push(`  - inner: ${c.innerLayout}`);
+		}
+		push();
+	}
+
+	if (decorative) {
+		const bits: string[] = [`illustration ${decorative.illustrationStyle}`];
+		if (decorative.backgroundEffects?.length) bits.push(`effects ${decorative.backgroundEffects.join(', ')}`);
+		if (decorative.accentTreatments?.length) bits.push(`accents ${decorative.accentTreatments.join(', ')}`);
+		if (decorative.hasBlobs) bits.push('blobs');
+		push(`**Decorative**: ${bits.join(' · ')}`);
+	}
+
+	if (breakpoints.length) {
+		const responsive = schema.responsive!;
+		push(`**Breakpoints**: ${breakpoints.join(', ')} · mobile nav ${responsive.mobileNavStyle} · grids ${responsive.gridCollapseBehavior}`);
+	}
+	push();
 }

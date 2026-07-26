@@ -14,6 +14,7 @@
  * a simpler defense against a slow model than any timeout. Ported by rewriting
  * from v1 schema/schema-optimizer.ts.
  */
+import { weightedContexts } from './tokens';
 import type { PageSchema } from './types';
 
 /** Returns a size-reduced copy of the schema, ready to serialize for the prompt. */
@@ -45,21 +46,31 @@ export function optimizeSchema(schema: PageSchema): PageSchema {
 	return optimized;
 }
 
-/** Merge colors that normalize to the same hex, summing counts. Keep the top 25. */
+/**
+ * Merge colors that normalize to the same value, summing counts and per-context usage. Keep
+ * the top 25. The context list is recomputed from the merged usage rather than unioned, so a
+ * merge cannot reintroduce a context the weighting already ruled trivial.
+ */
 function deduplicateColors(colors: PageSchema['tokens']['colors']): PageSchema['tokens']['colors'] {
-	const merged = new Map<string, { contexts: Set<string>; count: number }>();
+	const merged = new Map<string, { usage: Record<string, number>; contexts: string[]; count: number }>();
 	for (const entry of colors) {
 		const normalized = entry.value.toLowerCase();
 		const existing = merged.get(normalized);
 		if (existing) {
-			entry.contexts.forEach((c) => existing.contexts.add(c));
 			existing.count += entry.count;
+			for (const [group, count] of Object.entries(entry.usage ?? {})) {
+				existing.usage[group] = (existing.usage[group] ?? 0) + count;
+			}
+			for (const context of entry.contexts) if (!existing.contexts.includes(context)) existing.contexts.push(context);
 		} else {
-			merged.set(normalized, { contexts: new Set(entry.contexts), count: entry.count });
+			merged.set(normalized, { usage: { ...(entry.usage ?? {}) }, contexts: [...entry.contexts], count: entry.count });
 		}
 	}
 	return Array.from(merged.entries())
-		.map(([value, data]) => ({ value, contexts: Array.from(data.contexts), count: data.count }))
+		.map(([value, data]) => {
+			const contexts = Object.keys(data.usage).length > 0 ? weightedContexts(data.usage) : data.contexts;
+			return { value, contexts, count: data.count, ...(Object.keys(data.usage).length > 0 ? { usage: data.usage } : {}) };
+		})
 		.sort((a, b) => b.count - a.count)
 		.slice(0, 25);
 }
