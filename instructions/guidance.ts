@@ -121,7 +121,7 @@ the page is plain. Fill those with your own judgment, and do not read a type lab
 build the section the label usually implies: the element list and the item counts are the measured
 facts, and the label is a name on top of them.`;
 
-/** The standard placeholder icon for an empty image slot, referenced by RULES rule 5. */
+/** The standard placeholder icon for an empty image slot, referenced by RULES rule 6. */
 export const PLACEHOLDER_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>`;
 
 /** Universal quality rules for pages built from a schema. Soft defaults, the schema wins on conflict. */
@@ -138,16 +138,21 @@ has content, keep it as it is and change only what they ask you to change.
    place. If it is not rendered or executed, it does not ship.
 4. Structure is meaning. Use semantic markup and real text so the page reads correctly to
    machines as well as eyes.
-5. Fill image slots. When a layout expects an image you do not have, draw a neutral placeholder
-   sized to the slot: a filled block in a schema color with the icon below centered inside, plus a
-   short label when it helps. Replace only the image, never the whole component around it. Do not
-   invent CSS art, fake charts, or decorative shapes to stand in for a missing image, and never
-   leave a bare white or empty gap. Keep the placeholder self-contained, so no external image
-   service or remote URL. Use this icon exactly:
+5. Contrast is your check. The schema hands you a palette but not which color sits on which, so
+   every pairing is yours to verify: text on its background, a control or input on the block behind
+   it. When two schema colors are too close to read, use the nearest one in the palette that reads
+   clearly. Never ship dark on dark or light on light.
+6. Fill image slots. When a layout expects an image you do not have, draw a neutral placeholder
+   sized to the slot: a filled block in a schema color one visible step lighter or darker than the
+   surface behind it, with the icon below centered inside, plus a short label when it helps. Replace
+   only the image, never the whole component around it. Do not invent CSS art, fake charts, or
+   decorative shapes to stand in for a missing image, and never leave a bare white or empty gap.
+   Keep the placeholder self-contained, so no external image service or remote URL. Use this icon
+   exactly:
    ${PLACEHOLDER_ICON}
-6. Write plain copy. When you generate text, keep it concise and in plain English. Say what the
+7. Write plain copy. When you generate text, keep it concise and in plain English. Say what the
    thing does. Avoid em dashes, and avoid filler that imitates marketing without meaning.
-7. Precedence. The schema wins on anything it measures. These rules govern what it does not.
+8. Precedence. The schema wins on anything it measures. These rules govern what it does not.
    When they conflict, favor the schema and use your judgment.`;
 
 /** The guidance slice echoed inline on each command's json result. */
