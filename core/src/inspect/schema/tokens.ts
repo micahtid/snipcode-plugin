@@ -18,10 +18,10 @@
  * shorthand, a pill radius, or a two-axis gap is handled once rather than at each call site
  * that happens to meet it first.
  */
-import { hexToRgb, oklabDistance, rgbToOklab, type Oklab } from './oklab';
+import { hexToRgb, oklabDistance, parseRgba, rgbToOklab, type Oklab } from '../../utils/color';
 import {
 	byLength, compositeOver, effectiveBackground, gradientStops, isTranslucent,
-	parseRgba, validateToken, type ColorGroup, type WalkedElement,
+	validateToken, type ColorGroup, type WalkedElement,
 } from './shared';
 import type { ColorEntry, FontEntry } from './types';
 

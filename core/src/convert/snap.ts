@@ -21,6 +21,7 @@
  * to rem is decided by a category predicate, not a hardcoded property-name list.
  * Border widths are a px-native css mechanism.
  */
+import { parseRgba, rgbToHex } from '../utils/color';
 
 const PX_LEN = /(-?\d*\.?\d+(?:e[+-]?\d+)?)px\b/gi;
 const RGB_FN = /rgba?\(([^)]+)\)/gi;
@@ -65,7 +66,7 @@ export function snapValue(property: string, value: string): SnapResult {
 	}
 
 	// Colors: opaque rgb()/rgba() -> hex, regardless of property.
-	result = result.replace(RGB_FN, (match, body: string) => rgbToHex(match, body));
+	result = result.replace(RGB_FN, (match: string) => opaqueRgbToHex(match));
 
 	// Lengths: a px-native property, such as a border/outline width, shadow, or spacing, keeps its
 	// exact px, which reads well and is render-identical to the baked value. It is
@@ -108,15 +109,16 @@ function pxToRem(px: number): string {
 	return `${parseFloat(rem.toFixed(6))}rem`;
 }
 
-/** Convert an opaque rgb()/rgba() to #hex, preserving rgba() when it carries alpha. */
-function rgbToHex(original: string, body: string): string {
-	const parts = body.split(/[\s,/]+/).filter(Boolean);
-	const r = Number(parts[0]);
-	const g = Number(parts[1]);
-	const b = Number(parts[2]);
-	const a = parts[3] !== undefined ? Number(parts[3]) : 1;
-	if (![r, g, b].every((n) => Number.isFinite(n) && n >= 0 && n <= 255)) return original;
-	if (Number.isFinite(a) && a < 1) return original; // Keep alpha as rgba()
-	const hex = [r, g, b].map((c) => Math.round(c).toString(16).padStart(2, '0')).join('');
-	return `#${hex}`;
+/**
+ * Convert an opaque rgb()/rgba() to #hex, leaving it alone when it carries alpha.
+ *
+ * Out-of-range channels are left alone too. The shared serializer clamps them, and a value
+ * outside 0-255 is not a color this pass should be rewriting in the first place.
+ */
+function opaqueRgbToHex(original: string): string {
+	const rgba = parseRgba(original);
+	if (!rgba) return original;
+	if (![rgba.r, rgba.g, rgba.b].every((n) => n >= 0 && n <= 255)) return original;
+	if (rgba.a < 1) return original; // Keep alpha as rgba()
+	return rgbToHex(rgba);
 }

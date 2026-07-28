@@ -22,7 +22,8 @@
 import { computeFingerprint } from './fingerprint';
 import { classifyElement, isElementVisible, SKIP_TAGS } from './classify';
 import { hasDirectText, sectionFinder } from './geometry';
-import { gradientStops, isTransparentColor, normalizeColor, type PseudoColor, type WalkedElement } from './shared';
+import { gradientStops, normalizeColor, type PseudoColor, type WalkedElement } from './shared';
+import { isTransparentColor } from '../../utils/color';
 
 /** Selectors for third-party widgets, such as chat, cookie, and analytics, to skip during the walk. */
 const THIRD_PARTY_BLOCKLIST = [

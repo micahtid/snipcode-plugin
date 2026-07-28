@@ -21,8 +21,9 @@
  */
 import { classNameOf, isElementVisible } from './classify';
 import { contentChildren, contentRoot, sectionFinder } from './geometry';
-import { hexToRgb, oklabDistance, rgbToOklab } from './oklab';
-import { effectiveBackground, groupBy, isTransparentColor, normalizeColor, paddingShorthand, paintedShadow, radiusShorthand, type WalkedElement } from './shared';
+import { hexToRgb, oklabDistance, rgbToOklab } from '../../utils/color';
+import { effectiveBackground, groupBy, normalizeColor, paddingShorthand, paintedShadow, radiusShorthand, type WalkedElement } from './shared';
+import { isTransparentColor } from '../../utils/color';
 import type { BackgroundEffect, ButtonBlueprint, CardBlueprint, DecorativeInfo, NavBlueprint, ResponsiveInfo, StateRule } from './types';
 
 /** How many of a card's blocks the inner-layout string names. */

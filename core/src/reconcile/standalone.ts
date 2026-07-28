@@ -37,9 +37,7 @@
  * that dropped it.
  *
  * The neighbouring modules carry the parts this one only uses: the isolated frame in
- * reconcile/frame.ts, the divergence judgment in reconcile/diff.ts, and the non-mutating
- * report mode in reconcile/probe.ts, which is the completeness signal the measurement
- * loop gates on before trusting SSIM.
+ * reconcile/frame.ts and the divergence judgment in reconcile/diff.ts.
  */
 import type { Captured } from '../types';
 import { pairedSubtrees } from './match';
@@ -189,13 +187,13 @@ function zeroRootMargin(captured: Captured): void {
 function recoverEscapedBackground(captured: Captured): void {
 	const rootCs = getComputedStyle(captured.root);
 	// The root already paints its own backdrop, an opaque color or any image, so trust it.
-	if (!isTransparentColor(rootCs.backgroundColor)) return;
+	if (!paintsNothing(rootCs.backgroundColor)) return;
 	if (rootCs.backgroundImage && rootCs.backgroundImage !== 'none') return;
 
 	let node = captured.root.parentElement;
 	while (node && node !== document.documentElement) {
 		const cs = getComputedStyle(node);
-		if (!isTransparentColor(cs.backgroundColor)) {
+		if (!paintsNothing(cs.backgroundColor)) {
 			bakeOnRoot(captured, 'background-color', cs.backgroundColor);
 			return;
 		}
@@ -234,8 +232,15 @@ function bakeOnRoot(captured: Captured, prop: string, value: string): void {
 	}
 }
 
-/** Whether a computed color is fully transparent, so it paints no backdrop. */
-function isTransparentColor(color: string): boolean {
+/**
+ * Whether a computed color paints nothing, in any notation that ends at zero alpha.
+ *
+ * Wider than isTransparentColor in utils/color.ts, which matches only the two spellings a
+ * computed style produces for "nothing". Here any `rgba(r, g, b, 0)` counts, because this
+ * decides whether an ancestor supplies a backdrop, and a zero-alpha color of any color
+ * supplies none.
+ */
+function paintsNothing(color: string): boolean {
 	return color === 'transparent' || color === 'rgba(0, 0, 0, 0)' || /,\s*0\)\s*$/.test(color);
 }
 

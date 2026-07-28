@@ -19,6 +19,7 @@
  * data table, not a hardcoded list of styling properties or tags, so the
  * no-hardcoded-list rule does not apply to format vocabularies.
  */
+import { hexToRgb } from '../utils/color';
 
 /** Tailwind v3 palette: "family-shade" -> hex. */
 const TAILWIND_COLORS: Record<string, string> = {
@@ -76,8 +77,9 @@ export function matchColor(colorValue: string): PaletteMatch | null {
 		if (palHex === hex) return { name, exact: true };
 	}
 
-	const [r, g, b] = hexToRgb(hex);
-	const lab = rgbToLab(r, g, b);
+	const rgb = hexToRgb(hex);
+	if (!rgb) return null;
+	const lab = rgbToLab(rgb.r, rgb.g, rgb.b);
 	let best: { name: string; dist: number } | null = null;
 	for (const entry of paletteLab()) {
 		const dist = deltaE2000(lab, entry.lab);
@@ -113,12 +115,6 @@ export function parseColor(value: string): string | null {
 	}
 	// oklch/oklab and named colors other than white/black: not matched here.
 	return null;
-}
-
-/** Parse #rrggbb into [r,g,b] 0-255. */
-export function hexToRgb(hex: string): [number, number, number] {
-	const n = parseInt(hex.slice(1), 16);
-	return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
 /** [R,g,b] 0-255 -> CIELAB (D65). */
@@ -194,8 +190,8 @@ export function deltaE2000(lab1: [number, number, number], lab2: [number, number
 function paletteLab(): Array<{ name: string; lab: [number, number, number] }> {
 	if (labCache) return labCache;
 	labCache = Object.entries(TAILWIND_COLORS).map(([name, hex]) => {
-		const [r, g, b] = hexToRgb(hex);
-		return { name, lab: rgbToLab(r, g, b) };
+		const rgb = hexToRgb(hex) ?? { r: 0, g: 0, b: 0 };
+		return { name, lab: rgbToLab(rgb.r, rgb.g, rgb.b) };
 	});
 	return labCache;
 }

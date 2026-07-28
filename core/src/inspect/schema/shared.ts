@@ -15,6 +15,7 @@
  * for the same reason: every collector needs it, and a gate that only some of them go through
  * is not a gate.
  */
+import { hexToRgb, isTransparentColor, parseRgba, rgbToHex, type Rgba } from '../../utils/color';
 import { splitCommaList } from '../../utils/css-split';
 import type { SemanticRole } from './classify';
 import { classNameOf } from './classify';
@@ -47,18 +48,6 @@ export const BUTTON_SELECTOR = 'button, a[class*="btn"], a[class*="button"]';
 const MAX_BACKDROP_CLIMB = 24;
 
 /** One color parsed out of a css value: channels plus alpha. */
-interface Rgba {
-	r: number;
-	g: number;
-	b: number;
-	a: number;
-}
-
-/** Whether a normalized color value is fully transparent, painting nothing. */
-export function isTransparentColor(value: string): boolean {
-	return value === 'transparent' || value === 'rgba(0, 0, 0, 0)';
-}
-
 /** Counts the color tokens in a css value, so a multi-value shorthand can be rejected. */
 function countColorTokens(value: string): number {
 	return (value.match(/rgba?\(|hsla?\(|#[0-9a-f]{3,8}\b/gi) ?? []).length;
@@ -86,20 +75,6 @@ export function normalizeColor(value: string): string | null {
 	return trimmed;
 }
 
-/** Parses rgb()/rgba() in either comma or slash notation, null when the value is not one. */
-export function parseRgba(value: string): Rgba | null {
-	const m = value.trim().match(/^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:\s*[,/]\s*([\d.]+)(%?))?\s*\)$/i);
-	if (!m) return null;
-	const alphaRaw = m[4] === undefined ? 1 : parseFloat(m[4]);
-	const alpha = m[5] === '%' ? alphaRaw / 100 : alphaRaw;
-	return { r: parseFloat(m[1]!), g: parseFloat(m[2]!), b: parseFloat(m[3]!), a: isNaN(alpha) ? 1 : alpha };
-}
-
-/** Serializes rgb channels as #rrggbb, dropping any alpha. */
-export function rgbToHex(rgb: { r: number; g: number; b: number }): string {
-	return '#' + [rgb.r, rgb.g, rgb.b].map((c) => Math.round(Math.min(255, Math.max(0, c))).toString(16).padStart(2, '0')).join('');
-}
-
 /** True when a normalized color still carries alpha, meaning it paints over what is behind it. */
 export function isTranslucent(value: string): boolean {
 	const rgba = parseRgba(value);
@@ -108,19 +83,12 @@ export function isTranslucent(value: string): boolean {
 
 /** Alpha-composites a translucent color over an opaque backdrop, returning the painted hex. */
 export function compositeOver(fg: Rgba, backdropHex: string): string {
-	const back = parseRgba(backdropHex) ?? hexChannels(backdropHex) ?? { r: 255, g: 255, b: 255, a: 1 };
+	const back = parseRgba(backdropHex) ?? hexToRgb(backdropHex) ?? { r: 255, g: 255, b: 255 };
 	return rgbToHex({
 		r: fg.r * fg.a + back.r * (1 - fg.a),
 		g: fg.g * fg.a + back.g * (1 - fg.a),
 		b: fg.b * fg.a + back.b * (1 - fg.a),
 	});
-}
-
-/** Channels of a #rrggbb string, null when it is not one. */
-function hexChannels(hex: string): Rgba | null {
-	const m = hex.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
-	if (!m) return null;
-	return { r: parseInt(m[1]!, 16), g: parseInt(m[2]!, 16), b: parseInt(m[3]!, 16), a: 1 };
 }
 
 /**
