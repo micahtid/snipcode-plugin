@@ -130,7 +130,85 @@ export function classifySectionType(ev: SectionEvidence): SectionType {
 	return 'content';
 }
 
-/** The readings confident enough to name a section on their own, most confident first. */
+/**
+ * The readings confident enough to name a section on their own, in order of confidence.
+ *
+ * One table, so the order is visible in one place rather than spread across ten call sites.
+ * The first test that answers wins, and every test reads only what is on the evidence.
+ */
+const STRUCTURAL_TESTS: Array<{ type: SectionType; test: (ev: SectionEvidence) => boolean }> = [
+	// The page's opening statement: a big heading in the first screen, before any other section
+	// claimed it. A cta raises confidence but is not required; blogs, portfolios, and docs open
+	// with button-less heroes, and demanding a button there left the page's most important
+	// section unlabelled, which is exactly the gap an agent fills with invention. Repetition
+	// disqualifies it the other way: a section holding thirty-five identical blocks is a feed
+	// with a heading on top, not one statement.
+	{
+		type: 'hero',
+		test: (ev) => !ev.heroClaimed && !ev.items
+			&& ev.rect.top + window.scrollY <= window.innerHeight * HERO_TOP_VIEWPORTS
+			&& ev.headingPx >= ev.baseFontPx * HEADLINE_RATIO,
+	},
+	// A row of small, same-sized boxes each carrying a mark or one short word.
+	{
+		type: 'logos',
+		test: (ev) => !!ev.items && ev.items.count >= MIN_LOGO_ITEMS && isRowOfItems(ev)
+			&& ev.items.height <= ev.baseFontPx * LOGO_ITEM_HEIGHT_RATIO
+			&& majority(ev.itemFacts, (facts) => facts.lines.length <= 1 && isShort(facts.lines[0] ?? '')),
+	},
+	// A row of short, number-led blocks: "1,900+" over "universities". The row is load-bearing,
+	// not decoration on the rule: a dated archive stacks its entries in one column and every
+	// entry opens with its date, so read without the row a blog's post list came back as a
+	// hundred-and-ninety-six-item stats band.
+	{
+		type: 'stats',
+		test: (ev) => !!ev.items && ev.items.count >= MIN_STAT_ITEMS && isRowOfItems(ev)
+			&& majority(ev.itemFacts, isNumberLed),
+	},
+	// Repeated cards each carrying a price and a way to buy.
+	{
+		type: 'pricing',
+		test: (ev) => !!ev.items && ev.items.count >= MIN_CARD_ITEMS
+			&& majority(ev.itemFacts, (facts) => isCurrencyLed(facts) && hasButton(facts.shape)),
+	},
+	// Repeated cards each carrying a quote and the face or name behind it.
+	{
+		type: 'testimonials',
+		test: (ev) => !!ev.items && ev.items.count >= MIN_CARD_ITEMS
+			&& majority(ev.itemFacts, (facts) => isQuoted(facts) && facts.shape.includes('image')),
+	},
+	// Enough disclosure elements to be a question list.
+	{ type: 'faq', test: (ev) => ev.accordionCount >= MIN_ACCORDION_ITEMS },
+	// Repeated cards each pairing a mark with a heading and a line of copy.
+	{
+		type: 'features',
+		test: (ev) => !!ev.items && ev.items.count >= MIN_CARD_ITEMS
+			&& majority(ev.itemFacts, (facts) => hasHeading(facts.shape) && facts.shape.includes('text')
+				&& (facts.shape.includes('icon') || facts.shape.includes('image'))),
+	},
+	// A run of images large enough to be the content rather than a mark standing in for a brand.
+	{
+		type: 'gallery',
+		test: (ev) => !!ev.items && ev.items.count >= MIN_STAT_ITEMS
+			&& ev.items.height > ev.baseFontPx * LOGO_ITEM_HEIGHT_RATIO
+			&& majority(ev.itemFacts, (facts) => facts.shape.length === 1 && facts.shape[0] === 'image' && facts.lines.length === 0),
+	},
+	// A short, centered, button-bearing band near the end of the page.
+	{
+		type: 'cta',
+		test: (ev) => !ev.items && hasButton(ev.catalog) && ev.alignment === 'center'
+			&& ev.rect.height <= window.innerHeight * CTA_MAX_HEIGHT_SHARE
+			&& (ev.index + 1) / ev.total >= CTA_TAIL_SHARE,
+	},
+];
+
+/**
+ * The readings confident enough to name a section on their own, most confident first.
+ *
+ * The landmark tags answer above the table because they are not measurements of content: a
+ * `nav` or `footer` element has said what it is, and the page's scored bar was already chosen
+ * geometrically in discovery.ts.
+ */
 function structuralType(ev: SectionEvidence): SectionType | null {
 	if (ev.tag === 'nav') return 'nav';
 	if (ev.tag === 'footer') return 'footer';
@@ -139,15 +217,9 @@ function structuralType(ev: SectionEvidence): SectionType | null {
 	if ((ev.isNavBar || ev.tag === 'header') && isBarShaped(ev.rect)) return 'nav';
 	if (ev.coversPage) return null;
 
-	if (isHero(ev)) return 'hero';
-	if (isLogos(ev)) return 'logos';
-	if (isStats(ev)) return 'stats';
-	if (isPricing(ev)) return 'pricing';
-	if (isTestimonials(ev)) return 'testimonials';
-	if (ev.accordionCount >= MIN_ACCORDION_ITEMS) return 'faq';
-	if (isFeatures(ev)) return 'features';
-	if (isGallery(ev)) return 'gallery';
-	if (isCta(ev)) return 'cta';
+	for (const { type, test } of STRUCTURAL_TESTS) {
+		if (test(ev)) return type;
+	}
 	return null;
 }
 
@@ -158,79 +230,6 @@ function structuralType(ev: SectionEvidence): SectionType | null {
  */
 function isRowOfItems(ev: SectionEvidence): boolean {
 	return ev.layout.columns >= 2 || ev.layout.pattern === 'horizontal-scroll';
-}
-
-/**
- * The page's opening statement: a big heading in the first screen, before any other section has
- * claimed it.
- *
- * A cta raises confidence but is not required. Blogs, portfolios, and documentation open with
- * button-less heroes, and demanding a button there left the page's most important section
- * unlabelled, which is exactly the gap an agent fills with invention. Repetition disqualifies it
- * the other way: a hero is one statement, and a section holding a run of thirty-five identical
- * blocks is a feed with a heading on top of it.
- */
-function isHero(ev: SectionEvidence): boolean {
-	if (ev.heroClaimed || ev.items) return false;
-	if (ev.rect.top + window.scrollY > window.innerHeight * HERO_TOP_VIEWPORTS) return false;
-	return ev.headingPx >= ev.baseFontPx * HEADLINE_RATIO;
-}
-
-/** A row of small, same-sized boxes carrying an image or a short word: a logo wall or marquee. */
-function isLogos(ev: SectionEvidence): boolean {
-	if (!ev.items || ev.items.count < MIN_LOGO_ITEMS) return false;
-	if (!isRowOfItems(ev)) return false;
-	if (ev.items.height > ev.baseFontPx * LOGO_ITEM_HEIGHT_RATIO) return false;
-	// A logo box is a mark or a wordmark: an image, or one short word, and nothing more.
-	return majority(ev.itemFacts, (facts) => facts.lines.length <= 1 && isShort(facts.lines[0] ?? ''));
-}
-
-/**
- * A row of short, number-led blocks: "1,900+" over "universities", three or more across.
- *
- * The row is load-bearing, not decoration on the rule. A dated archive stacks its entries in one
- * column and every entry opens with its date, so read without the row a blog's post list came
- * back as a hundred-and-ninety-six-item stats band.
- */
-function isStats(ev: SectionEvidence): boolean {
-	if (!ev.items || ev.items.count < MIN_STAT_ITEMS) return false;
-	if (!isRowOfItems(ev)) return false;
-	return majority(ev.itemFacts, isNumberLed);
-}
-
-/** Repeated cards each carrying a price and a way to buy. */
-function isPricing(ev: SectionEvidence): boolean {
-	if (!ev.items || ev.items.count < MIN_CARD_ITEMS) return false;
-	return majority(ev.itemFacts, (facts) => isCurrencyLed(facts) && hasButton(facts.shape));
-}
-
-/** Repeated cards each carrying a quote and the face or name behind it. */
-function isTestimonials(ev: SectionEvidence): boolean {
-	if (!ev.items || ev.items.count < MIN_CARD_ITEMS) return false;
-	return majority(ev.itemFacts, (facts) => isQuoted(facts) && facts.shape.includes('image'));
-}
-
-/** Repeated cards each pairing a mark with a heading and a line of copy. */
-function isFeatures(ev: SectionEvidence): boolean {
-	if (!ev.items || ev.items.count < MIN_CARD_ITEMS) return false;
-	return majority(ev.itemFacts, (facts) =>
-		hasHeading(facts.shape) && facts.shape.includes('text') && (facts.shape.includes('icon') || facts.shape.includes('image')));
-}
-
-/** A run of images large enough to be the content rather than a mark standing in for a brand. */
-function isGallery(ev: SectionEvidence): boolean {
-	if (!ev.items || ev.items.count < MIN_STAT_ITEMS) return false;
-	if (ev.items.height <= ev.baseFontPx * LOGO_ITEM_HEIGHT_RATIO) return false;
-	return majority(ev.itemFacts, (facts) => facts.shape.length === 1 && facts.shape[0] === 'image' && facts.lines.length === 0);
-}
-
-/** A short, centered, button-bearing band near the end of the page. */
-function isCta(ev: SectionEvidence): boolean {
-	if (ev.items) return false;
-	if (!hasButton(ev.catalog)) return false;
-	if (ev.alignment !== 'center') return false;
-	if (ev.rect.height > window.innerHeight * CTA_MAX_HEIGHT_SHARE) return false;
-	return (ev.index + 1) / ev.total >= CTA_TAIL_SHARE;
 }
 
 /**
