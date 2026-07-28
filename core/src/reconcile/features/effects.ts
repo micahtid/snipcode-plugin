@@ -1,26 +1,10 @@
 /**
- * features/effects.ts: filters, masks, clip-path, blend, shadow
+ * features/effects.ts: filters, masks, clip-path, blend modes, and shadows.
  *
- * Pipeline position: reconcile
- * Reads from Captured: root, clone, bakedStyles
- * Writes to Captured: bakedStyles + clone, baking non-default effect properties
- *
- * Principles applied: this extends the "ship what renders" rule to the
- * visual-effect properties the authored cascade often omits.
- *
- * CSS/spec reference: https://developer.mozilla.org/en-US/docs/Web/CSS/filter
- * also covers backdrop-filter, clip-path, mask, mix-blend-mode, box-shadow.
- * Detection criterion: an element with a non-default value for one of the effect
- * properties. Otherwise it early-returns per element.
- * Transform contract: it bakes those computed values onto the matching clone
- * element, absolutizing any url(), for example in mask-image or clip-path:
- * url(#...). It mutates bakedStyles and the clone inline styles only.
- *
- * Why this exists: filter, backdrop-filter, clip-path, mask, mix-blend-mode, and
- * multi-layer or inset box-shadow are central to a component's look, but they are
- * frequently applied through a class that does not survive. So without baking, the
- * snip loses its blur, glass, or clipped shape. These properties are per-frame
- * stable, so baking the computed value is pixel-safe.
+ * Bakes the non-default effect properties, absolutizing any url() a mask or clip-path names.
+ * These are central to how a component looks and are usually applied through a class that does
+ * not travel, so without baking the snip loses its blur, glass, or clipped shape. They are
+ * per-frame stable, so baking the computed value is pixel-safe.
  */
 import type { Captured } from '../../types';
 import { pairedSubtrees } from '../match';

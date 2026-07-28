@@ -1,14 +1,8 @@
 /**
- * core/src/schema.ts: whole-page design reference for redesign prompts.
+ * core/src/schema.ts: the schema command's entry point.
  *
- * A thin wrapper over the page-schema inspector: design tokens (color palette ranked
- * by usage, font scale, spacing rhythm, radii, shadows) and a section blueprint with
- * grid/flex, column counts, and max-widths. The schema is the whole payload; component
- * samples are deliberately excluded so schema.md stays small enough for an agent to
- * read in one pass. An agent that wants a concrete sample runs extract on one element.
- *
- * Async because the extractor recovers cross-origin stylesheets through the Host, which is
- * where a cdn-served site keeps its hover rules and breakpoints.
+ * Runs the page-scoped inspect pass and returns the optimized PageSchema. The extraction
+ * itself is inspect/schema/extract.ts; this is the seam the runner drives.
  */
 import type { PageSchema } from './inspect/schema/types';
 import { extractPageSchema } from './inspect/schema/extract';

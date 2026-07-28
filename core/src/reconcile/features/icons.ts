@@ -1,28 +1,11 @@
 /**
- * features/icons.ts: svg sprite resolution
+ * features/icons.ts: resolving svg sprite references.
  *
- * Pipeline position: reconcile
- * Reads from Captured: root, the source document, and clone
- * Writes to Captured: clone, prepending a hidden <defs> sprite, and warnings
- *
- * Principles applied: none directly. This is a feature handler for the svg
- * <use href> mechanism.
- *
- * CSS/spec reference: https://developer.mozilla.org/en-US/docs/Web/SVG/Element/use
- * Detection criterion: the clone contains at least one <use> with a local
- * #fragment href or xlink:href. Otherwise it early-returns.
- * Transform contract: it reads the referenced <symbol> and element ids from the
- * live source document, clones them, and inlines them inside a hidden <svg><defs>
- * at the top of the clone so the <use> refs resolve locally. It modifies the clone
- * only and never reads other handlers' fields.
- *
- * Why this exists: design systems store icons as <symbol> definitions in a shared
- * sprite outside the picked subtree. Without resolving them at extraction time,
- * every <use href="#x"> renders as a blank 0x0 box once the snip is pasted
- * elsewhere. currentColor on fill and stroke keeps working because reconcile already
- * baked `color` onto the snip root. This was ported and rewritten from v1
- * vision/_archive/context-builder.ts (resolveSvgSprites/collectUseRefs/
- * findSymbolInDocument).
+ * A design system keeps icons as <symbol> definitions in a sprite outside the picked subtree,
+ * so every <use href="#x"> renders as a blank 0x0 box once the snip is pasted elsewhere. This
+ * reads the referenced symbols from the live document and inlines them in a hidden <defs> at
+ * the top of the clone. currentColor keeps working because bake.ts already baked color onto
+ * the snip root.
  */
 import type { Captured } from '../../types';
 

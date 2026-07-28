@@ -1,29 +1,14 @@
 /**
- * features/shadow.ts: shadow dom flattening
+ * features/shadow.ts: flattening open shadow trees into light dom.
  *
- * Pipeline position: reconcile
- * Reads from Captured: root, clone, inaccessible.closedShadowRoots
- * Writes to Captured: clone, flattening open shadow trees + styles, and warnings
+ * cloneNode(true) does not copy shadow roots, so a web component's entire rendered content and
+ * its scoped styles vanish. For each open host this inlines the shadow's adoptedStyleSheets
+ * and <style> css with :host rescoped to a marker, then appends a clone of the shadow tree.
  *
- * A feature handler for the shadow dom encapsulation mechanism.
- *
- * CSS/spec reference: https://developer.mozilla.org/en-US/docs/Web/API/Web_components/Using_shadow_DOM
- * Detection criterion: an element in the subtree exposing an open shadowRoot.
- * It early-returns when none do.
- * Transform contract: for each open shadow host, it inlines the shadow's
- * adoptedStyleSheets and <style> css as a <style>, with :host rescoped to a data-*
- * marker on the clone host. It then appends a clone of the shadow tree to the clone
- * host so its rendered markup travels. Closed roots cannot be read from a content
- * script and can only be counted via cdp pierce at capture, so they are surfaced as
- * a warning. It mutates the clone only.
- *
- * Why this exists: cloneNode(true) does not copy shadow roots, so a web
- * component's entire rendered content and its scoped styles vanish from the clone.
- * Flattening the open shadow tree into light dom, with styles rescoped, keeps the
- * component visible standalone. Slot distribution is approximated. Shadow content
- * is appended after the host's light children, and ::part and ::slotted styles are
- * carried verbatim. Shadow content is appended last so match.pairedSubtrees keeps
- * the light-dom pairing aligned for downstream handlers.
+ * Shadow content is appended after the host's light children, which keeps pairedSubtrees
+ * aligned for the handlers that run later. Slot distribution is approximated, and ::part and
+ * ::slotted styles ride along verbatim. A closed root cannot be read at all and is counted at
+ * capture and surfaced as a warning.
  */
 import type { Captured } from '../../types';
 import { pairedSubtrees } from '../match';

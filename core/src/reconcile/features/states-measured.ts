@@ -1,16 +1,11 @@
 /**
- * features/states-measured.ts: emitting the states the capture phase measured live
+ * features/states-measured.ts: emitting the states capture measured live.
  *
- * Pipeline position: reconcile, the preferred half of features/states.ts
- * Reads from Captured: root, clone, bakedStyles
- * Writes to Captured: clone, marking elements and appending state rules, and warnings
- *
- * Why this exists: when capture/states-measure.ts forced each state and read what actually
- * computed, the engine has already resolved the cascade, the inheritance, and every
- * group-hover, descendant, and sibling relationship. Nothing is left to parse, so this path
- * only has to map the measurement back onto clone elements, key it to markers, and shed the
- * declarations that restate the resting value. That is why it is preferred over the copied
- * path in features/states-copied.ts, which has to infer all of it from selectors.
+ * The preferred half of features/states.ts. Because capture/states-measure.ts forced each
+ * state and read what computed, the engine already resolved the cascade, the inheritance, and
+ * every group-hover, descendant, and sibling relationship. Nothing is left to parse, so this
+ * only maps the measurement back onto clone elements, keys it to markers, and sheds the
+ * declarations that restate the resting value.
  */
 import type { Captured, MeasuredState, MeasuredStateDecl } from '../../types';
 import { pairedSubtrees } from '../match';
@@ -28,7 +23,6 @@ import { generalize, MARKER } from './states-anchor';
  * survival remain, because the engine resolved both when the value was measured.
  *
  * @param captured - clone is mutated in place: markers and an appended <style>
- * @param measuredStates - the computed deltas per trigger and state from capture/states-measure.ts
  */
 export function applyMeasured(captured: Captured, measuredStates: MeasuredState[]): Captured {
 	if (measuredStates.length === 0) return captured;
@@ -113,9 +107,6 @@ interface MeasuredUnit {
 /**
  * Maps each measured trigger, state, and affected triple to its clone counterparts, dropping a
  * triple whose trigger or affected element is absent from the clone.
- *
- * @param measuredStates - the measured deltas keyed to original elements
- * @param originalToClone - the original->clone map from pairedSubtrees
  */
 function resolveMeasuredUnits(measuredStates: MeasuredState[], originalToClone: Map<Element, Element>): MeasuredUnit[] {
 	const units: MeasuredUnit[] = [];
@@ -141,9 +132,6 @@ function resolveMeasuredUnits(measuredStates: MeasuredState[], originalToClone: 
 /**
  * Assigns a marker id to every clone element a unit references, trigger or affected, numbered
  * by document order for determinism.
- *
- * @param pairs - the [original, clone] subtree pairs, in document order
- * @param units - the resolved emit units
  */
 function assignMeasuredMarkers(pairs: Array<[Element, Element]>, units: MeasuredUnit[]): Map<Element, number> {
 	const needed = new Set<Element>();
@@ -163,9 +151,6 @@ function assignMeasuredMarkers(pairs: Array<[Element, Element]>, units: Measured
  * affected marker. The affected layer's pseudo-element, if any, is appended to the subject, as in
  * `[marker]:hover::after` when the trigger is the subject, or `[trigger]:hover [affected]::after`
  * for a descendant. Returns null when the relationship is not expressible by a single combinator.
- *
- * @param unit - the emit unit
- * @param markerIds - the assigned marker id per clone element
  */
 function buildMeasuredSelector(unit: MeasuredUnit, markerIds: Map<Element, number>): string | null {
 	const triggerId = markerIds.get(unit.triggerClone);
@@ -208,7 +193,6 @@ const AUTO_SIZED_PROPS = new Set(['width', 'height', 'inline-size', 'block-size'
  * `auto` from the resting bake, or inferred for a size property the bake left unset since its
  * initial value is `auto`. A base already pinned to a concrete length stays pinned and animates.
  *
- * @param property - the measured longhand
  * @param resting - the affected element's resting baked value for it, or undefined when unset
  */
 function baseIsAuto(property: string, resting: string | undefined): boolean {
@@ -224,8 +208,6 @@ function baseIsAuto(property: string, resting: string | undefined): boolean {
  * property, but distinct triples carry distinct selectors, so this is just the per-selector
  * accumulation point.
  *
- * @param decls - the measured declarations for this affected element
- * @param resting - the affected clone's resting baked styles
  * @param winners - the per-property winners for the selector, mutated in place
  */
 function denoiseMeasured(decls: MeasuredStateDecl[], resting: Map<string, string> | undefined, winners: Map<string, string>): void {
@@ -262,9 +244,6 @@ function denoiseMeasured(decls: MeasuredStateDecl[], resting: Map<string, string
  * transition does not cover, such as the dot's colors-only timing vs our pinned width, animates
  * in step rather than snapping. This is the deliberate approximation: coordinated motion at the
  * element's rhythm, not exact per-property timing.
- *
- * @param original - the affected live element, read at rest
- * @param changed - the property names the state rules pin on the element
  */
 function broadenedTransition(original: Element, changed: Set<string>): string | null {
 	const cs = getComputedStyle(original);

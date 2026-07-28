@@ -55,7 +55,8 @@
     "test:unit": "tsx test/unit.ts",
     "test:golden": "npm run build && tsx test/golden.ts",
     "test:fidelity": "npm run build && tsx test/fidelity.ts",
-    "test:parity": "npm run build && tsx test/parity.ts"
+    "test:parity": "npm run build && tsx test/parity.ts",
+    "verify:comments": "npm run build && tsx test/verify-comments.ts"
   },
   "dependencies": {
     "playwright": "^1.60.0"

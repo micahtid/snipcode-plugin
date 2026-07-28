@@ -1,23 +1,15 @@
 /**
- * inspect/schema/walk.ts: the stratified dom walk
+ * inspect/schema/walk.ts: the stratified dom walk every later pass reads.
  *
- * Pipeline position: inspect, page-scoped. See inspect/schema/extract.ts for the whole pass.
- * Reads from DOM: document/window. This runs live, so the whole page must be loaded.
- * Writes to: nothing. It returns the walked records.
+ * The sample is taken once, here. A naive walk of a long page spends its whole budget in the
+ * first section, so the budget is split across the discovered sections in proportion to size.
  *
- * Why this exists: every later schema pass reads the same sample of the page, so the sample
- * is taken once, here. Sampling is the interesting part: a naive walk of a long page spends
- * its whole budget in the first section, so the budget is split across the page's sections in
- * proportion to their size.
+ * The sections come from discovery, not from body's children: on an app-root page body has one
+ * child, which gave the whole page a single bucket and made the stratification do nothing.
  *
- * The sections come from discovery, not from body's children. On an app-root page body has one
- * child, so splitting across its children gave the whole page a single bucket and the
- * stratification, whose entire purpose is to stop the first section from crowding out the rest,
- * did nothing at all. Discovery already reaches through the wrapper; the walk reuses its answer.
- *
- * Depth is counted in levels of structure, not in dom nodes. A framework build separates a
- * section from its content by a chain of single-child divs, and charging each link a level
- * spends the whole depth budget before the walk reaches anything worth recording.
+ * Depth counts levels of structure, not dom nodes. A framework build separates a section from
+ * its content by a chain of single-child divs, and charging each link a level spends the whole
+ * depth budget before the walk reaches anything worth recording.
  */
 import { computeFingerprint } from './fingerprint';
 import { classifyElement, isElementVisible, SKIP_TAGS } from './classify';

@@ -1,26 +1,13 @@
 /**
- * reconcile/match.ts: rule-to-element matching, the authored cascade
+ * reconcile/match.ts: rebuilding the authored cascade from the captured rules.
  *
- * Pipeline position: reconcile
- * Reads from Captured: root, foundationRules, componentRules
- * Writes to Captured: nothing directly, but returns the authored cascade for bake.ts
+ * Runs in reconcile, ahead of bake.ts. For each live element it finds the matching rules with
+ * the browser's own element.matches(), orders them by specificity, and merges them into one
+ * authored value per property.
  *
- * Its principle is simple: it provides the authored side of the per-element
- * authored-vs-computed comparison.
- *
- * It exists because a captured element's appearance is the sum of every rule that
- * matches it, resolved by the cascade. This module recreates that cascade from
- * the flattened CssRule[]. For each live element in the picked subtree it finds
- * the matching rules via the browser's own element.matches(), orders them by
- * specificity, and merges their declarations into one authored value per
- * property. bake.ts then asks, per property, whether that authored value
- * round-trips to the computed value.
- *
- * It is deliberately small, about 150 lines. There is no specificity edge-case
- * handling, no layer-assignment expansions, and no hand-curated property Sets. The
- * probe in bake.ts validates every decision against the real computed value, so a
- * slightly-imperfect cascade here cannot produce a wrong pixel. It can only fall
- * back to computed.
+ * Deliberately small: no specificity edge cases, no layer expansion, no property tables. The
+ * probe in bake.ts validates every decision against the real computed value, so an imperfect
+ * cascade here cannot produce a wrong pixel. It can only fall back to computed.
  */
 import type { Captured, CssRule } from '../types';
 import { subtreeElements } from './tree';
@@ -36,7 +23,6 @@ interface RankedDecl {
 /**
  * Builds the merged authored cascade for every element in the picked subtree.
  *
- * @param captured - the capture, read for root and the flattened rule lists
  * @returns a map from each live element to its winning authored value per property
  */
 export function authoredCascade(captured: Captured): Map<Element, Map<string, string>> {
@@ -69,7 +55,6 @@ export function authoredCascade(captured: Captured): Map<Element, Map<string, st
  * level so the structural correspondence holds. Shared by every handler that
  * needs to read a live element's computed style while writing to its clone.
  *
- * @param root - the live snip root
  * @param clone - the working clone (may carry handler-injected nodes)
  * @returns aligned [original, clone] pairs, root first
  */
@@ -107,7 +92,6 @@ export interface BakeSpec {
  * leaf handlers themselves free of it.
  *
  * @param captured - bakedStyles + clone mutated in place
- * @param specs - the properties to consider, each with its default predicate
  */
 export function bakeNonDefaultProps(captured: Captured, specs: BakeSpec[]): void {
 	for (const [original, clone] of pairedSubtrees(captured.root, captured.clone)) {
@@ -162,9 +146,6 @@ export interface RedundancyContext {
  * This is the same "validate against ground truth, never heuristics" stance bake.ts
  * takes. Here it decides removal instead of baking.
  *
- * @param prop - the property name, a longhand or a shorthand we special-case
- * @param value - the declared value under test
- * @param ctx - the fallback values and transform context for this element
  * @returns true when the declaration is safe to drop
  */
 export function isRedundantDecl(prop: string, value: string, ctx: RedundancyContext): boolean {
@@ -201,7 +182,6 @@ export function isRedundantDecl(prop: string, value: string, ctx: RedundancyCont
  * Reads the transform/perspective context an element or pseudo-element establishes,
  * used to decide whether transform-origin/perspective-origin have any effect.
  *
- * @param cs - the element's computed style
  * @returns whether a transform and a perspective are present
  */
 export function transformContext(cs: CSSStyleDeclaration): { hasTransform: boolean; hasPerspective: boolean } {
@@ -218,8 +198,6 @@ export function transformContext(cs: CSSStyleDeclaration): { hasTransform: boole
  * bake.ts reads from the engine via a probe. It is listed here because the
  * override-trap-safe redundancy test must know inheritance independent of any value,
  * which a value-based probe cannot answer when the value equals the default.
- *
- * @param prop - the property name
  */
 export function inheritsProperty(prop: string): boolean {
 	return INHERITED.has(prop);
@@ -263,8 +241,6 @@ function ruleApplies(rule: CssRule, el: Element): boolean {
  * Evaluate an @media condition against the live environment. Exported so the
  * interactive-states handler gates its rules on the same frozen viewport the resting
  * cascade uses, for parity.
- *
- * @param query - the @media condition text
  */
 export function mediaApplies(query: string): boolean {
 	try {

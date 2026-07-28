@@ -1,19 +1,13 @@
 /**
- * core/src/host.ts: the port boundary.
+ * core/src/host.ts: the seam that keeps core/ free of Playwright.
  *
- * The extension content code reached four privileged services through
- * chrome.runtime messages to a background worker: the devtools protocol
- * (inherited cascade, cross-origin sheet text, forced interactive states),
- * cross-origin asset fetch, and (in the extension) screenshots.
+ * core/ runs inside the page, where some things are impossible: reading the authored ancestor
+ * cascade, reading a cross-origin stylesheet, fetching a hotlink-protected font, forcing an
+ * interactive state. Each is declared here as a method and implemented by whatever is driving
+ * the page, which for this package is runner/src/host.ts over a Playwright CDPSession.
  *
- * core/ must not know whether it runs inside a chrome extension or a headless
- * Playwright page, so those services are abstracted behind this one Host
- * interface. The runner installs an implementation, in-page core calls it. This
- * is the only seam between core/ and its host, which is what keeps core/
- * promotable to a shared @snipcode/core package with no plugin-specific code.
- *
- * The wire shape mirrors the original background envelope ({ ok, result, error })
- * so the ported capture code reads replies exactly as it did against chrome.
+ * Every method may fail, and every caller treats failure as a degraded path rather than an
+ * error: no host means the snip still ships, with less recovered.
  */
 
 /** One authored ancestor rule the host lifted from CSS.getMatchedStylesForNode.inherited. */

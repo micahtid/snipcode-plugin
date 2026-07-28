@@ -1,24 +1,17 @@
 /**
- * convert/bem-factor.ts: factoring a shared base class out of near-identical rules
+ * convert/bem-factor.ts: factoring a shared base class out of near-identical rules.
  *
- * Pipeline position: convert, a helper for the bem emitter
- * Reads from Captured: nothing. It works on the deduped class rules.
- * Writes to Captured: nothing.
+ * Identical-set dedup only merges rules that match exactly, so a family of buttons differing
+ * in one color still ships its whole shared reset once per variant. This splits such families
+ * into one base class holding the intersection plus modifiers carrying the differences.
  *
- * Why this exists: identical-set dedup only merges rules that match exactly, so a family of
- * buttons differing in one color still ships its whole shared reset once per variant. This
- * pass finds those families and splits them into one base class holding the intersection
- * plus per-member modifiers carrying only the differences.
+ * Two things make the split render-neutral. Every emitted selector is a flat single class of
+ * equal specificity, so nothing outranks anything. And the family guard never separates a
+ * shorthand from a longhand it overlaps, which is the only way source order between base and
+ * modifier could change a used value. Order-sensitivity is asked of the engine rather than
+ * read off a hand-written table, so it covers every shorthand the browser knows.
  *
- * The split has to be render-neutral, and two things make it so. Every emitted selector is a
- * flat single class of equal specificity, so nothing outranks anything. And the family guard
- * never separates a shorthand from a longhand it overlaps, which is the only way source order
- * between the base and a modifier could change a used value. Order-sensitivity is asked of the
- * engine rather than read off a hand-written shorthand table, so it covers every shorthand the
- * browser knows and any it gains later. See familyGuardedBase and orderSensitive.
- *
- * Everything here is deterministic, processed in a fixed order with a fixed greedy
- * intersection and no enumeration-order dependence, so the emitted css stays byte-stable.
+ * Deterministic throughout, so the emitted css is byte-stable.
  */
 import { uniqueElementClass, type ClassRule } from './bem-classes';
 
@@ -62,9 +55,7 @@ const MIN_COHESION = 0.5;
  * Deterministic for byte-stable output: candidates are processed in class-name order
  * with a fixed greedy intersection, no enumeration-order or random dependence.
  *
- * @param block - the bem block base, used to name the generated base classes
  * @param rules - the deduped class rules, whose members are mutated into modifiers in place
- * @param counters - per-tag name counters, shared so generated base names stay unique
  * @returns the rules in emission order (each base before its members) and a map from
  *   every grouped member's old class name to its new `base base--modifier` string
  */
@@ -137,7 +128,6 @@ export function applyBaseClasses(elements: HTMLElement[], renames: Map<string, s
  * enough. Otherwise its seed stays solo. Class-name ordering makes the result
  * deterministic.
  *
- * @param rules - the deduped class rules, with the root excluded from grouping
  * @returns the accepted groups, each with its guarded base and members
  */
 function buildGroups(rules: ClassRule[]): FactorGroup[] {
@@ -205,8 +195,6 @@ function intersectDecls(base: Map<string, string>, decls: Array<[string, string]
  * declarations therefore still hoist to the base even when a sibling differs across
  * members. For the common case of computed-longhand-only rules the guard is a no-op.
  *
- * @param base - the pre-guard intersection, prop -> shared value
- * @param members - the rules sharing that intersection
  * @returns the subset of the base that is safe to hoist
  */
 function familyGuardedBase(base: Map<string, string>, members: ClassRule[]): Map<string, string> {
@@ -241,11 +229,6 @@ function familyGuardedBase(base: Map<string, string>, members: ClassRule[]): Map
  * positive only makes factoring more cautious, and the test has no false negatives, since
  * if order genuinely matters the blocks differ, so the guard stays render-safe. Memoized
  * per value pair, since the same declarations recur across a group's members.
- *
- * @param probe - a throwaway element whose style is reused as the parser
- * @param memo - per-call cache keyed by the ordered value pair
- * @param a - one declaration as [prop, value]
- * @param b - the other declaration as [prop, value]
  */
 function orderSensitive(probe: HTMLElement, memo: Map<string, boolean>, a: [string, string], b: [string, string]): boolean {
 	if (a[0] === b[0]) return false;
@@ -261,10 +244,6 @@ function orderSensitive(probe: HTMLElement, memo: Map<string, boolean>, a: [stri
  * Sets two declarations in order on a throwaway style and returns its resulting set of
  * declarations, sorted so only an order-dependent difference, one declaration overriding
  * the other, shows up, not the insertion order itself.
- *
- * @param probe - the element whose style is used as a throwaway parser
- * @param first - the declaration set first
- * @param second - the declaration set second
  */
 function declBlock(probe: HTMLElement, first: [string, string], second: [string, string]): string {
 	const style = probe.style;

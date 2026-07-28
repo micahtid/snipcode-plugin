@@ -1,18 +1,14 @@
 /**
- * features/states-copied.ts: reproducing states by copying the page's authored rules
+ * features/states-copied.ts: reproducing states from the page's authored rules.
  *
- * Pipeline position: reconcile, the fallback half of features/states.ts
- * Reads from Captured: root, clone, foundationRules, componentRules, bakedStyles
- * Writes to Captured: clone, marking elements and appending state rules, and warnings
+ * The fallback half of features/states.ts, used only when live measurement did not run. With
+ * no measured values to trust, the effect is inferred from the selectors: each rule is parsed,
+ * each branch bound to concrete subtree elements, the cascade resolved by hand, and the result
+ * re-anchored to markers.
  *
- * Why this exists: this runs only when live measurement did not, so there are no measured
- * values to trust and the effect has to be inferred from the selectors themselves. Each
- * state rule is parsed, each branch bound to concrete subtree elements, the cascade resolved
- * by hand across the matching rules, and the result re-anchored to markers. That reproduces
- * the common case of an element's own `:hover` and the plain descendant and sibling
- * relations, but it cannot follow a relationship a framework buries in `:is()` or group-hover
- * grammar, and it cannot reach a trigger outside the snipped subtree. Both of those are
- * dropped with a warning rather than guessed at.
+ * That covers an element's own :hover and the plain descendant and sibling relations. It
+ * cannot follow a relationship a framework buries in :is() or group-hover grammar, and it
+ * cannot reach a trigger outside the subtree. Both are dropped with a warning, never guessed.
  */
 import type { Captured, CssRule } from '../../types';
 import { pairedSubtrees, mediaApplies } from '../match';
@@ -113,9 +109,6 @@ export function applyCopied(captured: Captured): Captured {
  * A rule is considered when its selector mentions a dynamic interactive pseudo-class and
  * its @media gate currently applies, the same frozen viewport the resting cascade uses.
  *
- * @param captured - the capture, read for the flattened rule lists and root subtree
- * @param pairs - the [original, clone] subtree pairs, in document order
- * @param originalToClone - membership test + clone lookup for the subtree
  * @returns one candidate per rule-branch and subject-element pair that bound entirely in-subtree
  */
 function collectCandidates(
@@ -170,9 +163,6 @@ function collectCandidates(
  * subject. Structural-only intermediate compounds are gates. They are bound only as stepping
  * stones, never marked.
  *
- * @param branch - the parsed complex selector
- * @param subjectEl - the element matched by the branch's full structural selector
- * @param inSubtree - whether an element belongs to the snipped subtree
  * @returns the marked compounds and their combinators, or null if a state-bearing compound
  *   bound outside the subtree (the irreducible boundary) or could not be bound at all
  */
@@ -219,9 +209,6 @@ function bindMarkedCompounds(
  * its right and the combinator between them. Takes the nearest match for the loose
  * relations, descendant and subsequent-sibling, which the unique marker then pins exactly.
  *
- * @param right - the already-bound element to this compound's right
- * @param combinator - the combinator joining this compound to `right`
- * @param compound - the compound to bind (its structural part is matched)
  * @returns the bound element, or null if none satisfies the relation
  */
 function findRelated(right: Element, combinator: Combinator, compound: Compound): Element | null {
@@ -248,8 +235,6 @@ function findRelated(right: Element, combinator: Combinator, compound: Compound)
  * `[data-snip-state="n"]` marker carrying its dynamic pseudos and pseudo-element, joined
  * by the generalized combinators.
  *
- * @param cand - the bound candidate
- * @param markerIds - the assigned marker id per element
  * @returns the selector string, or null if any marked element lacks an id
  */
 function buildSelector(cand: Candidate, markerIds: Map<Element, number>): string | null {
@@ -273,8 +258,6 @@ function buildSelector(cand: Candidate, markerIds: Map<Element, number>): string
  * Assigns a marker id to every element any candidate marks, numbered by document order
  * for determinism.
  *
- * @param pairs - the [original, clone] subtree pairs, in document order
- * @param candidates - the bound candidates whose marked elements need ids
  * @returns the element -> marker id map
  */
 function assignMarkers(pairs: Array<[Element, Element]>, candidates: Candidate[]): Map<Element, number> {
@@ -292,8 +275,6 @@ function assignMarkers(pairs: Array<[Element, Element]>, candidates: Candidate[]
  * Merges one rule's declarations into the per-property cascade winners for a group,
  * keeping the winner by !important, then specificity, then capture order.
  *
- * @param rule - the contributing rule
- * @param order - the rule's capture order
  * @param winners - the per-property winning declaration map, mutated in place
  */
 function mergeRule(rule: CssRule, order: number, winners: Map<string, RankedStateDecl>): void {
@@ -320,8 +301,6 @@ function stateWins(a: RankedStateDecl, b: RankedStateDecl): boolean {
  * resting color contributes nothing. The remainder is emitted !important so it outranks
  * the inline resting value while the state is active.
  *
- * @param winners - the resolved per-property state declarations
- * @param resting - the subject's resting baked styles, its inline style at rest
  * @returns the formatted, non-redundant declaration lines
  */
 function denoise(winners: Map<string, RankedStateDecl>, resting: Map<string, string> | undefined): string[] {

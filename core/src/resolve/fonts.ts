@@ -1,29 +1,14 @@
 /**
- * resolve/fonts.ts: @font-face resolution
+ * resolve/fonts.ts: making the snip's webfonts load from its new home.
  *
- * Pipeline position: resolve
- * Reads from Captured: root, fonts
- * Writes to Captured: fonts, with absolutized src, narrowed to the faces the snip renders
+ * Runs during resolve. A @font-face src is usually relative to the source page, so it 404s
+ * once the snip is pasted elsewhere; each is resolved to an absolute url.
  *
- * Travel-with-the-snip rule for fonts: a used custom font must carry its
- * @font-face and an absolute src so it loads from the snip's new home.
- *
- * Why this exists: @font-face src urls are usually relative to the source page, so
- * pasted elsewhere they 404. This resolves them to absolute urls and narrows the
- * captured @font-face list to the faces the snip actually renders. A source page
- * commonly ships every weight of a family, light through bold, while a snipped
- * component renders only one or two, so narrowing to the used family is not
- * enough: the other weights are dead @font-face rules and dead font downloads.
- * The narrowing therefore matches on the full family, weight, and style that the
- * live subtree renders, resolved through the css-fonts-4 font-matching algorithm
- * so a request the family has no exact face for, such as weight 700 against a 600
- * bold, still keeps the face the browser substitutes. Requests are read from the
- * live computed styles across the root subtree and the generated-content
- * pseudo-elements, which pairs each rendered family with the weight and style it renders at, the
- * same "first family is the one that renders" ground truth assistive/fonts.ts
- * uses. Generic keywords (serif, system-ui,...) never match a captured
- * @font-face family, so they fall out naturally, no banned-keyword set needed.
- * Ported from v1 font-extractor.ts, rewritten.
+ * The face list is then narrowed to what the subtree actually renders. Narrowing by family
+ * alone is not enough: a page ships every weight and a component renders one or two, so the
+ * rest would be dead downloads. Matching is on family, weight, and style through the css
+ * font-matching algorithm, so a request with no exact face still keeps the one the browser
+ * substitutes. Generic keywords never match a captured family and fall out on their own.
  */
 import type { Captured, FontFace } from '../types';
 
@@ -221,9 +206,6 @@ function selectFaces(request: FaceRequest, faces: FontFace[], codepoints: Set<nu
  * descriptor covers the full repertoire, so it always qualifies. Otherwise at least one
  * of its declared ranges must contain a rendered codepoint. An empty codepoint set, meaning
  * no text, or an unparseable range qualifies too, so coverage never wrongly drops a face.
- *
- * @param font - the captured face
- * @param codepoints - the codepoints the live subtree renders
  */
 function faceCoversCodepoints(font: FontFace, codepoints: Set<number>): boolean {
 	const descriptor = font.descriptors['unicode-range'];
@@ -241,8 +223,6 @@ function faceCoversCodepoints(font: FontFace, codepoints: Set<number>): boolean 
  * Parses a css unicode-range descriptor into [lo, hi] codepoint ranges. Handles the
  * single (U+41), range (U+460-52F), and wildcard (U+00??) forms. A token it cannot read
  * is skipped rather than failing the whole descriptor.
- *
- * @param descriptor - the unicode-range value
  */
 function parseUnicodeRange(descriptor: string): Array<[number, number]> {
 	const out: Array<[number, number]> = [];
@@ -269,9 +249,6 @@ function parseUnicodeRange(descriptor: string): Array<[number, number]> {
 /**
  * Indexes the face a weight resolves to under the css-fonts-4 weight-matching
  * algorithm, generalized to weight ranges. Returns -1 only for an empty pool.
- *
- * @param desired - the requested numeric weight
- * @param ranges - each face's [min, max] weight descriptor, pool-aligned
  */
 function matchWeight(desired: number, ranges: Array<[number, number]>): number {
 	if (ranges.length === 0) return -1;
@@ -416,8 +393,6 @@ function fontMimeFromBytes(base64Payload: string): string | null {
  * face for every weight the merged faces served, so the render is unchanged. Runs after
  * inlineResources, so the data uri payload is the byte identity. Faces differing in any other
  * descriptor keep their own rule.
- *
- * @param captured - captured.fonts is rewritten to the merged set, first-seen order preserved
  */
 export function mergeIdenticalFaces(captured: Captured): void {
 	const groups = new Map<string, FontFace[]>();

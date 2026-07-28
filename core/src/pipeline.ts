@@ -1,15 +1,12 @@
 /**
- * core/src/pipeline.ts: the deterministic transform + emit, ported from the extension orchestrator.
- *
- * Everything the extension did between capture and delivery, minus the two layers
- * the plugin hands to the calling agent instead: the byok llm polish pass and the
- * human picker. The phase order lives here, exactly once, so it never drifts:
+ * core/src/pipeline.ts: the phase order, written once.
  *
  *   reconcile -> features -> denoise -> resolve -> self-contain   (runCoreTransform)
- *   emit(format) -> clean -> assemble -> minimize -> compose       (extractElement)
+ *   emit(format) -> clean -> assemble -> minimize -> compose      (extractElement)
  *
- * runCoreTransform and minimizeArtifact are copied from content/index.ts so the
- * phase order has one authoritative home shared with the extension.
+ * Keeping both sequences here is what stops them drifting. A feature handler that throws is
+ * recorded as a warning and the pipeline continues, so one broken mechanism cannot cost the
+ * whole snip.
  */
 import type { AssetFile, Captured, OutputFormat } from './types';
 import { detectBuilder } from './capture/gate';
@@ -56,8 +53,6 @@ import { stripUnreferencedDataAttributes } from './minimize/attributes';
 import { assembleHtmlDocument, formatCss, isHtmlShaped } from './convert/format';
 import { splitAssets } from './convert/assets';
 
-/** The lifted-asset entries splitAssets returns, derived so we need not re-export the type. */
-
 /**
  * The reconcile-phase feature handlers, in apply order. Each handles one css/html
  * spec mechanism universally and is orthogonal to the others.
@@ -97,8 +92,7 @@ function runFeatures(captured: Captured): void {
 
 /**
  * Runs the reconcile, resolve, and self-containment transform that turns a captured
- * snip into a self-contained clone. Copied from content/index.ts so the phase order
- * has one authoritative home shared with the extension.
+ * snip into a self-contained clone.
  */
 export async function runCoreTransform(captured: Captured): Promise<void> {
 	// Reconcile phase. Authored and inherited styles bake onto the clone, the feature
@@ -135,9 +129,8 @@ export async function runCoreTransform(captured: Captured): Promise<void> {
 
 /**
  * Runs the deterministic, key-free minimize pipeline over an assembled html-shaped
- * artifact. Copied from content/index.ts so the pass order has one authoritative home.
- * Every css step degrades to its input on failure, so the pipeline always produces a
- * shippable pair.
+ * artifact. Every css step degrades to its input on failure, so the pipeline always
+ * produces a shippable pair.
  */
 export async function minimizeArtifact(
 	captured: Captured,
@@ -196,13 +189,10 @@ export interface ExtractResult {
 
 /**
  * Runs the full deterministic pipeline for one already-resolved element and returns
- * a self-contained artifact in the chosen format. The byok llm polish phase is not
- * run: that judgment layer is the calling agent's job. Mirrors the extension's
- * headless snip path minus polish.
+ * a self-contained artifact in the chosen format. Every judgment layer, including which
+ * element to pick and what to name it, stays with the calling agent.
  *
- * @param root - the resolved element to extract
  * @param screenshot - cropped png data url, may be empty
- * @param format - the output format
  */
 export async function extractElement(root: Element, screenshot: string, format: OutputFormat): Promise<ExtractResult> {
 	// Builder gate: refuse framer/wix/etc before any capture work. On a hit the agent

@@ -1,15 +1,10 @@
 /**
- * inspect/schema/fingerprint.ts: compact style fingerprints + abbreviations
+ * inspect/schema/fingerprint.ts: compact style fingerprints and their abbreviations.
  *
- * Pipeline position: inspect, page-scoped. See inspect/schema/extract.ts for the whole pass.
- * Reads from DOM: document/window. This runs live, on per-element computed styles.
- * Writes to: nothing.
- *
- * Why this exists: the schema collapses elements that look identical into a single style-map
- * entry. A fingerprint is the sorted, abbreviated list of an element's non-default design
- * properties, so two elements with the same fingerprint share a style. The abbreviations keep
- * the style map compact, and they are what the style map's keys are written in, so renaming one
- * renames it everywhere that map is read.
+ * A fingerprint is the sorted, abbreviated list of an element's non-default design properties,
+ * so two elements with the same fingerprint share a style and the blueprint passes can group
+ * by it. The abbreviations are also the keys of the property maps the passes read, so renaming
+ * one renames it everywhere.
  */
 
 /** The design-relevant properties a fingerprint is built from. */

@@ -19,8 +19,6 @@ export interface HtmlOutput {
 /**
  * Builds the @font-face + @keyframes stylesheet block shared by every emitter.
  * These at-rules cannot be expressed inline or as utility classes.
- *
- * @param captured - reads fonts + keyframes
  */
 export function atRulesCss(captured: Captured): string {
 	const parts: string[] = [];
@@ -42,9 +40,8 @@ const BASE_RESET = 'html, body { margin: 0; padding: 0; }';
  * Composes a single self-contained html document from the markup and its stylesheet.
  * Emits a valid standalone document, with doctype, charset, and head/body, so the artifact does
  * not depend on the origin and renders identically wherever it is pasted. This is what
- * renders standalone, and what the grader screenshots.
+ * renders standalone.
  *
- * @param html - the inline-styled markup
  * @param css - the accompanying @font-face / @keyframes block, which may be empty
  */
 export function composeDocument(html: string, css: string): string {
@@ -58,8 +55,6 @@ export function composeDocument(html: string, css: string): string {
  * value cannot close its own quote, and `<` so a value can never be mistaken for a tag by a
  * lenient parser. Shared by every emitter that hand-writes an attribute rather than letting
  * the serializer do it, so all of them agree on one escape set.
- *
- * @param value - the raw attribute value
  */
 export function escapeHtmlAttr(value: string): string {
 	return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');

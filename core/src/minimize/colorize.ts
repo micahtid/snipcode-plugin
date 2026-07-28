@@ -1,40 +1,16 @@
 /**
- * minimize/colorize.ts: post-format serialization sanity for colors and saturating lengths
+ * minimize/colorize.ts: short hex colors and a sane pill radius.
  *
- * Pipeline position: minimize, last, after format
- * Reads from Captured: nothing
- * Writes to Captured: nothing. It transforms the formatted stylesheet string.
+ * Runs last in minimize, after format, as a plain string transform. Rewrites rgb() and rgba()
+ * to hex using a canvas 2d context as the authority, so the result is the engine's own
+ * canonical form with no color math here. Wide-gamut notations keep their color space and are
+ * only trimmed of float noise. A radius the engine saturated to 2.12676e+37rem becomes 9999px.
  *
- * Why this exists: the reproduce phase emits colors in whatever notation the engine
- * computed them to, verbose rgb(83, 58, 253) triples and rgba(31, 35, 40, 0.04)
- * functions. A human writes #533afd and #1f232809. This phase rewrites every rgb() and
- * rgba() function to a short hex, using the canvas 2d context as the authority: setting
- * fillStyle to the color yields the engine's own canonical form, so the rewrite is the
- * same color the browser would paint, by construction, with no color math here and no
- * gamut guesswork. Wide-gamut oklab/oklch/lab/lch/color() notations are never converted, so
- * they keep their color space rather than being clamped to the srgb gamut. Their numeric
- * components are only trimmed of the float noise a computed round-trip leaves, so
- * `oklab(0.999994 0.0000455678 0.0000200868 / 0.5)` reads as `oklab(1 0 0 / 0.5)`. And a
- * border radius the engine rounded to the saturation overflow, `2.12676e+37rem`, is clamped
- * to a plain `9999px` that paints the same full pill on any real element.
- *
- * It is a pure string transform and runs last, after format, for two reasons. First, it
- * needs no render oracle. An rgb()/rgba() function and its canvas-canonical hex paint the
- * identical pixel, a trimmed color component moves the pixel by less than a 24-bit step, and
- * a border radius past the saturation point paints the identical corner, so the rewrite
- * cannot move the render, in a resting rule, a state rule, a shadow, or a gradient alike.
- * Second, a cssom round-trip re-serializes a standalone hex back to rgb() and re-inflates a
- * trimmed component, so any phase that re-parses the sheet (format among them) would undo the
- * rewrite. Operating on the already-formatted text as a plain string sidesteps that and
- * preserves the indentation format produced.
- *
- * Two boundaries keep the rewrite paint-exact rather than merely close. First, it is
- * segment-aware. Quoted strings and url() spans are matched as whole units and left untouched,
- * so an `rgba(` sequence that is text (a `content` value, an svg data uri) is never mistaken
- * for a color. Second, a color is only rewritten when the text right after it is a delimiter.
- * A function ends in `)`, but a bare hex does not, so a color packed against the next token
- * (tailwind serializes gradient stops as `rgb(25, 25, 29)0px`) would glue into one invalid
- * hash token. Such a color keeps its delimited functional form.
+ * It runs on text, after format, because a cssom round-trip would re-serialize a hex back to
+ * rgb() and undo the whole pass. Two boundaries keep it paint-exact: quoted strings and url()
+ * spans are skipped, so an rgba( sequence that is content is never mistaken for a color; and a
+ * color is only rewritten when a delimiter follows, since a bare hex packed against the next
+ * token would glue into one invalid word.
  */
 
 /** A length in a border radius at or beyond this magnitude saturates the corner; clamp it. */
@@ -46,7 +22,6 @@ const RADIUS_SATURATION = 100000;
  * contract, returning the input unchanged when a canvas context is unavailable, and leaving any
  * function the context does not accept as a color exactly as it was.
  *
- * @param css - the formatted stylesheet
  * @returns the stylesheet with colors canonicalized and saturating radii clamped
  */
 export function colorizeCss(css: string): string {
@@ -105,8 +80,6 @@ function trimColorComponents(fn: string): string {
  * real layout can produce, and `9999px` renders the identical corner, so the swap is paint-
  * neutral. Only the border-radius family is touched, and only a length token whose magnitude
  * no real design reaches, so a legitimate radius is never rewritten.
- *
- * @param css - the recolored stylesheet
  */
 function clampSaturatingRadii(css: string): string {
 	return css.replace(/border(?:-[a-z]+)*-radius\s*:\s*[^;{}]+/gi, (decl) =>
@@ -125,9 +98,6 @@ const NAME_CHAR = /[-\w\u0080-\uffff]/;
  * fillStyle yields the engine's canonical spelling, a #rrggbb hex for an opaque color and an
  * rgba() for a translucent one. An opaque color becomes the shortest hex and a translucent
  * one an eight-digit hex, both the same pixels the context would paint.
- *
- * @param fn - a single rgb() or rgba() color function
- * @param ctx - a 2d context used to canonicalize colors
  */
 function colorize(fn: string, ctx: CanvasRenderingContext2D): string {
 	// Relative-color syntax, rgb(from ...), resolves against another color, and the [^)]* match

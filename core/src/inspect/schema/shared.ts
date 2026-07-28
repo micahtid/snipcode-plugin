@@ -1,18 +1,11 @@
 /**
- * inspect/schema/shared.ts: the walked-element record and the helpers every schema pass uses
+ * inspect/schema/shared.ts: the walked-element record and the helpers several passes need.
  *
- * Pipeline position: inspect, page-scoped. See inspect/schema/extract.ts for the whole pass.
- * Reads from DOM: window, for the computed styles the callers hand in.
- * Writes to: nothing.
+ * They live here so no pass imports another just to borrow a helper, which is what would put a
+ * cycle in the graph.
  *
- * Why this exists: the schema extractor is split across a walk, a token pass, a structure
- * pass, a section pass, and a blueprint pass. A handful of small definitions are needed by
- * more than one of them, chiefly the record the walk produces and the paint and grouping
- * helpers. They live here so no pass imports another just to borrow a helper, which is what
- * would put a cycle in the graph.
- *
- * validateToken at the bottom is the one boundary every candidate token crosses. It lives here
- * for the same reason: every collector needs it, and a gate that only some of them go through
+ * validateToken at the bottom is the one boundary every candidate token crosses, and it is
+ * here for the same reason: every collector needs it, and a gate only some of them go through
  * is not a gate.
  */
 import { hexToRgb, isTransparentColor, parseRgba, rgbToHex, type Rgba } from '../../utils/color';

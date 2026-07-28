@@ -1,13 +1,8 @@
 /**
- * inspect/schema/types.ts: the page-schema contracts
+ * inspect/schema/types.ts: the page-schema contracts.
  *
- * Pipeline position: inspect, page-scoped. This is the shape the schema extractor emits.
- * Reads from DOM: nothing. These are type definitions.
- * Writes to: nothing. These are type definitions.
- *
- * Why this exists: the schema inspector walks the page and produces a compressed design-system
- * schema, the PageSchema below. Defining its shape and every sub-type in one place lets the
- * extractor, the optimizer, and the renderer agree on one contract instead of three.
+ * PageSchema and its sub-types, defined in one place so the extractor, the optimizer, and the
+ * renderer agree on one contract instead of three.
  */
 
 /**

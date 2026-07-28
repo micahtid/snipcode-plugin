@@ -1,15 +1,10 @@
 /**
- * reconcile/diff.ts: what counts as a real standalone-vs-live divergence
+ * reconcile/diff.ts: what counts as a real standalone-versus-live divergence.
  *
- * Pipeline position: reconcile, a helper shared by the closing reconciliation and the probes
- * Reads from Captured: nothing. It compares computed styles the caller hands in.
- * Writes to Captured: nothing.
- *
- * Why this exists: the closing reconciliation and both probes ask the same question of every
- * property, is this divergence a real defect or benign context, and they must answer it
- * identically or the probe would report a residual the reconciliation refuses to fix. The
- * judgment lives here once: which properties are worth comparing at all, what counts as
- * equal given float noise, and which direction of a size divergence is a defect.
+ * Shared by the closing reconciliation and the probes, which must answer identically or a
+ * probe would report a residual the reconciliation refuses to fix. Holds which properties are
+ * worth comparing, what counts as equal given float noise, and which direction of a size
+ * divergence is a defect.
  */
 
 /**
@@ -102,11 +97,6 @@ export const TOP_PROPS = 20;
  *   intrinsic, so free-sizing larger than its display cell is as wrong as collapsing.
  * - Everything else, insets, paint, and box, is reclaimed on any real divergence.
  *
- * @param prop - the computed-style longhand being compared
- * @param artifact - the value the standalone artifact rendered
- * @param target - the live element's value (the authority being reclaimed toward)
- * @param replaced - whether the element is a replaced element (intrinsic box)
- * @param targetColor - the target element's own computed `color`, so a value merely following
  *   `currentColor` is left to track it rather than frozen concrete
  */
 export function shouldReclaim(prop: string, artifact: string, target: string, replaced: boolean, targetColor: string): boolean {
@@ -134,8 +124,6 @@ export function shouldReclaim(prop: string, artifact: string, target: string, re
  * set. The standalone render is the authority, so this list is deliberately broad,
  * never a hand-picked "important props" set. Used size and insets are included for
  * every element, and shouldReclaim then decides which divergences are real defects.
- *
- * @param cs - the element's computed style
  */
 export function comparableProps(cs: CSSStyleDeclaration): string[] {
 	const out: string[] = [];
@@ -159,9 +147,6 @@ const NUMBER_TOKEN = /-?\d*\.?\d+(?:e[+-]?\d+)?/gi;
  * as a loss, while a real divergence still differs, such as a dropped declaration falling
  * back to 0/normal/currentColor, or a different color. The threshold is well below one
  * device pixel, so nothing visible is masked.
- *
- * @param a - one computed value
- * @param b - the other computed value
  */
 function valuesMatch(a: string, b: string): boolean {
 	if (a === b) return true;

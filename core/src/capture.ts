@@ -1,14 +1,9 @@
 /**
- * core/src/capture.ts: the capture phase, ported from the extension orchestrator.
+ * core/src/capture.ts: the capture phase, in order.
  *
- * Drives the picked element to its settled state, clones it, discovers the page's
- * stylesheets, and augments the clone with the privileged data only the host can
- * reach (the authored inherited cascade, cross-origin sheets and fonts, forced
- * interactive states). Produces the Captured object every later phase reads.
- *
- * This is the extension's capture() lifted verbatim except for two things: the
- * screenshot arrives from the runner rather than the picker, and the privileged
- * augmentation goes through the Host seam rather than chrome messages.
+ * Settles the element, clones it, reads the page's stylesheets, and adds the two privileged
+ * reads the page context cannot make, the authored ancestor cascade and the cross-origin
+ * sheets, through the Host. The result is the Captured object every later phase mutates.
  */
 import type { Captured } from './types';
 import { buildElementMetadata, cloneElement } from './capture/dom';
@@ -21,7 +16,6 @@ import { measureInteractiveStates } from './capture/states-measure';
  * Runs the capture phase on the chosen element, assembling the shared Captured
  * object every later phase reads.
  *
- * @param root - the live element to snip
  * @param screenshot - cropped png data url from the runner, may be empty
  * @returns the populated Captured object
  */

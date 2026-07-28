@@ -1,20 +1,14 @@
 /**
- * cli/src/gen-skill.ts: generate the plugin's committed files from their one source.
+ * cli/src/gen-skill.ts: generating the plugin's committed files from their one source.
  *
- * Agent guidance lives once in instructions/guidance.ts, and this composes it into
- * skill/skills/{snip,schema}/SKILL.md, so the skills can never drift from the CLI --help or
- * the JSON guidance fields, which read the same source. The two flows are separate skills so
- * each trigger description stays sharp and each loads only its own flow.
+ * The skill files come from instructions/guidance.ts, so they can never drift from --help or
+ * the JSON guidance fields, which read the same source. The plugin manifest comes from
+ * package.json, because the version was hand written in both. Run via npm run gen:skill.
  *
- * The plugin manifest is generated the same way, from package.json, because the version was
- * hand written in both and the schema stamp exists precisely so an agent can spot a stale
- * file. Run via `npm run gen:skill` whenever the guidance or package.json changes.
- *
- * Composing and writing are separate. They used to be one step that ran on import, so the
- * only way to see the text the generator would produce was to let it rewrite the tracked
- * files. Editing guidance and forgetting to regenerate then shipped stale rules to every
- * agent reading the skill, with nothing to catch it. `composeSkills` returns the files
- * without touching disk, which is what lets the suite compare them to what is committed.
+ * Composing and writing are separate. They used to be one step that ran on import, so the only
+ * way to see what the generator would produce was to let it rewrite the tracked files.
+ * composeSkills returns them without touching disk, which is what lets the suite compare them
+ * to what is committed.
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

@@ -1,21 +1,11 @@
 /**
- * capture/sheets.ts: stylesheet discovery via cssom
+ * capture/sheets.ts: every rule on the page, flattened.
  *
- * Pipeline position: capture
- * Reads from Captured: n/a (reads the live document.styleSheets)
- * Writes to Captured: stylesheets, foundationRules, componentRules, variables,
- * fonts, keyframes, inaccessible.crossOriginStylesheets
- *
- * Why this exists: a snipped element's appearance comes from rules scattered
- * across every sheet on the page, <style> blocks, linked css, injected sheets.
- * This module flattens all of them into a single CssRule[],
- * preserving each rule's grouping context (@media/@container/@layer/@supports) so
- * later phases can decide what survives serialization. It splits broadly-scoped
- * "foundation" rules (html/body/:root/*) from element-scoped "component" rules.
- * reconcile/match.ts refines the component set by actually matching
- * against captured elements. Cross-origin sheets that throw on .cssRules are
- * recorded as inaccessible here and recovered via cdp/background fetch later.
- * Shadow + adoptedStyleSheets discovery lands with the shadow handler.
+ * Runs during capture, over document.styleSheets. A snipped element's appearance comes from
+ * rules scattered across every sheet, so all of them collapse into one CssRule list that keeps
+ * each rule's grouping context (@media, @container, @layer, @supports) for later phases to
+ * judge. Broadly scoped foundation rules (html, body, :root, *) are split from element-scoped
+ * ones. A cross-origin sheet that throws on .cssRules is recorded here and recovered in cdp.ts.
  */
 import type { CssRule, CssVariable, FontFace, Keyframes, Stylesheet } from '../types';
 import { holdsChildRules } from '../utils/css-rules';
@@ -65,7 +55,7 @@ export function discoverStylesheets(): SheetDiscovery {
 			rules = sheet.cssRules; // Throws SecurityError on cross-origin
 		} catch {
 			// Cannot read this sheet from the content script. Remember its href so
-			// the background worker can re-fetch it later through privileged access.
+			// capture/cdp.ts can recover it later through the Host.
 			if (sheet.href) out.crossOriginStylesheets.push(sheet.href);
 			out.stylesheets.push({ href: sheet.href, origin: 'cross-origin', ruleCount: 0 });
 			continue;
@@ -87,15 +77,12 @@ export function discoverStylesheets(): SheetDiscovery {
 
 /**
  * Parses a raw css string into the same discovery shape, for cross-origin sheets
- * recovered through the background worker.
+ * recovered through the Host.
  *
  * Uses a constructable stylesheet so parsing never touches the live page. The
  * resulting rules carry the caller's `source` tag so downstream phases can tell
  * recovered rules from cssom-read ones.
  *
- * @param cssText - the stylesheet text fetched by the background
- * @param source - provenance tag for the produced CssRule entries
- * @param base - the sheet url to absolutize @font-face src against, since a src is relative to
  *   the sheet, not the page. Omitted when the caller absolutizes itself
  * @returns the discovery deltas: rules, variables, fonts, keyframes
  */
@@ -125,8 +112,6 @@ const URL_IN_SRC = /url\(\s*(['"]?)([^'")]+)\1\s*\)/g;
  * sources are left untouched, so the rewrite is idempotent.
  *
  * @param fonts - the discovered faces, mutated in place from `start`
- * @param start - first index to rewrite, the faces this sheet contributed
- * @param base - the stylesheet url to resolve relative srcs against
  */
 function absolutizeFontSrcs(fonts: FontFace[], start: number, base: string): void {
 	for (let i = start; i < fonts.length; i++) {

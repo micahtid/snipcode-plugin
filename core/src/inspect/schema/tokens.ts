@@ -1,22 +1,14 @@
 /**
- * inspect/schema/tokens.ts: the design tokens and what they say about the system
+ * inspect/schema/tokens.ts: the design tokens the walk saw.
  *
- * Pipeline position: inspect, page-scoped. See inspect/schema/extract.ts for the whole pass.
- * Reads from DOM: window, for computed styles on the already walked elements.
- * Writes to: nothing. Each function returns its token set.
+ * Collects the colors, fonts, spacing, radii, and shadows, then makes them useful: the palette
+ * is clustered perceptually, because a page paints hundreds of near-identical colors, and the
+ * type sizes are fitted to a modular scale.
  *
- * Why this exists: a page's design system is mostly its repeated values, so the schema
- * collects the colors, fonts, spacing, radii, and shadows the walk saw. Collection alone is
- * noisy, since a page paints hundreds of near-identical colors, so the palette is clustered
- * perceptually, the spacing is fitted to a base unit, and the type sizes are fitted to a
- * modular scale. The consistency score at the bottom reads those fits back out as the
- * fragmentation the redesign prompt should know about.
- *
- * Every collector here reads a computed style, and a computed style serializes whatever the
- * cascade produced, which is not always one value of the kind being asked for. Nothing in this
- * file decides that for itself: each candidate crosses validateToken in shared.ts, so a corner
- * shorthand, a pill radius, or a two-axis gap is handled once rather than at each call site
- * that happens to meet it first.
+ * Every collector reads a computed style, which serializes whatever the cascade produced and
+ * is not always one value of the kind being asked for. Nothing here decides that alone: each
+ * candidate crosses validateToken in shared.ts, so a corner shorthand, a pill radius, or a
+ * two-axis gap is handled once rather than at whichever call site meets it first.
  */
 import { hexToRgb, oklabDistance, parseRgba, rgbToOklab, type Oklab } from '../../utils/color';
 import {

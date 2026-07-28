@@ -1,22 +1,13 @@
 /**
- * resolve/inline.ts: inline external resources so the snip is self-contained
+ * resolve/inline.ts: carrying the pixels with the snip.
  *
- * Pipeline position: resolve (the closing step, after the standalone reconciliation)
- * Reads from Captured: clone, bakedStyles, fonts, page
- * Writes to Captured: clone img src, bakedStyles background url, fonts src, and warnings
+ * Runs last in resolve, after the standalone reconciliation. A snip that still points at the
+ * origin breaks the moment it is pasted somewhere that cannot reach those urls: hotlink
+ * protected fonts, authenticated image cdns, or simply offline. Every referenced font and
+ * image is fetched through the Host and rewritten to a data uri.
  *
- * Why this exists: a snip that references the origin, such as a webfont url, an image url,
- * or a background-image url, breaks the moment it is pasted somewhere that cannot reach
- * those urls, hotlink-protected fonts, authenticated image cdns, or simply offline.
- * The artifact must not depend on the origin. This step fetches every referenced font
- * and image through the extension's privileged background context, whose <all_urls>
- * permission reaches resources the page's own context cannot, and rewrites the
- * reference to a base64 data uri, so the snip carries its pixels with it.
- *
- * Best-effort and deterministic: a fetch that fails, whether blocked, oversize, or offline,
- * leaves the absolute url in place rather than throwing, so the snip still ships. Given
- * the same responses the rewrite is byte-identical. Bounded by a resource cap and, in
- * the background, a size cap so a heavy page cannot bloat the output without limit.
+ * Best effort: a fetch that fails leaves the absolute url in place rather than throwing, so
+ * the snip still ships. Bounded by a resource cap so a heavy page cannot bloat the output.
  */
 import type { Captured } from '../types';
 import { synthesizedStyle, forEachSynthesizedDeclaration, rewriteSynthesizedDeclarations } from '../reconcile/synthesized';
@@ -146,8 +137,6 @@ function dropUncontainedFaces(captured: Captured): void {
  * Whether a @font-face src can render without the origin: it has no external url at all,
  * whether data:, local(), or already resolved, or it pairs an external url with an inlined
  * data: source or a local() system fallback the browser can use offline.
- *
- * @param src - the face's src descriptor
  */
 function isSelfContained(src: string): boolean {
 	if (!/url\(\s*['"]?https?:/i.test(src)) return true; // No external url to depend on.

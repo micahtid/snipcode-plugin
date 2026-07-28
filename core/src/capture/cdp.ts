@@ -1,25 +1,10 @@
 /**
- * capture/cdp.ts: privileged capture augmentation (inherited chain and cross-origin sheets)
+ * capture/cdp.ts: the two reads the page context cannot make.
  *
- * Pipeline position: capture
- * Reads from Captured: root, element.selector, inaccessible.crossOriginStylesheets
- * Writes to Captured: foundationRules from cdp inherited rules, componentRules,
- * variables, fonts, keyframes recovered cross-origin, inaccessible
- *
- * Feeds the inheritance bake. The cdp inherited chain is the authored ancestor
- * cascade that bake.ts later bakes onto the snip root.
- *
- * Why this exists: two things the content script cannot do alone. First, it reads
- * the *authored* ancestor cascade, the devtools "inherited from" section. Only the
- * chrome devtools protocol exposes it, and chrome.debugger is background-only.
- * Second, it reads cross-origin stylesheets blocked by the same-origin policy,
- * which only a background fetch with <all_urls> host permission can do. Both are
- * delegated to the background worker over capture-internal messages
- * (CDP_INHERITED / FETCH_STYLESHEET).
- *
- * The v2 change versus v1 is that DOM.getDocument runs with { pierce: true } so
- * the document tree includes closed shadow roots, letting the inherited chain
- * resolve through them. The full shadow handler lands later.
+ * Runs during capture, through the Host. One is the authored ancestor cascade, what devtools
+ * shows as "inherited from", which only the protocol exposes and which bake.ts later bakes
+ * onto the snip root. The other is the cross-origin sheets the same-origin policy blocks.
+ * DOM.getDocument runs with pierce, so the inherited chain resolves through closed shadow roots.
  */
 import type { Captured, CssRule } from '../types';
 import { parseCssText, specificityOf } from './sheets';
@@ -120,7 +105,7 @@ export async function recoverCrossOriginSheets(captured: Captured): Promise<void
 /**
  * Recovers the @font-face rules that cross-origin stylesheets hide, by reading the text
  * the browser already parsed over cdp. recoverCrossOriginSheets above tries a privileged
- * re-fetch, which a cdn waf often blocks for the extension origin. This fallback reads
+ * re-fetch, which a cdn waf often blocks. This fallback reads
  * the same sheets through the devtools protocol, which is not bound by the same-origin
  * policy and needs no network round-trip. It runs over the hrefs still flagged
  * inaccessible after the fetch attempt, so it closes exactly the font-discovery gap those

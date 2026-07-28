@@ -1,17 +1,9 @@
 /**
- * capture/dom.ts: dom clone + element metadata extraction
+ * capture/dom.ts: the detached clone and the element metadata.
  *
- * Pipeline position: capture
- * Reads from Captured: root, the live element
- * Writes to Captured: clone, element, the metadata block
- *
- * Why this exists: the pipeline mutates a detached copy of the picked subtree so
- * the live page is never touched. This module produces that copy and the element
- * metadata block of selectors, xpath, bounding box, and ancestors that both snip and
- * assistive modes consume. It also promotes lazy-loaded image
- * sources at clone time so images render when the snip is pasted elsewhere,
- * ported from v1 extraction-pipeline cloneElement. Shadow piercing is added
- * later via cdp. This is the cssom/light-dom baseline.
+ * Runs first in capture. Every later phase mutates the clone, so the live page is never
+ * touched. Lazy image sources are promoted at clone time, because a src the page has not
+ * swapped in yet is a broken image once the snip is pasted somewhere else.
  */
 import type { Captured } from '../types';
 
@@ -30,7 +22,6 @@ const LAZY_SRC_ATTRS = ['data-src', 'data-lazy-src', 'data-original', 'data-srcs
  * stashed in a data-* attribute, so a pasted snip shows the image immediately
  * instead of waiting for the host page's lazy-load script that no longer runs.
  *
- * @param root - the live element the user picked
  * @returns a detached clone, safe to mutate downstream
  */
 export function cloneElement(root: Element): Element {
@@ -63,7 +54,6 @@ function isPlaceholderSrc(src: string): boolean {
  * over class hashes, so a downstream agent can re-find the element even if class
  * hashes churn.
  *
- * @param root - the live picked element
  * @returns the populated metadata block
  */
 export function buildElementMetadata(root: Element): Captured['element'] {

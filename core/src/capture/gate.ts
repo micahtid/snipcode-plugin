@@ -1,21 +1,10 @@
 /**
- * capture/gate.ts: website-builder gate
+ * capture/gate.ts: refusing the pages that cannot be snipped.
  *
- * Pipeline position: capture (final step, refuses unsupported pages)
- * Reads from Captured: root (runs before Captured exists, on the live element)
- * Writes to Captured: n/a (gates the pipeline before it builds Captured)
- *
- * Why this exists: framer / wix / webflow / elementor / readymag render runtime-
- * dependent, non-portable markup: scale-to-fit transforms, hashed class soups,
- * sprite refs to document-root <symbol>s. Snipping them produces broken output,
- * so v2 refuses with a static "unsupported" message instead of degrading
- * silently. Detection is purely structural: data-*
- * rendering-chrome attributes and class-name fingerprints, sampled from a
- * bounded subtree walk. Ported, rewritten, from v1 vision/builder-detection.ts.
- * The v1 version routed to a vision model, but v2 drops that path and blocks.
- *
- * Note: the runtime Set in collectSampleClassNames dedups sampled class names. It
- * is not a hardcoded tag/role/property enumeration.
+ * Runs before capture builds anything. Framer, Wix, Webflow, Elementor, and Readymag render
+ * markup that only works in place: scale-to-fit transforms, hashed class soup, sprite refs to
+ * document-root symbols. Snipping those produces broken output, so the pipeline refuses and
+ * the agent rebuilds from the screenshot crop instead. Detection is structural, never a url list.
  */
 
 /** The builders v2 refuses, plus the not-a-builder sentinel. */
@@ -39,7 +28,7 @@ export interface GateResult {
 }
 
 // A single strong rendering-chrome signal, weight 0.4-0.5, clears this, so one
-// unambiguous fingerprint is enough to block. Mirrors v1's routing threshold.
+// unambiguous fingerprint is enough to block.
 const BLOCK_THRESHOLD = 0.4;
 // The dominant builder must own at least this much weight to be named, versus noise.
 const NAME_THRESHOLD = 0.3;
@@ -51,7 +40,6 @@ const NAME_THRESHOLD = 0.3;
  * when its confidence clears BLOCK_THRESHOLD. Cheap enough, one bounded dom walk,
  * to run unconditionally on every snip.
  *
- * @param root - the live picked element
  * @returns the gate verdict. `blocked` gates the rest of the pipeline
  */
 export function detectBuilder(root: Element): GateResult {
@@ -167,9 +155,6 @@ function sum(signals: GateSignal[]): number {
  *
  * Caps both the result set and the traversal stack so detection stays cheap on
  * enormous pages. All fingerprint regexes test against this bounded sample.
- *
- * @param root - subtree to sample
- * @param cap - max distinct class names to collect
  */
 function collectSampleClassNames(root: Element, cap: number): string[] {
 	const seen = new Set<string>();

@@ -1,26 +1,15 @@
 /**
- * inspect/schema/extract.ts: the page-schema extractor
+ * inspect/schema/extract.ts: the order the page-schema passes run in.
  *
- * Pipeline position: inspect, page-scoped. This is the whole pass; the others are its steps.
- * Reads from DOM: document/window. This runs live, so the whole page must be loaded.
- * Writes to: nothing. It returns a PageSchema.
+ * This file is the order of operations and nothing else. Discovery finds the sections, the
+ * walk samples them, tokens.ts collects the design values, states.ts lifts the interactive
+ * rules, sections.ts and section-type.ts describe and name each section, and the blueprint and
+ * page-language passes read the components. optimize.ts trims the result and
+ * cli/src/schema-md.ts renders it.
  *
- * Why this exists: the schema inspector turns a whole page into a compressed design-system
- * schema. It walks the visible dom, stratified by section so a long page samples evenly,
- * collects the color, font, spacing, radius, and shadow tokens, lifts interactive-state rules
- * from the readable stylesheets, and detects section blueprints and the button, card, and nav
- * component blueprints plus the page's decorative and responsive language. The result is
- * size-reduced in optimize.ts and rendered for the reader in cli/src/schema-md.ts.
- *
- * This file is the order of operations and nothing else. Each pass lives in its own module:
- * the sample in walk.ts, the design tokens in tokens.ts, the state rules in states.ts, the
- * section reading in sections.ts, and the component and page-language specs in blueprints.ts.
- * Anything two passes both need is in shared.ts.
- *
- * The pass is async for one reason: a site that serves its css cross-origin hands the page
- * context stylesheets it may not read, and the hover rules and breakpoints live in exactly
- * those sheets. Recovering them goes through the Host, the same seam the extract pipeline
- * already uses for the same problem, and Host calls are round trips.
+ * The pass is async for one reason: a site serving its css cross-origin hands the page context
+ * sheets it may not read, and the hover rules and breakpoints live in exactly those. Recovering
+ * them goes through the Host, and Host calls are round trips.
  */
 import { getHost } from '../../host';
 import { walkDOM } from './walk';

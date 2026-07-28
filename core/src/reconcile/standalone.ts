@@ -1,43 +1,26 @@
 /**
- * reconcile/standalone.ts: standalone-context reconciliation
+ * reconcile/standalone.ts: making the artifact's own render the source of truth.
  *
- * Pipeline position: reconcile, the closing step, after bake + features + denoise
- * Reads from Captured: root, clone, bakedStyles, page.viewport
- * Writes to Captured: bakedStyles + clone, warnings
+ * Runs last in reconcile. bake.ts validates each authored value by forcing it onto the live
+ * element, and that test passes for values which only resolve because the page is present: a
+ * var() defined on :root, an inherited body font, an ancestor-relative length. Those dangle
+ * once the snip is pasted. So the baked clone is mounted in an isolated iframe carrying only
+ * the ua stylesheet, and any property whose standalone value diverges from the original's live
+ * one is corrected. One anchor fixes missing backgrounds, dangling tokens, lost display, and
+ * collapsed geometry at once, because they are all the same defect.
  *
- * It exists because bake.ts validates each authored value by forcing it onto the
- * LIVE element and re-reading getComputedStyle. That live-context test passes for
- * values that only resolve because the page is present (a `var(--token)` defined on
- * :root, an inherited body font, an ancestor-relative length). Those values then
- * dangle once the snip is pasted standalone. The artifact's own render is the only
- * authority on what survives, so this module makes that render the source of truth.
- * It mounts the baked clone in an isolated iframe that carries only the ua stylesheet,
- * with no page author rules, exactly the pasted-snip environment. Per element, it
- * compares the clone's standalone computed style against the original's live computed
- * style. Where they diverge, the standalone artifact is wrong, so the original's
- * resolved value is baked, overriding any authored value that does not reproduce
- * standalone. One anchor fixes missing backgrounds, dangling tokens, lost display,
- * and collapsed box geometry at once, because they are all the same defect: a value
- * that only resolved while the page was present.
+ * Box geometry is reconciled directionally, because the standalone render is authoritative on
+ * size in one direction only. A non-replaced box that lost a sizing input from outside the snip
+ * can only collapse, never grow, so its size is reclaimed only when it shrank; that is what
+ * keeps a font-grown fallback box from being clipped back. A replaced element has an intrinsic
+ * box, so either direction is a defect. See shouldReclaim in reconcile/diff.ts.
  *
- * Box geometry is reconciled directionally, because the standalone render is the
- * authority on size in only one direction. A non-replaced box that loses a sizing
- * input it drew from outside the snip, such as a flex track, a `var()` chain on a theme
- * ancestor, or an inset, can only collapse standalone, never grow, so its used size is
- * reclaimed only when it shrank. A box the same or larger standalone has the room its
- * content needs and is left alone, which is what keeps a font-grown fallback box from
- * being clipped back to the live width. A replaced element has an intrinsic box, so a
- * divergence in either direction is a lost size and is reclaimed. The discriminator is
- * a CSS category, replaced versus not, and the sign of the divergence, never a tolerance
- * constant. See shouldReclaim in reconcile/diff.ts.
+ * The same anchor extends to structure: an element rendered in the original but absent from
+ * the clone, dropped by some earlier handler, is restored, so a dropped element is corrected
+ * universally rather than by special-casing whichever handler dropped it.
  *
- * The same anchor extends to structure: an element rendered in the original but
- * absent from the clone, silently dropped by some earlier handler, is restored, so a
- * dropped element is corrected universally rather than by special-casing the handler
- * that dropped it.
- *
- * The neighbouring modules carry the parts this one only uses: the isolated frame in
- * reconcile/frame.ts and the divergence judgment in reconcile/diff.ts.
+ * It runs to a fixed point, because baking a structural property such as display changes
+ * descendants' computed values.
  */
 import type { Captured } from '../types';
 import { pairedSubtrees } from './match';
@@ -116,9 +99,6 @@ export function reconcileStandalone(captured: Captured): void {
  * Bakes one recovered value onto the clone, persistently in bakedStyles plus the inline
  * style, and mirrors it onto the in-frame copy so the next reconciliation round reads the updated
  * standalone render. A property the element rejects is skipped via the inline try/catch.
- *
- * @param captured - source of the per-clone baked maps
- * @param o - the override to apply
  */
 function applyOverride(captured: Captured, o: Override): void {
 	const baked = captured.bakedStyles.get(o.clone) ?? new Map<string, string>();
@@ -252,9 +232,6 @@ function paintsNothing(color: string): boolean {
  * it paints the whole ancestor box, a full-bleed backdrop which can be rescaled to cover
  * the snip. A smaller placed raster is a framed image positioned for its section and does
  * not reproduce.
- *
- * @param node - the ancestor painting the backdrop, the source of its box size
- * @param cs - the ancestor's computed style, the image plus its placement
  */
 function isReproducibleBackdrop(node: Element, cs: CSSStyleDeclaration): boolean {
 	if (!/url\(/i.test(cs.backgroundImage)) return isReproducibleGradient(cs.backgroundImage);
@@ -266,8 +243,6 @@ function isReproducibleBackdrop(node: Element, cs: CSSStyleDeclaration): boolean
  * scaling backdrop keeps its own placement: a tile repeats, and a cover/contain image fits.
  * A full-bleed raster sized in fixed pixels for the original section is rescaled to
  * cover, so it fills the smaller snip box rather than overflowing it.
- *
- * @param cs - the ancestor's computed style
  */
 function backdropPlacement(cs: CSSStyleDeclaration): { size: string; repeat: string } {
 	const keepsOwn = !/url\(/i.test(cs.backgroundImage) || backdropTiles(cs.backgroundRepeat) || backdropScales(cs.backgroundSize);
@@ -293,9 +268,6 @@ function backdropScales(backgroundSize: string): boolean {
  * mark of a decorative full-bleed backdrop rather than a smaller placed image. A
  * percentage of 100 or more, or a length at least as wide as the box, is full-bleed. An
  * auto or smaller size is a placed image.
- *
- * @param node - the ancestor painting the backdrop
- * @param backgroundSize - the ancestor's computed background-size
  */
 function isFullBleed(node: Element, backgroundSize: string): boolean {
 	const first = (backgroundSize.split(',')[0] ?? '').trim().split(/\s+/)[0] ?? '';
@@ -308,8 +280,6 @@ function isFullBleed(node: Element, backgroundSize: string): boolean {
  * Whether a computed background-image is purely css gradients: linear/radial/conic,
  * including repeating and -webkit- forms. A gradient is a paint function, not positioned
  * pixels, so baking it onto a smaller box still renders a faithful backdrop.
- *
- * @param backgroundImage - the computed background-image value
  */
 function isReproducibleGradient(backgroundImage: string): boolean {
 	if (/url\(/i.test(backgroundImage)) return false; // A raster layer cannot be reproduced.

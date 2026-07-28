@@ -1,28 +1,13 @@
 /**
- * features/colors.ts: modern color preservation + currentColor consolidation
+ * features/colors.ts: putting currentColor back.
  *
- * Pipeline position: reconcile
- * Reads from Captured: root, clone, bakedStyles
- * Writes to Captured: bakedStyles + clone, consolidating currentColor
+ * getComputedStyle resolves currentColor on fill, stroke, and border to a literal, which
+ * severs the link to `color`, so an icon that should recolor with its text no longer does.
+ * Where the baked literal equals the element's resolved color, this rewrites it back to the
+ * keyword. Pixel-identical, and it keeps the link for any state rule added later.
  *
- * Principles applied: authored color syntax is preserved when it round-trips.
- * This handler only rewrites a literal back to the equivalent currentColor.
- *
- * CSS/spec reference: https://developer.mozilla.org/en-US/docs/Web/CSS/color_value#currentcolor_keyword
- * Detection criterion: an svg fill or stroke whose baked literal equals the
- * element's resolved `color`. Otherwise it early-returns per element.
- * Transform contract: it rewrites such literals to the `currentColor` keyword.
- * It mutates bakedStyles and the clone inline styles only.
- *
- * Why this exists: oklch, oklab, color() and color-mix() already survive
- * serialization, because reconcile keeps the authored value when it round-trips
- * and otherwise ships the computed value, which chrome serializes in the same color
- * space. So this handler does not need to touch them. What it does fix is
- * currentColor. chrome's getComputedStyle resolves currentColor on fill/stroke/border
- * to the literal, severing the link to `color`, so an icon that should recolor with
- * its text no longer does. Restoring currentColor where the literal matches `color`
- * is pixel-identical and keeps that link. It also matters once polish adds hover
- * rules. This consolidates the currentColor handling that v1 spread across 3 places.
+ * Modern color notations need nothing here: reconcile keeps the authored value when it
+ * round-trips, and otherwise ships the computed value in the same color space.
  */
 import type { Captured } from '../../types';
 import { pairedSubtrees } from '../match';

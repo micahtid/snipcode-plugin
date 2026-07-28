@@ -1,23 +1,13 @@
 /**
- * cli/src/schema-md.ts: render the page schema as a markdown reference.
+ * cli/src/schema-md.ts: rendering the schema as the markdown an agent reads.
  *
- * schema.json is the machine payload; schema.md is the human/prompt-facing summary an
- * agent can drop straight into a redesign prompt. Pure formatting over the schema the
- * inspector produced, defensive about optional fields so a thin page still renders.
+ * schema.json is the complete record; this is the part meant to be read in one pass, so it is
+ * ordered by what a rebuild needs first: tokens, then the section sequence, then the component
+ * blueprints, then the page's decorative and responsive language.
  *
- * Everything the inspector measures renders here, one line each. The component blueprints used
- * to be extracted and then dropped, so a card spec that said `border: none` sat in schema.json
- * while the agent reading schema.md invented borders. Data that never reaches the reader may
- * as well not have been measured.
- *
- * The one thing held back is a fact the schema cannot place. A background effect names the
- * section it was seen in; one that names no section is left in schema.json and kept out of
- * here, because with nowhere attached it reads as permission to paint the effect anywhere,
- * which is drift the reader has no way to check.
- *
- * An unmeasured layout renders as `unknown (not measured)`, never as a default. The schema is
- * a hard contract, so a value it did not measure has to read as a gap and hand the decision
- * back to the agent's judgment.
+ * Anything the schema measured as unknown is printed as unknown rather than omitted. A missing
+ * line reads as "nothing to say here", which an agent fills with invention; an explicit unknown
+ * does not.
  */
 import type { BackgroundEffect, PageSchema, SectionBlueprint } from '../../core/src/inspect/schema/types';
 import type { SchemaResult } from '../../core/src/schema';

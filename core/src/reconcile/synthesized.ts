@@ -1,22 +1,10 @@
 /**
- * reconcile/synthesized.ts: the shared synthesized-<style> carrier
+ * reconcile/synthesized.ts: the one <style> node the handlers share.
  *
- * Pipeline position: reconcile, a shared helper for the feature handlers
- * Reads from Captured: clone, warnings
- * Writes to Captured: clone, one appended <style>, and warnings
- *
- * It exists because two feature handlers express what an inline style cannot, and so
- * both ship a real css rule rather than a property. pseudo.ts materializes
- * ::before/::marker content, and states.ts reproduces :hover/:focus/:active. Each
- * needs the identical plumbing: a marker re-anchored rule appended to a <style> on
- * the clone, later lifted into the document head by convert/format.ts. Rather than
- * have each handler create and manage its own <style> (the v1-era copy-paste), they
- * share one carrier here. A single appended <style> collects every synthesized rule,
- * which also gives the resolve phase one place to find and rewrite those rules'
- * url()/var() references (see resolve/inline.ts and resolve/vars.ts).
- *
- * The carrier is tagged with a data-* attribute so the resolve passes can locate it
- * and convert/format.ts strips it on lift. It never reaches the emitted markup.
+ * The pseudo and state handlers both need real css rules, which an inline style cannot
+ * express. If each created and managed its own <style> the clone would carry several, their
+ * order would depend on handler order, and the formatter would have to find them all. One
+ * node, created on first use and appended at a fixed place, removes all of that.
  */
 import type { Captured } from '../types';
 
@@ -39,7 +27,6 @@ const VOID_TAGS = new Set([
  * one block in handler order.
  *
  * @param captured - clone + warnings mutated in place
- * @param rules - complete css rule strings (`selector {... }`), already formatted
  */
 export function appendSynthesizedRules(captured: Captured, rules: string[]): void {
 	if (rules.length === 0) return;
@@ -58,8 +45,6 @@ export function appendSynthesizedRules(captured: Captured, rules: string[]): voi
 /**
  * The clone's synthesized <style>, or null if no handler has created one. The resolve
  * passes use this to rewrite the synthesized rules' resource references.
- *
- * @param captured - the capture whose clone is searched
  */
 export function synthesizedStyle(captured: Captured): HTMLStyleElement | null {
 	return captured.clone.querySelector(`style[${SYNTH_MARKER}]`);
@@ -95,9 +80,6 @@ interface SynthesizedRule {
  * Walks every declaration in the synthesized <style>, read-only. The resolve passes use
  * this to gather the url()/var() references the synthesized rules carry, which the
  * resting bake never sees because these rules live in a <style>, not in bakedStyles.
- *
- * @param captured - the capture whose synthesized <style> is read
- * @param fn - called once per declaration
  */
 export function forEachSynthesizedDeclaration(captured: Captured, fn: (decl: SynthesizedDeclaration) => void): void {
 	const style = synthesizedStyle(captured);
@@ -146,8 +128,6 @@ export function rewriteSynthesizedDeclarations(
  * Parses the synthesized <style> text into rules and declarations. The text is always in
  * the handlers' own one-declaration-per-line shape, so a line parser is exact and avoids
  * the cssom's shorthand-with-var() loss (see rewriteSynthesizedDeclarations).
- *
- * @param style - the synthesized <style> element
  */
 function parseSynthesized(style: HTMLStyleElement): SynthesizedRule[] {
 	const rules: SynthesizedRule[] = [];

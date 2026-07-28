@@ -1,17 +1,10 @@
 /**
- * core/src/candidates.ts: the element inventory for agent-driven targeting.
+ * core/src/candidates.ts: the element inventory an agent picks a target from.
  *
- * The extension had a human click the element to snip. An agent has no cursor, so
- * candidates walks the page and returns a durable, selector-addressable inventory of
- * everything worth targeting: interactive controls, headings, landmarks, and the
- * representative of each repeated structural block (cards, nav items, list rows).
- *
- * Every candidate carries a churn-resistant css selector plus the text and rect it
- * had at harvest time. That recorded pair is what makes the flow stateless: extract
- * relaunches the browser, re-resolves the selector, and verifies the match against
- * this recorded text/rect before it snips, so a shifted page fails loudly instead of
- * extracting the wrong node. Rects are document-absolute (scroll offset folded in) so
- * they line up with the full-page screenshot the runner captures alongside.
+ * An agent has no cursor, so instead of clicking it reads a list. This harvests the page's
+ * interactive controls, headings, and landmarks, collapses a repeated block to one
+ * representative with a count, and gives each a durable selector plus the text and rect that
+ * let extract verify the page has not shifted underneath it.
  */
 import { buildElementMetadata } from './capture/dom';
 import { classifyElement, isElementVisible, SKIP_TAGS, type SemanticRole } from './inspect/schema/classify';

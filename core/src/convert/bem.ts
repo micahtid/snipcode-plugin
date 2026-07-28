@@ -53,7 +53,7 @@ export function emitBem(captured: Captured): HtmlOutput {
 
 	// Factor a shared base class out of near-identical rules, demoting each member to
 	// a modifier carrying only its differences. Render-neutral by construction, so it
-	// runs unconditionally. The screenshot grader is the backstop.
+	// runs unconditionally.
 	const { rules: finalRules, renames } = factorBaseClasses(block, rules, tagCounters);
 	applyBaseClasses(elements, renames);
 
@@ -86,8 +86,6 @@ function readDecls(el: HTMLElement): Array<[string, string]> {
  * of the value and never a separator. An `!important` priority is stripped, matching the
  * prior getPropertyValue read. The class rules carry no competing selectors, so priority
  * changes nothing. A declaration with an empty property or an empty value is dropped.
- *
- * @param cssText - the element's serialized inline style
  */
 function inlineDeclarations(cssText: string): Array<[string, string]> {
 	const out: Array<[string, string]> = [];

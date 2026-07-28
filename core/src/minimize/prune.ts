@@ -1,32 +1,19 @@
 /**
- * minimize/prune.ts: declaration-level dead-code minimization
+ * minimize/prune.ts: deleting declarations that change no pixel.
  *
- * Pipeline position: minimize, the first phase, right after convert/clean
- * Reads from Captured: page.viewport via the oracle, plus warnings on graceful skip
- * Writes to Captured: nothing. It transforms the emitted stylesheet string.
+ * Runs first in minimize, after convert/clean. Reconcile bakes a full computed style onto
+ * every element, so the sheet restates inherited values and ua defaults by the hundred. This
+ * is dead-code elimination one level below clean.ts, which drops whole unused rules but never
+ * looks inside a matched one.
  *
- * Why this exists: the reproduced stylesheet bakes a full computed style onto every
- * element, so it restates inherited values, repeats ua defaults, and carries no-op
- * declarations by the hundred. This deletes every declaration whose removal leaves the
- * render byte-identical, judged by the computed-style oracle, and drops any rule left
- * empty. It is dead-code elimination one level deeper than convert/clean, which prunes
- * whole unused rules and at-rules but never looks inside a matched rule.
+ * Declarations are indexed through the browser's own parser in the oracle frame, never by
+ * regex, so data-uri braces and nested functions cannot mislead it. Deletion is delta
+ * debugging: remove a chunk, ask the oracle, accept only an unchanged render, otherwise
+ * restore and split. A cheap pre-pass batches the declarations most likely dead; whatever it
+ * misses the bisection still finds, so it only saves time.
  *
- * The method is universal and verification-first, never example-specific. Declarations
- * are indexed through the browser's own css parser in the oracle frame, never by regex
- * over text, so data-uri braces and nested functions cannot mislead it. Deletion is
- * delta-debugging: a chunk is removed, the oracle checks the render, and the removal is
- * accepted only when the render is unchanged, otherwise the chunk is restored and split.
- * Because every accepted deletion is individually render-verified, the result cannot depend on
- * which site produced the css. There is no property table and no per-site rule anywhere,
- * only the oracle's verdict. A cheap pre-pass batches the declarations most likely to be
- * dead, the ones that merely restate an inherited value, into one check. Whatever it
- * misses the bisection still finds, so the pre-pass only ever saves time, never changes
- * the outcome.
- *
- * State, pseudo, and at rules are out of scope here. Their selectors carry the
- * interactive and generated-content fidelity earlier phases earned, so they are indexed
- * neither for deletion nor rewriting and pass through untouched. See WITHHELD.
+ * State, pseudo, and at rules are out of scope: their selectors carry the interactive and
+ * generated-content fidelity earlier phases earned. See WITHHELD.
  */
 import type { Captured } from '../types';
 import { withOracle, type RenderOracle } from './oracle';
@@ -107,9 +94,7 @@ export interface MinimizeStats {
  * which the bisection is synchronous and processes declarations in a fixed order, so the
  * same input always yields the same output.
  *
- * @param css - the emitted stylesheet, after convert/clean
  * @param captured - source of the viewport size. Warnings are appended here on skip.
- * @param markup - the emitted root markup the stylesheet targets, mounted in the oracle
  * @param stats - optional measurement sink, filled with this run's numbers when provided
  * @returns the minimized stylesheet, or the input unchanged on any failure
  */
@@ -291,10 +276,6 @@ function run(oracle: RenderOracle, stats?: MinimizeStats): string {
  * a wrong guess only costs the batch a re-bisection, never correctness.
  *
  * @param oracle - the mounted render, read only here
- * @param rules - the minimizable rules, index-aligned with the candidate index
- * @param index - the candidate declarations
- * @param matched - the elements each rule matches, index-aligned with rules
- * @param defaults - ua default values per tag for the non-inherited candidate props
  */
 function redundantDefaults(
 	oracle: RenderOracle,
@@ -342,11 +323,6 @@ function redundantDefaults(
  * layout property reads a context-dependent value on a bare element, so it will not match a
  * real element and simply never joins the batch, which is what keeps risky sizes such as a
  * form control's intrinsic height out of the fast path and in the verified bisection.
- *
- * @param oracle - the mounted render
- * @param matched - the elements each rule matches, index-aligned with rules
- * @param rules - the minimizable rules
- * @param index - the candidate declarations
  */
 function uaDefaults(oracle: RenderOracle, matched: Element[][], rules: MinRule[], index: DeclRef[]): Map<string, Map<string, string>> {
 	const props = new Set<string>();

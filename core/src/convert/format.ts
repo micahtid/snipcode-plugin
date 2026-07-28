@@ -1,43 +1,22 @@
 /**
- * convert/format.ts: html + css pretty-printer (whitespace-safe)
+ * convert/format.ts: pretty-printing the markup and the stylesheet.
  *
- * Pipeline position: convert
- * Reads from Captured: nothing. It operates on the emitted markup + stylesheet strings.
- * Writes to Captured: nothing. It returns the formatted strings.
+ * Runs in convert, for the html-shaped formats only; jsx and vue self-indent. Indentation is
+ * the whole goal, and it must never move a pixel, so it only reflows where that is provably
+ * render-neutral.
  *
- * Indentation is the only goal. It must never move a pixel.
+ * Markup takes one element per line only where whitespace collapses to nothing. Whitespace
+ * between block boxes collapses, so those children each get a line; whitespace around inline
+ * content renders as a space, so an element with inline children or mixed text stays verbatim.
+ * Whitespace-sensitive tags and the handler-injected nodes stay verbatim too.
  *
- * Why this exists: every emitter returns the clone's outerHTML as a single
- * unindented line and a stylesheet whose rules are serialized one per line by the
- * cssom in clean.ts. Both are correct but unreadable. This module re-emits them in a
- * prettier shape, but only where doing so is provably render-neutral:
+ * The stylesheet takes one declaration per line, which css is insensitive to, and the
+ * reconcile-injected pseudo <style> is lifted into the head sheet so all css lives in one
+ * place. Those rules target pseudo-elements, so their cascade position cannot change.
  *
- * - Markup is re-serialized one element per indented line, but only where whitespace
- *   collapses to nothing. Whitespace between block boxes collapses, so those children
- *   each take their own line. Whitespace around inline content renders as a space, so
- *   any element with inline children or mixed text stays verbatim on one line. A block
- *   element whose only content is text puts that text on its own line, and a block trims
- *   its leading/trailing whitespace. Whitespace-sensitive tags/displays (pre,
- *   textarea, white-space:pre*) and the handler-injected style/svg nodes stay verbatim.
- * - The stylesheet is re-emitted one declaration per line. Css is insensitive to
- *   whitespace between declarations and rules, so this never changes rendering.
- * - The reconcile-injected pseudo <style> is lifted out of the markup into the single
- *   head stylesheet, so all css lives in one place. Those rules target pseudo-elements
- *   only, so their cascade position cannot change. Each rule's numeric data-snip-pseudo
- *   marker is then re-keyed to the host element's class where that class is unique, a
- *   more readable selector at the same specificity.
- *
- * The result is the readable form for html-shaped formats. The jsx and vue formats are
- * already indented by their own emitters and are skipped. See isHtmlShaped. The markup is
- * parsed once and every step mutates that one document, so like convert/clean.ts the whole
- * pass returns its input unchanged if the markup will not parse.
- *
- * Deciding what is reflowable needs each element's effective display, and white-space.
- * The html format carries those on the inline style. The class-based formats such as bem-css
- * carry them in the emitted stylesheet, so this reads the css too and maps each flat
- * class rule to its display/white-space. Without it bem markup looks all-block, having no
- * inline styles, so flex/grid containers go undetected and whole subtrees collapse to
- * one line again.
+ * Deciding what is reflowable needs each element's display and white-space. The html format
+ * carries those inline; the class-based formats carry them in the stylesheet, so the css is
+ * read too. Without that, bem markup looks all-block and whole subtrees collapse to one line.
  */
 import type { OutputFormat } from '../types';
 import { isInjected } from '../reconcile/match';
@@ -91,8 +70,6 @@ export function isHtmlShaped(format: OutputFormat): boolean {
  * pretty-prints the markup and the stylesheet, and composes them. Render-neutral
  * throughout. See liftEmbeddedStyles, formatHtmlMarkup, and formatCss.
  *
- * @param html - the polished markup, possibly carrying an injected pseudo <style>
- * @param css - the polished head stylesheet
  * @param warnings - appended to on a markup parse failure
  * @returns the formatted markup, the formatted + merged stylesheet, and the composed document
  */
@@ -153,8 +130,6 @@ function liftEmbeddedStyles(doc: Document): string {
  * exactly the marked element at the same specificity as the attribute selector.
  *
  * @param doc - the parsed markup, mutated in place to drop the redundant markers
- * @param css - the lifted rules, keyed by the marker attribute
- * @param attr - the marker attribute, data-snip-pseudo or data-snip-state
  * @returns the re-keyed css
  */
 function keyMarkersToClasses(doc: Document, css: string, attr: string): string {
@@ -184,7 +159,6 @@ function keyMarkersToClasses(doc: Document, css: string, attr: string): string {
 /**
  * Pretty-prints emitted html markup, indenting only where it is render-neutral.
  *
- * @param doc - the parsed markup, with the injected style already lifted out
  * @param css - the emitted stylesheet, read for class-based display, empty for html
  * @param warnings - appended to when the markup holds no element, after which it is
  *   re-serialized unformatted
@@ -208,7 +182,6 @@ function formatHtmlMarkup(doc: Document, css: string, warnings: string[]): strin
  * serialized text, never re-derived, so shorthands are preserved exactly. Returns the
  * input unchanged if it will not parse.
  *
- * @param css - the stylesheet text to format
  * @returns the multi-line stylesheet
  */
 export function formatCss(css: string): string {
@@ -268,9 +241,6 @@ function formatCssRule(rule: CSSRule, depth: number): string {
  * a function, or a string, such as a data uri or a quoted family, never splits a declaration.
  * Each segment is emitted verbatim rather than rebuilt from its property and value, so a
  * descriptor body with no colon, which a declaration parse would drop, still survives.
- *
- * @param block - the cssom-serialized declaration block, with no braces
- * @param depth - the indent depth for each line
  */
 function declarationLines(block: string, depth: number): string {
 	const pad = '\t'.repeat(depth);
@@ -290,7 +260,6 @@ function declarationLines(block: string, depth: number): string {
  * format, which has no class rules, yields an empty map and falls back to inline styles.
  * The flat bem-css rules do match.
  *
- * @param css - the emitted stylesheet
  * @returns a class-name -> resting display/white-space map
  */
 function classStyleMap(css: string): Map<string, ClassStyle> {
@@ -391,10 +360,6 @@ function isReflowable(el: Element, classStyle: Map<string, ClassStyle>): boolean
  * as in the bem-css format, else '' when unknown. Routing both display and white-space through
  * one reader lets the same reflow logic serve the inline-styled and class-based formats.
  *
- * @param el - the element to resolve
- * @param prop - the property to read (display or white-space)
- * @param classStyle - class-name -> resting style from the emitted stylesheet
- * @param pick - selects the property off a class's resting style
  * @returns the lowercased value, or '' if none is known
  */
 function restingValue(el: Element, prop: string, classStyle: Map<string, ClassStyle>, pick: (s: ClassStyle) => string | undefined): string {

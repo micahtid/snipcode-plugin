@@ -1,35 +1,19 @@
 /**
- * reconcile/denoise.ts: inert-declaration removal
+ * reconcile/denoise.ts: dropping the declarations that restate a default.
  *
- * Pipeline position: reconcile
- * Reads from Captured: root, clone, bakedStyles
- * Writes to Captured: bakedStyles and clone, removing redundant inline styles, plus warnings
+ * Runs in reconcile, after the feature handlers, on bakedStyles before convert, so every
+ * output format ships the smaller result. Baking every winning property leaves declarations
+ * that merely repeat a ua default, an inherited value, or have no effect in context, such as
+ * transform-origin with no transform.
  *
- * Removal is render-identical by construction, never aesthetic surgery.
+ * Each drop is measured, not guessed: against a per-tag ua default read from a clean probe,
+ * which is what a non-inherited property falls back to, and against the parent's computed
+ * value, which is what an inherited one falls back to. The probe is off-screen but laid out,
+ * because display:none or a detached node returns empty or blockified values.
  *
- * It exists because bake.ts and the feature handlers bake every winning property
- * onto each element. Many of those merely restate a default (animation-timing-
- * function: ease, vertical-align: baseline), have no effect in context (such as
- * transform-origin with no transform), or just repeat an inherited value. The
- * result renders correctly but reads as noise. This step drops those declarations
- * against ground truth. It compares against a per-tag ua default read from a clean
- * probe element, which is what a non-inherited property falls back to, and against
- * the immediate parent's computed value, which is what an inherited property falls
- * back to. It runs on bakedStyles before convert, so every output format ships the
- * smaller result and the polish llm sees clean markup.
- *
- * Two further drops ride the same ground-truth machinery. A css-wide keyword
- * (initial/inherit/unset) reaches the output verbatim because bake.ts prefers the
- * authored value when it round-trips. resolveCssWideKeyword resolves it to the value
- * it actually produces, so isRedundantDecl can match it against the fallback and drop
- * it when inert. A legacy vendor-prefixed flexbox longhand such as -webkit-box-align
- * and friends is dropped when its standard counterpart is present and the legacy box
- * model is not in use, since every engine then ignores the prefixed form.
- *
- * Like bake.ts, it trusts no hand-curated "is this noise" Set. The decision lives in
- * match.ts's isRedundantDecl, which only ever removes a measured no-op. The probe is
- * off-screen and laid out, not display:none and not detached, because getComputedStyle
- * returns empty or blockified values otherwise.
+ * Two more drops ride the same machinery: a css-wide keyword (initial, inherit, unset) is
+ * resolved to the value it produces before being matched, and a legacy prefixed flexbox
+ * longhand goes when its standard counterpart is present and the legacy box model is not in use.
  */
 import type { Captured } from '../types';
 import { pairedSubtrees, isRedundantDecl, transformContext, inheritsProperty } from './match';
@@ -89,10 +73,6 @@ export function denoise(captured: Captured): void {
  * Removes one declaration from both the baked map and the clone's inline style. The
  * inline removal can throw for a property this element rejects, in which case the
  * baked-map delete alone is enough.
- *
- * @param baked - the element's baked declaration map
- * @param clone - the clone element whose inline style mirrors the baked map
- * @param prop - the property to drop
  */
 function dropDecl(baked: Map<string, string>, clone: Element, prop: string): void {
 	baked.delete(prop);
@@ -124,10 +104,6 @@ function dropDecl(baked: Map<string, string>, clone: Element, prop: string): voi
  * resolve. `revert` is left untouched. It reverts to the ua/author origin, which the
  * standalone snip does not carry, so it is never provably inert.
  *
- * @param captured - source of the per-clone baked maps, for inherited resolution
- * @param clone - the element whose declaration is under test
- * @param prop - the property name
- * @param value - the declared value
  * @returns the resolved value, or undefined to leave the value untouched
  */
 export function resolveCssWideKeyword(captured: Captured, clone: Element, prop: string, value: string): string | undefined {
@@ -163,10 +139,6 @@ export function resolveCssWideKeyword(captured: Captured, clone: Element, prop: 
  * guard checks the element's own baked display and its parent's. The
  * `-webkit-flex-*`/`-webkit-align-*` aliases need no guard. Modern engines treat them as
  * plain aliases of the standard names, so the standard sibling wins regardless.
- *
- * @param captured - source of the per-clone baked maps, for the parent display check
- * @param baked - the element's baked declaration map
- * @param clone - the clone element whose inline style mirrors the baked map
  */
 function dropDeadPrefixes(captured: Captured, baked: Map<string, string>, clone: Element): void {
 	const selfOldBox = isOldBox(baked.get('display'));
@@ -199,9 +171,6 @@ function isOldBox(display: string | undefined): boolean {
  * from the page (a global body font, say) does not travel with the snip, so
  * comparing against the live parent would drop a declaration the snip still needs.
  *
- * @param captured - source of the per-clone baked maps
- * @param clone - the element whose inherited fallback is wanted
- * @param prop - the inherited property
  * @returns the inherited value, or undefined if not even an initial exists
  */
 export function effectiveInherited(captured: Captured, clone: Element, prop: string): string | undefined {
@@ -224,8 +193,6 @@ export function effectiveInherited(captured: Captured, clone: Element, prop: str
  * author rules, which do not travel with the snip. Results are cached per attribute
  * signature for the snip.
  *
- * @param doc - the probe iframe document
- * @param win - the probe iframe window (its getComputedStyle)
  * @returns a function from a live element to its longhand prop->default-value map
  */
 function elementDefaultProbe(doc: Document, win: Window): (el: Element) => Map<string, string> {
@@ -249,8 +216,6 @@ function elementDefaultProbe(doc: Document, win: Window): (el: Element) => Map<s
  * A cache key over the attributes that affect an element's ua styling. Excludes style
  * (the thing under test), plus id, class, and the data- and aria- families, which
  * never match a ua rule, so folding them in would only fragment the cache.
- *
- * @param el - the element to key
  */
 function probeKey(el: Element): string {
 	const parts = [el.tagName.toLowerCase()];
@@ -272,8 +237,6 @@ function probeKey(el: Element): string {
  * not travel with the snip, so the pseudo handler can de-noise against the same ground
  * truth the element pass uses. Cached per attribute signature + pseudo for the snip.
  *
- * @param el - the originating element
- * @param pseudo - the pseudo-element selector, e.g. '::placeholder'
  * @returns a longhand prop->default-value map for that pseudo
  */
 export function pseudoDefaults(el: Element, pseudo: string): Map<string, string> {
@@ -315,8 +278,6 @@ function initialStyles(): Map<string, string> {
 /**
  * Runs `fn` against a fresh, hidden, same-origin iframe, where about:blank carries only the
  * ua stylesheet, isolated from the page's author rules, tearing it down afterward.
- *
- * @param fn - reads probe styles from the iframe document/window while it is attached
  */
 function withProbeFrame(fn: (doc: Document, win: Window) => void): void {
 	const frame = document.createElement('iframe');

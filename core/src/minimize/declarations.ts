@@ -1,19 +1,9 @@
 /**
- * minimize/declarations.ts: shared css declaration-block parsing
+ * minimize/declarations.ts: how the minimize phases read a declaration block.
  *
- * Pipeline position: minimize, a helper for prune and normalize
- * Reads from Captured: nothing
- * Writes to Captured: nothing
- *
- * Why this exists: both the prune phase and the normalize phase need to split a rule's
- * serialized declaration block into its author declarations, keeping shorthands whole and
- * never splitting on a semicolon inside a url, a function, or a quoted string, and both
- * need the same notion of which rules are in scope and how the surviving rules serialize.
- * Defining those once here keeps the phases from drifting apart on what they may touch.
- *
- * The splitting itself is not written here. It is the shared scan in utils/css-split.ts,
- * which every phase and every emitter uses. This module only puts a minimize-shaped face
- * on it, lowercasing the property so phase lookups are case insensitive.
+ * Shared by prune and normalize, so the two cannot drift on what they may touch or on how a
+ * surviving rule serializes. The splitting itself is the shared scan in utils/css-split.ts;
+ * this only puts a minimize-shaped face on it and lowercases the property name.
  */
 import { parseDeclarations as parseCssDeclarations } from '../utils/css-split';
 
@@ -32,8 +22,6 @@ export const WITHHELD = /:hover|:focus|:active|\[data-snip-state|\[data-snip-pse
  * `instanceof`, because the rule belongs to the oracle iframe's realm and would fail an
  * `instanceof CSSStyleRule` against this window's constructor, while `CSSRule.STYLE_RULE` is
  * the same numeric constant in every realm.
- *
- * @param rule - a top-level rule from an oracle frame's stylesheet
  */
 export function inScopeRule(rule: CSSRule): CSSStyleRule | null {
 	if (rule.type !== CSSRule.STYLE_RULE) return null;
@@ -47,8 +35,6 @@ export function inScopeRule(rule: CSSRule): CSSStyleRule | null {
  * it still carries declarations, so a rule a phase emptied is dropped, whether it is in scope
  * or a withheld state or pseudo rule the merge collapsed into a selector list. At-rules and
  * grouping rules are emitted verbatim in their original position.
- *
- * @param topRules - a frame stylesheet's top-level rules
  */
 export function serializeRules(topRules: CSSRule[]): string {
 	const out: string[] = [];
@@ -79,8 +65,6 @@ export interface Segment {
  * quoted string, such as a data-uri background, never splits a declaration. Each segment
  * keeps its verbatim text, priority included, so re-emitting the segments reproduces the
  * rule exactly.
- *
- * @param cssText - a rule's serialized declaration block, no braces
  */
 export function parseSegments(cssText: string): Segment[] {
 	return parseCssDeclarations(cssText).map((d) => ({ prop: d.prop.toLowerCase(), decl: d.decl, value: d.value }));

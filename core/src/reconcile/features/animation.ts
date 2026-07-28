@@ -1,34 +1,12 @@
 /**
- * features/animation.ts: animation, transition, transform context
+ * features/animation.ts: the transform and animation context.
  *
- * Pipeline position: reconcile
- * Reads from Captured: root, clone, bakedStyles
- * Writes to Captured: bakedStyles + clone, the transform context and anim declarations
+ * Bakes non-default transform-origin, perspective, the 3d flags, and the animation and
+ * transition shorthands, which the authored cascade often omits yet which shape the frame.
  *
- * Principles applied: this extends the "ship what renders" rule to the transform
- * and animation context, without disturbing the per-element decision about the
- * `transform` value.
- *
- * CSS/spec reference: https://developer.mozilla.org/en-US/docs/Web/CSS/transform
- * also covers animation, transition, perspective, transform-style, backface-visibility.
- * Detection criterion: an element with a non-default value for one of the
- * transform-context or animation/transition properties. Otherwise it early-returns
- * per element.
- * Transform contract: it bakes those computed values onto the matching clone
- * element. It deliberately does not re-bake `transform` or the individual
- * translate/rotate/scale properties, because those can be mid-animation at capture
- * time and the per-element pass already owns the value. It mutates bakedStyles and
- * the clone inline styles only.
- *
- * Why this exists: the static transform context of transform-origin, perspective,
- * and the 3d flags, together with the animation and transition shorthands, is
- * easily omitted from the authored cascade, yet it shapes the rendered frame. The
- * grader freezes animations at frame 0 (reducedMotion), so the @keyframes 0% styles
- * only apply if the element still carries its `animation` declaration and the
- * keyframes travel. resolve/anim keeps the referenced ones, with cubic-bezier
- * precision intact in the verbatim keyframe text. `transform` itself is left to the
- * per-element pass, so an animated element is not locked to a mid-flight frame
- * that would mismatch frame 0.
+ * It deliberately does not re-bake transform itself, or translate/rotate/scale: those can be
+ * mid-animation at capture time, and the per-element pass already owns the value. Baking a
+ * mid-flight frame would lock the element to it.
  */
 import type { Captured } from '../../types';
 import { pairedSubtrees } from '../match';

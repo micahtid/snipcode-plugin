@@ -1,21 +1,10 @@
 /**
- * convert/tailwind.ts: inline styles -> tailwind utility classes
+ * convert/tailwind.ts: inline styles to tailwind utility classes.
  *
- * Pipeline position: convert
- * Reads from Captured: clone, inline-styled
- * Writes to Captured: nothing. It deep-copies the clone, so the canonical clone is untouched.
- *
- * A format transform of the baked result.
- *
- * Why this exists: the tailwind / jsx-tailwind formats express
- * styles as utility classes. This walks a *copy* of the baked clone, so all 7
- * formats stay derivable from one capture, and turns
- * each element's inline declarations into utilities: a curated map for the common
- * properties, namely display, flex, spacing, and color via the palette matcher, and
- * tailwind's arbitrary-value syntax `[prop:value]` for everything else, which
- * guarantees full coverage and exact fidelity in a tailwind environment without
- * an exhaustive mapping table. Ported from v1 css-to-tailwind.ts +
- * tailwind-extractor.ts, rewritten, covering the conversion mappings and arbitrary-value handling.
+ * Runs in convert, on a deep copy of the clone so every format stays derivable from one
+ * capture. Each element's inline declarations become utilities: a curated map for the common
+ * properties, and tailwind's arbitrary-value syntax for everything else, which guarantees full
+ * coverage and exact fidelity without an exhaustive mapping table.
  */
 import type { Captured } from '../types';
 import { snapValue } from './snap';
@@ -25,7 +14,7 @@ import { atRulesCss, type HtmlOutput } from './document';
 /**
  * Emits the snip as tailwind-classed markup plus the shared @font-face/@keyframes
  * block. Fidelity in a tailwind project comes from utilities + arbitrary values. The
- * grader uses the inline html format, so this targets clean, usable output.
+ * output is meant to be pasted into a tailwind project, so it targets clean, usable classes.
  *
  * @param captured - read-only, so a deep copy of the clone is transformed
  */

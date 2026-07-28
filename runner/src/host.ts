@@ -1,23 +1,16 @@
 /**
- * runner/src/host.ts: the Node side of the port boundary.
+ * runner/src/host.ts: the Host implementation over a Playwright CDPSession.
  *
- * core/ runs in the page and reaches its four privileged services through one
- * exposed function, __snipHostSend(type, payload). This module implements those
- * services against a Playwright CDPSession and Node fetch, mirroring exactly what
- * the extension's background worker did with chrome.debugger and background fetch
- * (see the message contract in core/src/host.ts). The reply envelope shape
- * ({ ok, result, error }) is preserved so the ported capture code reads replies
- * unchanged.
+ * Answers the calls core/src/host.ts declares: the authored ancestor cascade, cross-origin
+ * stylesheet text, binary fetches, and forcing interactive states. Everything protocol-shaped
+ * lives here, which is what keeps core/ free of Playwright.
  *
- * CDP lifecycle note: the extension attached and detached the debugger per one-shot
- * call and cleared forced states by detaching. Playwright holds one long-lived
- * session, so this module enables DOM/CSS once, buffers CSS.styleSheetAdded from the
- * start, and clears forced pseudo-states explicitly on forceEnd rather than by
- * detaching.
+ * Every method degrades rather than throws. A protocol that is busy, such as when devtools is
+ * attached, returns a failed envelope and the calling phase falls back.
  */
 import type { CDPSession, Page } from 'playwright';
 
-/** Largest asset inlined as a data uri, matching the extension's 3 MB ceiling. */
+/** Largest asset inlined as a data uri. Past this the artifact costs more than it carries. */
 const MAX_INLINE_BYTES = 3 * 1024 * 1024;
 /** Poll budget for CDP_STYLESHEETS to let a requested sheet's styleSheetAdded arrive. */
 const SHEET_POLL_STEPS = 20;
@@ -232,7 +225,7 @@ export class PlaywrightHost {
 	}
 }
 
-// --- CDP result shapes and transforms (mirrors the extension background worker) ---
+// --- CDP result shapes and transforms ---
 
 interface DomNode {
 	nodeId: number;

@@ -1,14 +1,12 @@
 /**
  * core/src/entry.ts: the injectable bundle entry.
  *
- * Vite bundles this to one self-contained iife the runner injects into a Playwright
- * page. It hangs the three commands off window.__snipCore. The runner drives them
- * over page.evaluate; each command returns a plain json-serializable object.
+ * Bundled to one self-contained iife the runner injects into a Playwright page, hanging the
+ * three commands off window.__snipCore. Each returns a plain json-serializable object.
  *
- * extract owns the stateless re-resolution: it re-finds the element by selector in
- * the freshly loaded page and, when the caller passed the text/rect the candidate
- * recorded, verifies the match before snipping so a shifted page fails loudly rather
- * than extracting the wrong node.
+ * extract owns the stateless re-resolution: it re-finds the element by selector in the freshly
+ * loaded page and, when the caller passed the text and rect the candidate recorded, verifies
+ * the match before snipping, so a shifted page fails loudly rather than extracting the wrong node.
  */
 import type { OutputFormat } from './types';
 import { harvestCandidates, normalizedText, rectOf, type CandidateInventory, type CandidateRect } from './candidates';

@@ -1,20 +1,14 @@
 /**
- * reconcile/properties.ts: registered custom properties (@property)
+ * reconcile/properties.ts: reading the document's @property registrations.
  *
- * Pipeline position: reconcile, a leaf utility read live from the cssom
- * Reads from Captured: nothing, it reads document.styleSheets directly
- * Writes to Captured: nothing, it is a pure read
+ * A custom property registered with @property carries a syntax, an inherits flag, and often an
+ * initial-value that govern how it falls back and interpolates. Two phases need that:
+ * features/layers.ts re-emits the rules so the artifact keeps the behavior, and resolve/vars.ts
+ * treats a registration with an initial-value as resolvable, since var() yields that initial
+ * even when nothing sets it.
  *
- * It exists because a custom property registered with `@property` carries a syntax, an
- * inherits flag, and often an initial-value that govern how it falls back and
- * interpolates. Two phases need that registration. features/layers.ts re-emits the
- * rules so the artifact keeps the behavior, and resolve/vars.ts treats a registered
- * property with an initial-value as resolvable, since a `var()` to it yields its initial
- * even when nothing sets it, so a state rule referencing it renders standalone. The two
- * shared this scan rather than walk the cssom twice with copied logic.
- *
- * CSSPropertyRule is not in every dom lib version, so the rule is detected
- * structurally by its descriptor fields, exactly as before.
+ * CSSPropertyRule is missing from some dom lib versions, so the rule is detected structurally
+ * by its descriptor fields.
  */
 
 /** One registered @property: its name, its initial-value or null when none, and its source text. */

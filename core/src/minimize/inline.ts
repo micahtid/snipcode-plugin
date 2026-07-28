@@ -1,30 +1,18 @@
 /**
- * minimize/inline.ts: inline the custom-property dumps
+ * minimize/inline.ts: resolving var() to the value it actually holds.
  *
- * Pipeline position: minimize, after the at-rule purge and before format
- * Reads from Captured: page.viewport via the oracle, plus warnings on graceful skip
- * Writes to Captured: nothing. It transforms the stylesheet string.
+ * Runs in minimize, after the at-rule purge. Reconcile bakes a wall of custom properties onto
+ * the rules and reads them back through var(); this resolves each reference over the elements
+ * its rule matches, substitutes only when they all agree, and then drops the declarations
+ * nothing references any more.
  *
- * Why this exists: the reproduce phase bakes a wall of custom properties (`--text-sm`,
- * `--border`, `--spacing`) onto the emitted rules and then reads them back through var(),
- * an indirection a human writing this by hand would not keep. This phase resolves each
- * `var(--x)` to the value it actually holds at that site, read from the mounted frame, and
- * then drops the custom-property declarations nothing references any more, so the sheet
- * reads as the literal values it paints.
+ * The substitution is oracle-gated and reverted whole if anything moved. The deletion is not,
+ * and cannot be: getComputedStyle enumerates a custom property, so removing an unreferenced
+ * declaration changes its own computed value and the oracle would veto a no-op.
  *
- * Two safeties bound it. The inlining is oracle-gated. Every var() a rule holds is resolved
- * over exactly the elements the rule matches, substituted only when they all agree, and the
- * whole batch is reverted if the computed-style oracle sees any render change. The deletion
- * is by construction, not oracle-gated, because getComputedStyle enumerates a custom
- * property, so removing its declaration changes that property's own computed value even
- * though nothing paints from it any more, which the oracle would wrongly veto. A name with no
- * surviving var() reference governs nothing, so dropping its declaration is render-neutral.
- *
- * A custom property is left alone, both its var() references and its declaration, when it
- * carries motion the resting frame cannot see: named inside an @keyframes, listed in a
- * transition or animation, or redefined by a state or pseudo rule. That last case matters
- * most. A resting `color: var(--x)` is dynamic, so if a :hover rule redefines `--x` the color
- * follows it on hover. Inlining the resting reference to its resting sample would freeze the
+ * A property carrying motion the resting frame cannot see is left alone entirely: named in
+ * @keyframes, listed in a transition, or redefined by a state rule. That last case matters
+ * most. Inlining a resting color: var(--x) that a :hover rule redefines would freeze the
  * color and strip the state change.
  */
 import type { Captured } from '../types';
@@ -38,9 +26,7 @@ import { inScopeRule, parseSegments, serializeRules, WITHHELD } from './declarat
  * while still dropping the dead declarations. It is deterministic, so rules and declarations
  * are processed in document order.
  *
- * @param css - the stylesheet after the at-rule purge
  * @param captured - source of the viewport size. Warnings are appended here on skip.
- * @param markup - the emitted root markup the stylesheet targets, mounted in the oracle
  * @returns the stylesheet with var() inlined and dead custom properties removed
  */
 export async function inlineVars(css: string, captured: Captured, markup: string): Promise<string> {
@@ -94,7 +80,6 @@ function motionHeldNames(css: string): Set<string> {
  * var() is dynamic. Inlining that reference to the resting value would freeze it and drop the
  * state change the withheld rule reproduces.
  *
- * @param sheet - the mounted stylesheet
  * @param held - the motion-held name set, extended in place
  */
 function addStateRedefinedNames(sheet: CSSStyleSheet, held: Set<string>): void {
@@ -145,7 +130,6 @@ function inlineRule(oracle: RenderOracle, rule: CSSStyleRule, held: Set<string>)
  * and replaces the reference with `resolve(name)` when that returns a value, else leaves it.
  * Nested var() inside a kept reference's fallback is handled by re-walking the remainder.
  *
- * @param value - a declaration value, priority included
  * @param resolve - maps a custom-property name to its site value, or null to leave the ref
  */
 function substituteVars(value: string, resolve: (name: string) => string | null): string {
@@ -209,8 +193,6 @@ function topLevelComma(inner: string): number {
  * is handled by the parser rather than a text split.
  *
  * @param sheet - the mounted stylesheet, mutated in place
- * @param inScope - the in-scope style rules to remove dead declarations from
- * @param held - names withheld for motion, always kept
  */
 function dropDeadCustomProps(sheet: CSSStyleSheet, inScope: CSSStyleRule[], held: Set<string>): void {
 	const referenced = new Set<string>();

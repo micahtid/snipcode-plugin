@@ -1,15 +1,10 @@
 /**
- * inspect/schema/classify.ts: semantic element classifier
+ * inspect/schema/classify.ts: each element's semantic role.
  *
- * Pipeline position: inspect, page-scoped. See inspect/schema/extract.ts for the whole pass.
- * Reads from DOM: document/window. This runs live, on per-element computed styles.
- * Writes to: nothing.
- *
- * Why this exists: the schema walk needs each element's semantic role, such as heading, button,
- * card, or container, to build the structure tree and group component blueprints. Role is
- * decided from aria role, then, for the tags that only package what they hold, from visual
- * evidence, and only then from the tag map: a card has a visual container shape, and a
- * container is a flex/grid with children.
+ * Runs during the page-scoped inspect pass, against the live dom. The walk and the blueprint
+ * passes group by role, so it is decided once here: from the aria role first, then, for the
+ * tags that only package what they hold, from visual evidence, and only then from the tag map.
+ * A card has a visual container shape; a container is a flex or grid with children.
  */
 
 /** The semantic roles an element can be classified into. */

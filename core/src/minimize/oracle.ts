@@ -1,33 +1,19 @@
 /**
- * minimize/oracle.ts: computed-style render oracle for the minimizer
+ * minimize/oracle.ts: the render check every minimize phase proposes edits to.
  *
- * Pipeline position: minimize, the deletion/rewrite verifier used by every minimize phase
- * Reads from Captured: page.viewport, to size the frame like the pasted-snip environment
- * Writes to Captured: nothing. It operates on a private iframe and the emitted stylesheet.
+ * Mounts the emitted markup and stylesheet in a hidden, viewport-sized iframe carrying only
+ * the ua stylesheet, the same isolated environment reconcile/standalone.ts validates against.
+ * It snapshots getComputedStyle for every element and its ::before/::after, and after a
+ * candidate edit re-reads and compares.
  *
- * Why this exists: the minimizer proposes a candidate edit to the emitted stylesheet, such
- * as deleting a declaration, folding a shorthand, or hoisting a rule, and needs a fast,
- * conservative way to decide whether that edit changed the render. This module is that
- * decision. It mounts the emitted markup plus its stylesheet in a hidden, viewport-sized
- * iframe carrying only the ua stylesheet, the same isolated environment
- * reconcile/standalone.ts validates against. It snapshots getComputedStyle for every element
- * and its ::before/::after, then after a candidate edit re-reads and compares. Equal
- * computed styles on an unchanged dom imply an identical render, so accepting only edits
- * that leave every computed longhand unchanged is strictly conservative. It can keep a
- * declaration that was in fact dead, but it can never delete one that was load-bearing.
+ * Equal computed styles on an unchanged dom imply an identical render, so accepting only
+ * edits that leave every longhand unchanged is strictly conservative: it can keep a
+ * declaration that was dead, never delete one that was load-bearing.
  *
- * The comparison is universal by construction. It enumerates the full computed longhand
- * set the engine reports, never a hand-picked property list, and compares before against
- * after in the SAME frame, so any divergence is caused by the edit rather than by
- * standalone context. There is no property table, no selector knowledge, and no per-site
- * tuning anywhere in the oracle. It only knows how to ask the browser whether two renders
- * are computationally identical.
- *
- * The edit is applied to the live stylesheet the frame renders from, exposed as `sheet`,
- * so mutating a rule's declarations reflows the frame and the next comparison sees the
- * result. The whole cycle is synchronous. Because there is no await, the frame never yields
- * to load a font or run a timer mid-run, so the compared font and layout state is fixed and
- * the verdict is deterministic.
+ * It enumerates the full longhand set the engine reports rather than a property list, and
+ * compares before against after in the same frame, so a divergence is the edit and not the
+ * standalone context. The whole cycle is synchronous, so the frame never yields to load a
+ * font or run a timer mid-run and the verdict is deterministic.
  */
 import type { Captured } from '../types';
 import { createSizedFrame } from '../reconcile/frame';
@@ -83,9 +69,7 @@ export interface RenderOracle {
  * needs no network. Throws if the frame or its stylesheet cannot be created, which the
  * caller treats as an infrastructure failure and skips the phase.
  *
- * @param captured - source of the capture viewport size
  * @param css - the emitted stylesheet, mounted whole so the render context is complete
- * @param markup - the emitted root markup, mounted as the frame body's content
  */
 export async function createRenderOracle(captured: Captured, css: string, markup: string): Promise<RenderOracle> {
 	const sized = createSizedFrame(captured, true);
@@ -269,11 +253,7 @@ export async function createRenderOracle(captured: Captured, css: string, markup
  * never fails on a minimize step. A phase with an additional cheap precondition checks it
  * before calling this, to avoid mounting a frame it does not need.
  *
- * @param css - the stylesheet this phase transforms
  * @param captured - source of the viewport size. The skip warning is appended here.
- * @param markup - the emitted root markup the stylesheet targets, mounted in the oracle
- * @param skipLabel - the warning prefix for this phase, e.g. `merge: skipped`
- * @param transform - runs against the mounted oracle and returns the phase's result css
  * @returns the transform's result, or the input css unchanged on any failure
  */
 export async function withOracle(
@@ -332,9 +312,6 @@ export async function withOracle(
  * line on, changes a gating property that is never skipped, so the comparison still catches it
  * and the relaxation can never mask a real change. All of these relaxations are layout-safe
  * because none of the skipped properties affect layout.
- *
- * @param values - the reference computed values, index-aligned with masterProps
- * @param propIndex - masterProps name to its index
  */
 function paintIrrelevant(values: string[], propIndex: Map<string, number>): Set<number> {
 	const skip = new Set<number>();

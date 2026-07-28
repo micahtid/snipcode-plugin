@@ -1,25 +1,13 @@
 /**
- * convert/snap.ts: value snapper
+ * convert/snap.ts: normalizing values before tailwind matching.
  *
- * Pipeline position: convert
- * Reads from Captured: nothing. It operates on property/value pairs.
- * Writes to Captured: nothing. It is a pure value transform.
+ * Baked values are exact computed pixels. Before matching they read better and map to
+ * utilities more cleanly as rem lengths and hex colors, which are tailwind's own forms.
  *
- * A readability and normalization pass feeding the tailwind converter.
- *
- * Why this exists: baked values are exact computed pixels, for example "16px" or "rgb(15,
- * 23, 42)". Before tailwind matching they read better and map to utilities more
- * cleanly when normalized: px lengths to rem, tailwind's spacing unit, and opaque
- * rgb() to hex, tailwind's palette form. It deliberately does NOT snap to a
- * design grid or a type scale, v1 learned that snapping 13px->12px or 15px->14px
- * causes visible ~8% drift, so exact values are preserved, only the unit/format
- * changes. Ported from v1 value-snapper.ts, trimmed ~50%: it dropped the html-string
- * inline parser, since v2 snaps the bakedStyles maps directly, plus oklab math, grid-
- * track fr conversion, and the animation-artifact detector.
- *
- * Which properties keep px, namely border/outline widths, shadows, and spacing, vs convert
- * to rem is decided by a category predicate, not a hardcoded property-name list.
- * Border widths are a px-native css mechanism.
+ * It deliberately does not snap to a design grid or a type scale. Rounding 13px to 12px
+ * causes visible drift, so exact values are preserved and only the unit or format changes.
+ * Which properties keep px, meaning border and outline widths, shadows, and spacing, is
+ * decided by a category predicate rather than a property-name list.
  */
 import { parseRgba, rgbToHex } from '../utils/color';
 
@@ -41,7 +29,6 @@ export interface SnapResult {
  * rewriting it could change what it means once substituted. See the body.
  *
  * @param property - the css property, which decides px-vs-rem treatment
- * @param value - the declaration value
  */
 export function snapValue(property: string, value: string): SnapResult {
 	let result = value;

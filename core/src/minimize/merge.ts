@@ -1,27 +1,15 @@
 /**
- * minimize/merge.ts: merge identical rules into selector lists
+ * minimize/merge.ts: collapsing identical rules into selector lists.
  *
- * Pipeline position: minimize, after normalize and before relax
- * Reads from Captured: page.viewport via the oracle, plus warnings on graceful skip
- * Writes to Captured: nothing. It transforms the normalized stylesheet string.
+ * Runs in minimize, after normalize. Reconcile gives every element its own class and rule, so
+ * a grid of eight identical cards emits the same block eight times, and pruning drives others
+ * to match. Each group collapses into one rule with a comma-joined selector.
  *
- * Why this exists: the reproduce phase gives every element its own generated class and
- * rule, so a grid of eight cards styled the same emits the same declaration block eight
- * times. Pruning and normalizing can also drive two rules that differed to the identical
- * body. A human writes that body once against a selector list. This phase collapses every
- * group of rules whose declaration block is now identical into one rule whose selector is
- * the comma-joined list, in document order, and drops the duplicates.
- *
- * The merged resting rule takes the position of the last rule in its group, the latest
- * cascade position the block held. Every such merge is verified by the computed-style oracle
- * over exactly the elements the group's selectors match. So a cascade change from moving a
- * block later, past some rule that overrides one of its properties, is caught, and that merge
- * is reverted while the others stand.
- *
- * The withheld state and pseudo rules are merged too, but the resting oracle is blind to
- * them, so their merge is accepted by construction under syntactic checks rather than by the
- * oracle (see mergeWithheldRules). At rules stay out of scope. The transform is deterministic,
- * groups are processed in selector order, and it only ever shrinks the stylesheet.
+ * The merged rule takes the position of the last rule in its group, which moves the block
+ * later in the cascade. That is exactly what the oracle checks, over the elements the group's
+ * selectors match, so a merge that steps past an overriding rule is reverted while the rest
+ * stand. Withheld state and pseudo rules are merged under syntactic checks instead, because
+ * the resting oracle is blind to them. At-rules stay out of scope.
  */
 import type { Captured } from '../types';
 import { withOracle, type RenderOracle } from './oracle';
@@ -42,9 +30,7 @@ const DYNAMIC_PSEUDO = /::[\w-]+(?:\([^)]*\))?|:(?:hover|focus-visible|focus-wit
  * contract, returning the input unchanged on any infrastructure failure. Each individual
  * merge is oracle-verified and reverted if it is not render-neutral.
  *
- * @param css - the normalized stylesheet, after normalize
  * @param captured - source of the viewport size. Warnings are appended here on skip.
- * @param markup - the emitted root markup the stylesheet targets, mounted in the oracle
  * @returns the merged stylesheet, or the input unchanged on any failure
  */
 export async function mergeCss(css: string, captured: Captured, markup: string): Promise<string> {
@@ -83,9 +69,6 @@ export async function mergeCss(css: string, captured: Captured, markup: string):
  * earlier rules are emptied so serialize drops them. Verification is scoped to the
  * elements the group's selectors match and their descendants, the only render a position
  * change can affect.
- *
- * @param oracle - the mounted render
- * @param group - the identical-body rules, in document order
  */
 function mergeGroup(oracle: RenderOracle, group: CSSStyleRule[]): void {
 	const keeper = group[group.length - 1]!;
@@ -178,9 +161,6 @@ function mergeWithheldRules(oracle: RenderOracle, topRules: CSSRule[]): void {
  * flip a cascade result with a moving member (see couldFlip). An intervening rule that only
  * shares an element but not a property, or that an element resolves by specificity or
  * importance rather than source order, cannot flip and no longer vetoes.
- *
- * @param group - the identical-body withheld rules, in document order
- * @param styleRules - every top-level style rule, to scan the positions the group spans
  */
 function safeToMergeWithheld(group: StyleRuleRef[], styleRules: StyleRuleRef[]): boolean {
 	const first = group[0]!.pos;

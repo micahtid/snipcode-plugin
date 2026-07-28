@@ -1,28 +1,12 @@
 /**
- * features/forms.ts: form control rendering + state
+ * features/forms.ts: control chrome and the live state cloneNode drops.
  *
- * Pipeline position: reconcile
- * Reads from Captured: root, clone
- * Writes to Captured: bakedStyles + clone, the appearance/accent-color + live state
+ * Bakes non-default appearance and accent-color: appearance: none is how a custom-styled
+ * control replaces the native widget, and losing it snaps the control back to the os one.
  *
- * Principles applied: this extends the "ship what renders" rule to form-control
- * styling, and it preserves the live control state that cloneNode drops.
- *
- * CSS/spec reference: https://developer.mozilla.org/en-US/docs/Web/CSS/appearance
- * also covers accent-color. ::file-selector-button is emitted by features/pseudo.
- * Detection criterion: an element matching the form-control selector. That selector
- * is the form-element spec surface expressed as a selector rather than a tag Set.
- * Transform contract: it bakes non-default appearance, -webkit-appearance, and
- * accent-color onto matching clone controls. It also mirrors the live value,
- * checked, and selected state onto the clone as attributes, so the rendered control
- * matches the capture. It touches bakedStyles and the clone only.
- *
- * Why this exists: appearance: none is how authors replace native control chrome
- * with custom styling. If it is lost, the control snaps back to the os widget.
- * Accent-color tints checkboxes, radios, and range inputs. And cloneNode copies a
- * control's attributes but not its current value, checked, or selected state, so a
- * filled input or ticked checkbox renders empty in the clone. Mirroring the state
- * fixes that.
+ * It also mirrors value, checked, and selected onto the clone as attributes. cloneNode copies
+ * a control's attributes but not its current state, so a filled input or ticked checkbox
+ * would render empty.
  */
 import type { Captured } from '../../types';
 import { pairedSubtrees } from '../match';

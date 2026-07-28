@@ -1,23 +1,13 @@
 /**
- * convert/tw-palette.ts: tailwind color palette matcher
+ * convert/tw-palette.ts: matching a captured color to the tailwind palette.
  *
- * Pipeline position: convert
- * Reads from Captured: nothing. It operates on color strings.
- * Writes to Captured: nothing. It is a pure color matcher.
+ * Tailwind names colors as tokens, so an arbitrary captured color has to map to the nearest
+ * palette entry, but only when the match is perceptually faithful. Otherwise the converter
+ * must emit an arbitrary value, so a brand color is never silently drifted.
  *
- * A lookup feeding the tailwind converter.
- *
- * Why this exists: tailwind expresses colors as palette tokens (bg-slate-700).
- * To emit clean tailwind, an arbitrary captured color must map to the nearest
- * palette entry, but only when the match is perceptually faithful, else the
- * converter must fall back to an arbitrary value (bg-[#4287f5]) so brand colors
- * are not silently drifted. Matching uses ciede2000, a perceptual color distance,
- * with tight thresholds: <1 is exact, 1-2 is an acceptable nudge, >=2 forces an
- * arbitrary value. Ported from v1 tailwind-palette.ts, rewritten, full module.
- *
- * The palette table below is the tailwind v3 vocabulary: a finite output-format
- * data table, not a hardcoded list of styling properties or tags, so the
- * no-hardcoded-list rule does not apply to format vocabularies.
+ * Matching uses ciede2000 with tight thresholds: under 1 is exact, 1 to 2 is an acceptable
+ * nudge, 2 or more forces an arbitrary value. The palette table below is tailwind's own
+ * vocabulary, a finite output-format table rather than a heuristic list.
  */
 import { hexToRgb } from '../utils/color';
 
@@ -48,7 +38,7 @@ const TAILWIND_COLORS: Record<string, string> = {
 	'rose-50': '#fff1f2', 'rose-100': '#ffe4e6', 'rose-200': '#fecdd3', 'rose-300': '#fda4af', 'rose-400': '#fb7185', 'rose-500': '#f43f5e', 'rose-600': '#e11d48', 'rose-700': '#be123c', 'rose-800': '#9f1239', 'rose-900': '#881337', 'rose-950': '#4c0519',
 };
 
-// Tightened from v1's earlier 3.0: above ~2.0 brand colors drift visibly, so we
+// Above roughly 2.0 a brand color drifts visibly, so
 // force an arbitrary value (bg-[#hex]) instead of an approximate palette token.
 const DELTA_E_EXACT = 1;
 const DELTA_E_CLOSE = 2;
@@ -93,8 +83,6 @@ export function matchColor(colorValue: string): PaletteMatch | null {
  * Parses a css color to a 6-digit #hex, or null for colors we cannot/should not
  * match, such as transparent, currentcolor, oklch/oklab, and keywords. Alpha is dropped,
  * the caller preserves opacity separately.
- *
- * @param value - the css color string
  */
 export function parseColor(value: string): string | null {
 	const v = value.trim().toLowerCase();

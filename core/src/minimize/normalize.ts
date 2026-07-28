@@ -1,34 +1,18 @@
 /**
- * minimize/normalize.ts: shorthand folding + human property order
+ * minimize/normalize.ts: shorthand folding and a readable property order.
  *
- * Pipeline position: minimize, after prune and before hoist
- * Reads from Captured: page.viewport via the oracle, plus warnings on graceful skip
- * Writes to Captured: nothing. It transforms the minimized stylesheet string.
+ * Runs in minimize, after prune. Reconcile emits longhands in computed-style order, so a box's
+ * margins sit apart from its paddings and a border is twelve declarations. This reorders each
+ * rule into a fixed order, layout then box then spacing then border then background then type
+ * then effects, and lets the cssom fold the now-adjacent families back into their shorthands.
  *
- * Why this exists: the pruned stylesheet still reads like a machine dump. Each rule lists
- * the longhands the reproduce phase baked, in computed-style order, so a box's four
- * margins sit apart from its four paddings and a border is spelled out as twelve
- * declarations. A human writes the shorthand and groups related properties. This phase
- * does both, in one move. It reorders each rule's declarations into a fixed human order
- * (layout, then box, then spacing, then border, then background, then type, then effects),
- * and lets the cssom fold the now-adjacent longhand families back into their shorthands as it
- * reserializes. margin-top/right/bottom/left becomes margin, the border longhands become
- * border-width/style/color, and top/right/bottom/left becomes inset.
+ * Reordering distinct properties cannot change the cascade and folding a full family sets the
+ * same values, so it is render-neutral by construction; the oracle confirms it over the whole
+ * sheet, and a failure ships the pruned css untouched rather than a wrong render.
  *
- * It is render-neutral by construction and verified anyway. Reordering distinct properties
- * cannot change the cascade, and folding a full longhand family into its shorthand sets the
- * identical values, so the render is unchanged. The computed-style oracle confirms it over
- * the whole stylesheet. If some rule's reorder did change the render, because it mixed
- * a shorthand with a longhand it overrides, the phase ships the pruned css untouched rather
- * than a wrong render. The transform is a pure string reshuffle, so it is deterministic and
- * never grows the stylesheet.
- *
- * The reorder runs on in-scope rules only, exactly as in prune (see inScopeRule). After it, a
- * second pass drops each longhand a preceding shorthand in the same block already sets to that
- * value, the restatement a machine dump leaves behind, most often a border-radius spelled out
- * again as its four corner longhands. That drop is render-neutral by CSS definition, so it
- * needs no oracle and runs on withheld state and pseudo rules too, where such restatement is
- * densest.
+ * A second pass then drops each longhand a preceding shorthand already sets to that value.
+ * That is render-neutral by definition, so it needs no oracle and runs on the withheld state
+ * and pseudo rules too, where the restatement is densest.
  */
 import type { Captured } from '../types';
 import { withOracle } from './oracle';
@@ -73,9 +57,7 @@ function rank(prop: string): number {
  * rule's declarations like a human would. Graceful by contract, returning the input
  * unchanged on any infrastructure failure or if the reorder is not render-neutral.
  *
- * @param css - the pruned stylesheet, after prune
  * @param captured - source of the viewport size. Warnings are appended here on skip.
- * @param markup - the emitted root markup the stylesheet targets, mounted in the oracle
  * @returns the normalized stylesheet, or the input unchanged on any failure
  */
 export async function normalizeCss(css: string, captured: Captured, markup: string): Promise<string> {
@@ -138,7 +120,6 @@ interface Longhand {
  * cover, so a restatement after such an override is not dropped.
  *
  * @param styleRule - a style rule, in-scope or withheld, pruned in place
- * @param scratch - a detached style declaration used to expand a shorthand to its longhands
  */
 function dropCoveredLonghands(styleRule: CSSStyleRule, scratch: CSSStyleDeclaration): void {
 	const segs = parseSegments(styleRule.style.cssText);

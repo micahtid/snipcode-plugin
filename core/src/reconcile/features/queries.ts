@@ -1,28 +1,13 @@
 /**
- * features/queries.ts: @media + @container resolution
+ * features/queries.ts: keeping the container context a container query resolves against.
  *
- * Pipeline position: reconcile
- * Reads from Captured: root, clone, bakedStyles
- * Writes to Captured: bakedStyles + clone, baking container context
+ * @media needs nothing: match.ts only admits rules whose query currently applies, so colour
+ * scheme, reduced motion, and breakpoint variants are already resolved to the captured
+ * viewport and baked as computed values.
  *
- * This extends the "ship what renders" approach to the containment context that
- * container queries resolve against.
- *
- * CSS/spec reference: https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_containment/Container_queries
- * Detection criterion: an element whose computed container-type is not `normal`.
- * Otherwise it early-returns per element.
- * Transform contract: it bakes container-type, and container-name when set, onto the
- * matching clone element. It mutates bakedStyles and the clone inline styles only.
- *
- * Why this exists: @media is already flattened at capture. match.ts only admits
- * rules whose @media currently applies (matchMedia), so prefers-color-scheme,
- * prefers-reduced-motion, and breakpoint variants are resolved to the captured
- * viewport's values and baked as the computed result. @container is the part that
- * needs help. A descendant's container query resolves against an ancestor's
- * containment context, which is lost if container-type is not preserved. Baking the
- * computed container-type keeps that context inside the snip. The container's width
- * is locked by features/units.ts, so the two cooperate. Baking the real computed
- * container-type is pixel-safe.
+ * @container does. A descendant's query resolves against an ancestor's containment context,
+ * which is lost if container-type is not preserved, so it is baked. features/units.ts locks
+ * the container's width, so the two cooperate.
  */
 import type { Captured } from '../../types';
 import { pairedSubtrees } from '../match';

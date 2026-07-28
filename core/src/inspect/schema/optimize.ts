@@ -1,15 +1,10 @@
 /**
- * inspect/schema/optimize.ts: schema size reduction
+ * inspect/schema/optimize.ts: trimming the schema to what fits in one read.
  *
- * Pipeline position: inspect, page-scoped. It post-processes the extracted schema.
- * Reads from DOM: nothing. It operates on the extracted schema.
- * Writes to: nothing. It returns a size-reduced copy.
- *
- * Why this exists: the raw schema can be large, and schema.md has to stay short enough for an
- * agent to read in one pass, so this trims it first: dedupe and cap the color palette, sort and
- * bound spacing, and cap the states, sections, and blueprints. A cap can cut the section an
- * effect names, so anything that points at a section is reconciled here rather than left to
- * the renderer to discover broken.
+ * Post-processes the extracted schema: dedupe and cap the palette, sort and bound spacing, cap
+ * the states, sections, and blueprints. Trimming is not free of meaning, because a cap can cut
+ * the section an effect names, so anything pointing at a section is reconciled here rather
+ * than left for the renderer to discover broken.
  */
 import { weightedContexts } from './tokens';
 import type { PageSchema } from './types';

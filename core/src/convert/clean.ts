@@ -1,33 +1,16 @@
 /**
- * convert/clean.ts: dead-code elimination
+ * convert/clean.ts: dead-code elimination on the emitted stylesheet.
  *
- * Pipeline position: convert
- * Reads from Captured: clone, to test selector and usage
- * Writes to Captured: nothing. It operates on the emitted css string.
+ * Removes exactly four kinds of dead code and nothing else: style rules whose selector matches
+ * no element in the snip, custom properties nothing references, @font-face whose family is
+ * never used, and @keyframes no animation names. Usage is measured against the actual markup
+ * and the actual declarations, so it can never remove something the output depends on.
  *
- * Cleanup is dead-code elimination, not aesthetic surgery.
- *
- * Why this exists: the emitted stylesheet can carry rules and at-rules that
- * nothing in the snip references. This removes EXACTLY four kinds of dead code and
- * nothing else:
- * 1. Style rules whose selector matches no element in the snip
- * 2. Css custom properties that nothing references
- * 3. @font-face whose family is never used
- * 4. @keyframes whose name is never referenced by an animation
- *
- * This is the antithesis of v1's 2,477-line cleaner.ts: no hand-curated property
- * sets, no is<X> predicates, no "shading-critical" / "vertical text spacing"
- * heuristics. Usage is measured against ground truth, the
- * actual clone subtree and the actual declarations, so the cleaner can never
- * remove something the output depends on. It is reused by every format emitter,
- * html inline and bem/tailwind/scss class rules alike, so it must be format-agnostic.
- *
- * Selector usage is measured against whatever markup the caller passes: the bem
- * emitters generate their class names on a private copy and leave captured.clone
- * inline-styled, so a generated `.block__el` selector matched against the clone would
- * find nothing and wrongly drop a live rule, so those callers pass the emitted markup.
- * The html path passes no markup and keeps matching against the clone, its
- * established behavior, since it ships only inline styles plus at-rules, no class rules.
+ * Selector usage is measured against whatever markup the caller passes. The bem emitters
+ * generate their class names on a private copy and leave captured.clone inline-styled, so a
+ * generated .block__el selector matched against the clone would find nothing and wrongly drop
+ * a live rule; those callers pass the emitted markup instead. The html path passes none and
+ * matches the clone, which is correct because it ships only inline styles and at-rules.
  */
 import type { Captured } from '../types';
 
@@ -38,9 +21,6 @@ const DROP = '';
 /**
  * Removes dead code from an emitted stylesheet.
  *
- * @param css - the stylesheet text to prune
- * @param captured - the snip, whose baked styles are read for font/animation/var usage
- * @param markup - the emitted markup selectors are matched against, falling back to the
  *   inline-styled clone when absent. The html path passes none and matches the clone,
  *   its established behavior, since it ships only inline styles plus at-rules
  * @returns the cleaned stylesheet text
@@ -69,7 +49,6 @@ export function cleanCss(css: string, captured: Captured, markup?: string): stri
  * Parses emitted markup into a container element for selector matching, returning
  * null on absent or unparseable markup so the caller falls back to the clone.
  *
- * @param markup - the emitted markup string, or undefined
  * @returns the parsed body element, whose descendants are the snip, or null
  */
 function parseMatchRoot(markup: string | undefined): Element | null {

@@ -1,12 +1,11 @@
 /**
  * runner/src/browser.ts: launch, navigate, wait, inject, and drive.
  *
- * The runner reproduces the extension's content-script environment in a headless
- * Playwright page: it loads the url with the deterministic defaults the plan fixes
- * (1440x900 desktop, load + network idle + fonts ready, one lazy-content scroll
- * pass), installs the Host binding, injects the core iife, and then drives the three
- * commands over page.evaluate. Nothing here knows about the pipeline internals; it
- * only knows how to load a page and hand core its privileged services.
+ * Loads the url with the deterministic defaults every run shares, a 1440x900 desktop
+ * viewport, load plus network idle plus fonts ready, and one lazy-content scroll pass;
+ * installs the Host binding; injects the core iife; then drives the three commands over
+ * page.evaluate. Nothing here knows the pipeline internals. It only knows how to load a page
+ * and hand core its privileged services.
  */
 import { chromium, type Browser, type Page } from 'playwright';
 import { readFileSync } from 'node:fs';
@@ -16,7 +15,7 @@ import { existsSync } from 'node:fs';
 import { PlaywrightHost } from './host';
 import { fullPage, elementCrop } from './screenshot';
 
-/** Deterministic page-loading defaults, fixed by the plan so every run is comparable. */
+/** Page-loading defaults, fixed so two runs of one page are comparable. */
 const VIEWPORT = { width: 1440, height: 900 };
 const USER_AGENT =
 	'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';

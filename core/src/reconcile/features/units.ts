@@ -1,34 +1,15 @@
 /**
- * features/units.ts: viewport + container units
+ * features/units.ts: resolving units that would mean something else elsewhere.
  *
- * Pipeline position: reconcile
- * Reads from Captured: root, clone, bakedStyles
- * Writes to Captured: bakedStyles + clone, resolving viewport/container units
+ * A viewport or container length resolves against the viewport or containment context, which
+ * changes when the snip is reparented: a 50vw hero becomes half of whatever it lands in. Each
+ * is replaced with the live element's computed px, which locks the captured pixels without a
+ * synthetic wrapper. A wrapper could not work anyway, since the artifact renders at the
+ * element's own size and a viewport-sized one would clip.
  *
- * Locks pixel fidelity at the capture viewport.
- *
- * CSS/spec reference: https://developer.mozilla.org/en-US/docs/Web/CSS/length#viewport-percentage_lengths
- * Detection criterion: a baked value containing a viewport (vw/vh/dvh/svh/lvh/
- * vmin/vmax) or container (cqw/cqh/cqi/cqb/...) length. It early-returns otherwise.
- * Transform contract: it replaces such values with the live element's computed
- * literal (px). It mutates bakedStyles and the clone inline styles only.
- *
- * Why this exists: viewport and container units resolve against the viewport or
- * containment context, which changes when the snip is reparented. A 50vw hero
- * becomes half of whatever viewport it lands in. An alternative, wrapping the
- * snip in a captured-viewport container, cannot work for a standalone element
- * crop. The grader renders output.html at the element's own dimensions, so a
- * viewport-sized wrapper would clip. Resolving to the captured computed literal
- * locks the pixels exactly as preferring the computed value does when an authored
- * value would not survive, and it needs no synthetic wrapper.
- *
- * Extensions in this file:
- * - Logical properties: logical props (margin-inline, inset-inline-
- * start, ...) survive as the authored value when authored, but they resolve against the
- * element's direction and writing-mode, which must be baked when non-default for
- * rtl and vertical text. Material v6 and tailwind v4 lean on logical props.
- * - Aspect-ratio: the aspect-ratio property and intrinsic <img
- * width/height> attributes, baked so the box keeps its ratio standalone.
+ * Two related bakes live here. Logical properties survive as authored, but they resolve
+ * against direction and writing-mode, so those are baked when non-default. And aspect-ratio
+ * plus intrinsic img width and height are baked so the box keeps its ratio standalone.
  */
 import type { Captured } from '../../types';
 import { pairedSubtrees } from '../match';

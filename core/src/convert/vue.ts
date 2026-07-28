@@ -1,17 +1,9 @@
 /**
- * convert/vue.ts: vue single-file component output
+ * convert/vue.ts: vue single-file component output.
  *
- * Pipeline position: convert
- * Reads from Captured: clone, via the bem emitter
- * Writes to Captured: nothing
- *
- * A format transform of the baked result.
- *
- * Why this exists: the vue format emits a single-file component.
- * Vue templates are html, where class stays class unlike jsx, so this reuses the
- * bem-css emitter for class-based markup and a stylesheet, then wraps the markup
- * in <template> and the css in <style scoped>. A vue template needs one root
- * element, which the snip root provides.
+ * Runs in convert, on the bem emitter's output. A vue template is html, where class stays
+ * class unlike jsx, so this reuses the bem markup and stylesheet and wraps them in <template>
+ * and <style scoped>. A vue template needs one root element, which the snip root provides.
  */
 import type { Captured } from '../types';
 import { emitBem } from './bem';

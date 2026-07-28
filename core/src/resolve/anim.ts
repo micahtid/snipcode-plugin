@@ -1,19 +1,9 @@
 /**
- * resolve/anim.ts: @keyframes resolution
+ * resolve/anim.ts: keeping only the keyframes the snip animates with.
  *
- * Pipeline position: resolve
- * Reads from Captured: bakedStyles, keyframes
- * Writes to Captured: keyframes, narrowed to referenced animations
- *
- * Travel-with-the-snip rule: a @keyframes block travels only if an animation in
- * the snip references it.
- *
- * Why this exists: animation/transition values are already baked onto elements,
- * but the @keyframes blocks they name live in stylesheets that do not travel.
- * This pairs the animation references in the baked styles with the captured
- * @keyframes and keeps only the ones actually used, so the emitted css carries
- * the animations the snip needs and nothing else. clean.ts re-checks this as
- * dead-code elimination. Here it is the resolve-phase pairing.
+ * Runs during resolve. Animation values are already baked onto the elements, but the
+ * @keyframes blocks they name live in stylesheets that do not travel with the snip. This
+ * pairs the two and drops every block nothing references.
  */
 import type { Captured } from '../types';
 

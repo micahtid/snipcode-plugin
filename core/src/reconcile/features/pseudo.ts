@@ -1,28 +1,13 @@
 /**
- * features/pseudo.ts: generated-content pseudo-elements
+ * features/pseudo.ts: generated-content pseudo-elements.
  *
- * Pipeline position: reconcile
- * Reads from Captured: root, clone
- * Writes to Captured: clone, marking elements and appending a <style> of pseudo rules
+ * ::before and ::after content, styled ::marker, ::placeholder, and ::file-selector-button
+ * render no dom node, so a clone loses them entirely. An inline style cannot target a
+ * pseudo-element, so the faithful fix is a real rule: the element is tagged and a
+ * `[data-snip-pseudo="n"]::x` rule is added to the shared synthesized <style>.
  *
- * Extends the "ship what renders" approach to pseudo-elements, which inline
- * styles cannot express.
- *
- * CSS/spec reference: https://developer.mozilla.org/en-US/docs/Web/CSS/Pseudo-elements
- * Detection criterion: ::before and ::after with computed content other than `none`,
- * ::marker on display:list-item elements, ::placeholder on elements with a
- * placeholder attribute, and ::file-selector-button on file inputs.
- * Transform contract: it tags the matching clone element with a data-snip-pseudo
- * marker and adds `[data-snip-pseudo="n"]::x {... }` rules, snapshotted from the live
- * pseudo's computed style, to the clone's shared synthesized <style>. See
- * reconcile/synthesized.ts. It touches the clone only.
- *
- * Why this exists: ::before and ::after content such as counters, quote glyphs,
- * decorative bars, and css icons, plus styled ::marker and ::placeholder, render no
- * dom node, so a clone loses them entirely. Inline styles cannot target a
- * pseudo-element, so the faithful fix is a real css rule. The marker is a data-*
- * attribute rather than a class, so it survives the tailwind and bem emitters, which
- * rewrite class but keep data-*.
+ * The marker is a data-* attribute rather than a class, because the tailwind and bem emitters
+ * rewrite class and keep data-*.
  */
 import type { Captured } from '../../types';
 import { pairedSubtrees, isRedundantDecl, transformContext, inheritsProperty } from '../match';

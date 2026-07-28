@@ -1,30 +1,13 @@
 /**
- * features/images.ts: responsive images + background images
+ * features/images.ts: pinning responsive images and absolutizing background urls.
  *
- * Pipeline position: reconcile
- * Reads from Captured: root, clone, bakedStyles
- * Writes to Captured: clone for img src/srcset and <picture>, bakedStyles for bg urls, and warnings
+ * srcset and <picture> pick a source from viewport and dpr at render time, so once reparented
+ * the browser may pick a different one or none. Each <img> is pinned to the currentSrc the
+ * browser actually resolved at the captured viewport, and srcset, sizes, and <source> are
+ * dropped so it renders deterministically.
  *
- * A feature handler for image url resolution.
- *
- * CSS/spec reference: https://developer.mozilla.org/en-US/docs/Web/HTML/Element/picture
- * and https://developer.mozilla.org/en-US/docs/Web/CSS/background-image
- * Detection criterion: an <img> with srcset or inside <picture>, or a baked
- * background-image with a relative url(). It early-returns when none apply.
- * Transform contract: it pins each <img> to the browser-resolved currentSrc, which
- * is the image that actually rendered at the captured viewport, and drops srcset,
- * sizes, and <source>s so it renders deterministically. It also absolutizes
- * background-image url()s. It mutates the clone and bakedStyles only and does no
- * network work (the handler contract).
- *
- * Why this exists: srcset and <picture> pick a source from viewport and dpr at
- * render time. Once reparented, the browser may pick a different one, or none,
- * changing the pixels. Pinning currentSrc locks the captured-viewport image.
- * Background-image urls are usually relative to the source page and 404 when pasted,
- * so absolutizing fixes that. Cross-origin image urls render fine without cors,
- * since only canvas reads need it. So no base64 inline is required for fidelity, and
- * feature handlers may not fetch anyway. Truly unreachable assets get a warning
- * instead.
+ * Background urls are usually relative to the source page and 404 when pasted, so they are
+ * absolutized. No fetching happens here; resolve/inline.ts does the embedding.
  */
 import type { Captured } from '../../types';
 import { absolutizeUrls } from './urls';

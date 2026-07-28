@@ -1,31 +1,18 @@
 /**
- * minimize/transitions.ts: drop dead transition entries and group shared timing
+ * minimize/transitions.ts: dropping transition layers that can never move.
  *
- * Pipeline position: minimize, after normalize and before merge and the at-rule purge
- * Reads from Captured: nothing
- * Writes to Captured: nothing. It transforms the normalized stylesheet string.
+ * Runs in minimize, after normalize and before merge and the at-rule purge. A utility class
+ * bakes a long enumerated transition-property list onto the resting rule, and nothing changes
+ * most of those properties. This drops every layer nothing changes, and when the survivors
+ * share one timing it emits the grouped form rather than repeating the timing per layer.
  *
- * Why this exists: a Tailwind `transition-colors` or `transition` utility bakes a long
- * enumerated list (`color, background-color, border-color, outline-color, fill, stroke,
- * --tw-gradient-from, ...`), each layer carrying the same duration and easing, onto the resting
- * rule. Most of those properties no state or animation ever changes, so their layers can never
- * produce motion. A human would list only the properties that actually move. This drops every
- * layer whose property nothing changes, and when the survivors all share one timing it emits
- * the grouped form a human writes, `transition-property: color, background-color;
- * transition-duration: 0.15s; transition-timing-function: ...`, rather than repeating the
- * timing on each layer.
+ * The order matters: dropping a --tw-gradient-* layer removes that name's last transition
+ * mention, which lets the purge retire its @property registration.
  *
- * Runs before the at-rule purge and var inlining so a dropped `--tw-gradient-*` layer removes
- * that name's last transition mention, letting the purge retire its now-unread `@property`
- * registration, and before merge so rules a fold makes identical collapse together.
- *
- * Liveness is judged by construction, never by the resting oracle, for the same reason the
- * at-rule purge is textual. A transition paints no resting pixel, yet getComputedStyle
- * enumerates transition-property and the timing longhands, so the oracle would read a dropped
- * layer as a render change and wrongly veto it. A layer for a property nothing changes is
- * unobservable, so removing it is render-neutral by construction. The grouped form cycles one
- * timing across the property list, exactly the engine's own rule, so it animates identically.
- * The corpus pixel backstop and the forced-state checks verify the batch at the gate.
+ * Liveness is by construction, not oracle-gated. A transition paints no resting pixel, yet
+ * getComputedStyle enumerates transition-property, so the oracle would read a dropped layer as
+ * a render change. A layer for a property nothing changes is unobservable. The grouped form
+ * cycles one timing across the list, which is the engine's own rule.
  */
 import { serializeRules, WITHHELD } from './declarations';
 import { splitTopLevelCommas, TIMING_LONGHANDS } from '../resolve/transition';
@@ -49,7 +36,6 @@ interface Layer {
  * It is graceful by contract, returning the input unchanged when it will not parse or holds no
  * transition. It is deterministic, a pure function of the input text.
  *
- * @param css - the normalized stylesheet, after normalize and before merge
  * @returns the stylesheet with dead transition layers dropped and shared timing grouped
  */
 export function foldTransitions(css: string): string {

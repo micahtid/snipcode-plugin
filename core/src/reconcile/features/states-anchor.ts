@@ -1,16 +1,11 @@
 /**
- * features/states-anchor.ts: how a state effect is re-anchored to the artifact
+ * features/states-anchor.ts: how a state effect is re-anchored to the artifact.
  *
- * Pipeline position: reconcile, a helper shared by both state paths
- * Reads from Captured: nothing
- * Writes to Captured: nothing
- *
- * Why this exists: a captured state selector is written against the live page's classes and
- * ancestor chain, which the emitters rewrite and the artifact does not carry. Both state
- * paths solve that the same way, by tagging each element with a unique data-* marker and
- * rebuilding the selector from those markers joined by a combinator that is true for the
- * concrete pair. The marker name and the combinator rule are that shared contract, so they
- * live here rather than in either path.
+ * Shared by both state paths. A captured state selector is written against the live page's
+ * classes and ancestor chain, which the emitters rewrite and the artifact does not carry, so
+ * both paths tag each element with a unique data-* marker and rebuild the selector from those
+ * markers joined by a combinator true for the concrete pair. The marker name and the
+ * combinator rule are that shared contract.
  */
 import type { Combinator } from '../selector';
 
@@ -25,8 +20,6 @@ export const MARKER = 'data-snip-state';
  * precedes right. Any other relationship, such as an "uncle", is not expressible by a single
  * combinator, so the caller drops the branch.
  *
- * @param left - the earlier marked element
- * @param right - the later marked element
  * @returns the generalized combinator, or null if the relationship is inexpressible
  */
 export function generalize(left: Element, right: Element): Combinator | null {

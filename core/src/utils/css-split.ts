@@ -1,20 +1,12 @@
 /**
- * utils/css-split.ts: one quote and paren aware splitter for css text
+ * utils/css-split.ts: one quote and paren aware splitter for css text.
  *
- * Pipeline position: none. A leaf utility with no pipeline state.
- * Reads from Captured: nothing
- * Writes to Captured: nothing
+ * Nearly every phase cuts a css string at its top-level separators, and each cut has the same
+ * trap: the separator also appears inside url(data:...;base64,...), inside a function such as
+ * cubic-bezier(0.4, 0, 0.2, 1), and inside a quoted family or attribute value. The scan lived
+ * in a dozen near-identical copies, so it lives here once.
  *
- * Why this exists: nearly every phase needs to cut a css string at its top level
- * separators, a declaration block at its semicolons, a value list at its commas, a
- * selector list at its commas, a shorthand at its spaces. Each cut has the same trap:
- * the separator character also appears inside `url(data:...;base64,...)`, inside a
- * function such as `cubic-bezier(0.4, 0, 0.2, 1)`, and inside a quoted string such as
- * a font family or an attribute selector value. Splitting naively corrupts those.
- * The scan lived in a dozen near identical copies, so it lives here once instead.
- *
- * Everything here is pure string work. No dom, no cssom, so both the core and the node
- * build graphs can import it.
+ * Pure string work, no dom and no cssom, so both build graphs can import it.
  */
 
 /** How a split treats bracket spans, on top of the always tracked parens and quotes. */
@@ -30,9 +22,6 @@ export interface SplitOptions {
  * returned verbatim, untrimmed and including empties, so callers decide what an empty
  * segment means for their own grammar.
  *
- * @param text - the css text to cut
- * @param separator - a single character, or a pattern matched against one character
- * @param options - bracket handling
  * @returns the segments, always at least one
  */
 export function splitTopLevel(text: string, separator: string | RegExp, options: SplitOptions = {}): string[] {
@@ -68,8 +57,6 @@ export function splitTopLevel(text: string, separator: string | RegExp, options:
  * Splits a comma separated value list at its top level commas, trimming each entry and
  * dropping empty ones. This is how the engine reads a layered value such as a
  * transition or a shadow list, where a trailing or doubled comma contributes no layer.
- *
- * @param value - a css value list, possibly carrying nested function commas
  */
 export function splitCommaList(value: string): string[] {
 	return splitTopLevel(value, ',')
@@ -98,8 +85,6 @@ export interface Declaration {
  * priority, so a caller that re-emits the text reproduces it exactly, and a caller that
  * wants a lowercased property or a priority stripped value asks for it explicitly. See
  * stripImportant.
- *
- * @param cssText - a declaration block with no braces, or an element's inline style
  */
 export function parseDeclarations(cssText: string): Declaration[] {
 	const out: Declaration[] = [];

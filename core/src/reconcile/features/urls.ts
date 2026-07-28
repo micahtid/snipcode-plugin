@@ -20,9 +20,7 @@ const ALREADY_RESOLVED = /^(data:|blob:|https?:|#)/i;
  * pointing at the in-document fragment it names.
  *
  * @param value - the css value, which may hold several url()s
- * @param base - the document url to resolve against
  * @param warnings - optional sink for a url that will not resolve; omit it for silence
- * @param source - the handler name to prefix a warning with
  */
 export function absolutizeUrls(value: string, base: string, warnings?: string[], source = 'urls'): string {
 	return value.replace(URL_IN_VALUE, (match, quote: string, url: string) => {

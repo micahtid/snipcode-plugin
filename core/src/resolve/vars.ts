@@ -1,24 +1,14 @@
 /**
- * resolve/vars.ts: css custom property resolution
+ * resolve/vars.ts: deciding which var() references can survive the snip.
  *
- * Pipeline position: resolve
- * Reads from Captured: root, clone, bakedStyles, variables
- * Writes to Captured: bakedStyles and clone (resolves var() refs and emits root vars)
+ * Runs during resolve. Baking deliberately kept authored var() references, but one only
+ * renders if its definition travels. A definition on :root is re-emitted onto the snip root,
+ * and one inside the subtree is already inline on its clone node. A definition on an ancestor
+ * outside the subtree cannot survive, so its references resolve to the computed literal the
+ * live element already produced.
  *
- * Variables travel with their definitions, or resolve to literals.
- *
- * Why this exists: earlier baking deliberately preserved authored var() references
- * on the baked elements. But a var() only renders if its definition survives into the
- * emitted snip. A definition survives when it lives on :root (re-emitted onto the
- * snip root here) or on an element inside the snip subtree (already inline on
- * that clone node). A definition on an ancestor *outside* the subtree does not
- * survive serialization, so its references are resolved to the computed literal
- * read from the live element, which already resolved them in-page.
- *
- * Single pass: every reference is decided in one sweep.
- * The only loop is computing the dependency closure of the root vars we keep,
- * that is resolving a definition's own var() deps, not a second orphan-recovery
- * pass over the output.
+ * One sweep decides every reference. The only loop is the dependency closure of the root vars
+ * that are kept.
  */
 import type { Captured } from '../types';
 import { pairedSubtrees } from '../reconcile/match';
@@ -124,9 +114,6 @@ export function resolveVariables(captured: Captured): void {
  * color. Dropping is transitive through the fixpoint, so no dangling var() is ever emitted.
  *
  * @param captured - the synthesized <style> is rewritten in place, and warnings appended
- * @param subtreeDefs - custom-property names defined on a subtree element
- * @param ambientVars - the :root + foundation custom properties available to re-emit
- * @param neededAmbientVars - accumulates the ambient vars a kept reference depends on
  */
 function resolveSynthesizedVariables(
 	captured: Captured,
@@ -185,8 +172,6 @@ function resolveSynthesizedVariables(
  * Every var() reference in a value, each with whether it carries a fallback, meaning a top-level
  * comma inside its own parens. A reference with a fallback always yields a value, so it
  * never forces a declaration to drop. One without a fallback must resolve by name.
- *
- * @param value - the declaration value to scan
  */
 function varRefs(value: string): Array<{ name: string; hasFallback: boolean }> {
 	const refs: Array<{ name: string; hasFallback: boolean }> = [];
@@ -214,8 +199,6 @@ function varRefs(value: string): Array<{ name: string; hasFallback: boolean }> {
  * subtree. The :root ones also flip their source-of-truth flag for transparency.
  *
  * @param captured - bakedStyles + clone mutated in place
- * @param ambientVars - the ambient definitions, name -> value
- * @param needed - the names to emit (already dependency-closed)
  */
 function emitAmbientVars(captured: Captured, ambientVars: Map<string, string>, needed: Set<string>): void {
 	const rootClone = captured.clone;

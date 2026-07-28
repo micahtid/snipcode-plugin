@@ -1,26 +1,13 @@
 /**
- * reconcile/selector.ts: a compound/combinator css selector parser
+ * reconcile/selector.ts: a small compound and combinator selector parser.
  *
- * Pipeline position: reconcile, a leaf utility used by features/states.ts
- * Reads from Captured: nothing, it operates on selector strings
- * Writes to Captured: nothing, it is pure
+ * Used by the state handlers. Re-anchoring a rule like `.nav > .btn:hover` means taking it
+ * apart: which compound is the subject, which carry a dynamic pseudo, and how they are joined.
  *
- * It exists because re-anchoring an interactive-state rule (`.nav > .btn:hover`)
- * to a standalone artifact means taking it apart structurally. We need to know which
- * compound is the subject, which compounds carry a `:hover`/`:focus`/`:active`, and
- * how they are joined. A regex cannot do that safely. A selector nests parens
- * (`:is(.a, .b)`, `:nth-child(2n+1)`), brackets (`[href="a > b"]`), and strings, any
- * of which can hide a comma, a combinator, or a colon. So this is a real, if small,
- * parser that walks the string with paren/bracket/quote depth tracking, the same job
- * the vendored `parsel` micro-parser does, kept here with no node dependency.
- *
- * It is deliberately structural-only. It identifies compounds, the combinators
- * between them, each compound's dynamic interactive pseudo-classes, and any
- * pseudo-element. It does not validate that a selector is well-formed beyond
- * balanced delimiters. The live `element.matches()` in the caller is the real
- * arbiter, and an unsupported `:has()` argument throws there and the caller drops the
- * rule. Anything with unbalanced delimiters throws a SyntaxError so the caller can
- * drop + warn rather than emit a broken selector.
+ * A regex cannot do it safely, because a selector nests parens, brackets, and strings, any of
+ * which can hide a comma, a combinator, or a colon. So this walks the string tracking depth and
+ * quotes. It is structural only: it does not validate beyond balanced delimiters, and the
+ * caller's live element.matches() is the real arbiter. Unbalanced input throws.
  */
 
 /** A combinator between two compounds: descendant as a space, child, next-sibling, subsequent-sibling. */
@@ -97,8 +84,6 @@ function isIdentChar(ch: string): boolean {
  * at all. Used to skip the full parse for the overwhelming majority of rules that
  * carry none. A false positive, where the token appears inside a string or comment,
  * only costs a parse that then finds nothing, never a wrong result.
- *
- * @param selector - the rule selector text
  */
 export function containsDynamicPseudo(selector: string): boolean {
 	return /:(?:hover|focus|focus-visible|focus-within|active)\b/.test(selector);
@@ -108,7 +93,6 @@ export function containsDynamicPseudo(selector: string): boolean {
  * Parses a selector list into its complex selectors. Splits on top-level commas, then
  * each complex selector into compounds and combinators.
  *
- * @param selector - a full selector, possibly a comma list
  * @returns one Complex per comma branch
  * @throws SyntaxError on unbalanced parens, brackets, or quotes
  */
@@ -137,7 +121,6 @@ export interface TriggerBearer {
  * is found by descending into the argument and taking the inner bearer (`.group`). The
  * grammar a framework encodes the relationship in is never decoded, only stepped past.
  *
- * @param selector - a full rule selector, possibly a comma list
  * @returns one bearer per place a dynamic pseudo is carried, across every branch
  * @throws SyntaxError on unbalanced parens, brackets, or quotes
  */
@@ -156,7 +139,6 @@ export function findTriggerBearers(selector: string): TriggerBearer[] {
  * holds a dynamic pseudo is itself dropped from the structural part (it would never match at
  * rest), while a purely-structural one (`:where(.group)`, `:not(.disabled)`) is kept.
  *
- * @param compoundText - the compound's source text (no combinators)
  * @param out - the accumulating bearer list, appended in place
  */
 function collectBearers(compoundText: string, out: TriggerBearer[]): void {
@@ -194,7 +176,6 @@ function functionalArgument(piece: string): string {
 /**
  * Parses one complex selector, with no top-level comma, into compounds + combinators.
  *
- * @param complex - a single complex selector
  * @returns the parsed compounds and the combinators between them
  * @throws SyntaxError on unbalanced delimiters
  */
@@ -209,7 +190,6 @@ export function parseComplex(complex: string): Complex {
  * tracking delimiter depth so a combinator-looking character inside `[...]`, `(...)`,
  * or a string is never treated as a combinator.
  *
- * @param s - a single complex selector
  * @throws SyntaxError on unbalanced delimiters
  */
 function splitCompounds(s: string): { compoundTexts: string[]; combinators: Combinator[] } {
@@ -272,8 +252,6 @@ function splitCompounds(s: string): { compoundTexts: string[]; combinators: Comb
  * does not parse must not be silently re-anchored onto the wrong element. The value
  * splitter does none of those. See test/unit.ts, which pins both.
  *
- * @param s - the string to split
- * @param delim - the single-character delimiter, here ','
  * @throws SyntaxError on unbalanced delimiters
  */
 export function splitSelectorTopLevel(s: string, delim: string): string[] {
@@ -306,8 +284,6 @@ export function splitSelectorTopLevel(s: string, delim: string): string[] {
  * pseudo-classes, and any pseudo-element. The structural part is what binds the
  * compound to a live element. The dynamic pseudos and pseudo-element are what the
  * re-anchored output rule keeps after the structural part is replaced by a marker.
- *
- * @param raw - the compound's source text
  */
 function analyzeCompound(raw: string): Compound {
 	const structuralParts: string[] = [];
@@ -356,8 +332,6 @@ function normalizePseudoElement(piece: string): string {
  * Splits a compound into its individual simple selectors (`*`, tag, `.class`, `#id`,
  * `[attr]`, `:pseudo`, `::pseudo-element`), tracking paren/bracket depth and escapes
  * so a delimiter inside `[...]` or `(...)` never starts a new piece.
- *
- * @param compound - the compound text (no combinators)
  */
 function tokenizeSimpleSelectors(compound: string): string[] {
 	const pieces: string[] = [];

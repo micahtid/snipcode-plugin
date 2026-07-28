@@ -1,16 +1,10 @@
 /**
- * reconcile/frame.ts: the pasted-snip environment, as an iframe
+ * reconcile/frame.ts: the pasted-snip environment, as an iframe.
  *
- * Pipeline position: reconcile, a helper shared with minimize
- * Reads from Captured: clone, page.viewport
- * Writes to Captured: nothing
- *
- * Why this exists: every claim the closing reconciliation and the probes make rests on one
- * idea, that the artifact's own render is the authority. That render needs an environment
- * with the page's author rules absent and nothing but the ua stylesheet present, which is
- * exactly what a fresh about:blank iframe is. Defining it once here means the reconcile
- * probes and the minimize oracle judge against the same environment rather than two
- * subtly different ones.
+ * Every claim the closing reconciliation and the minimize oracle make rests on the artifact's
+ * own render being the authority, which needs the page's author rules absent and nothing but
+ * the ua stylesheet present. That is a fresh about:blank iframe. Defined once here so both
+ * judge against the same environment rather than two subtly different ones.
  */
 import type { Captured } from '../types';
 
@@ -37,7 +31,6 @@ export interface SizedFrame {
  * minimize oracle needs that match so a removal's rendered effect is judged as it ships.
  * The reconcile probes keep the default, preserving their established behavior.
  *
- * @param captured - source of the viewport size
  * @param standards - write a doctype so the frame renders in standards mode
  */
 export function createSizedFrame(captured: Captured, standards = false): SizedFrame {
@@ -72,9 +65,6 @@ export function createSizedFrame(captured: Captured, standards = false): SizedFr
  * from each working-clone element to its in-frame counterpart, and since the two trees are
  * structurally identical a lockstep walk pairs them, then runs `fn` with that
  * map while the frame is attached and laid out, tearing it down afterward.
- *
- * @param captured - source of the clone and the viewport size
- * @param fn - reads standalone computed styles via the clone->frame element map
  */
 export function withStandaloneFrame(captured: Captured, fn: (map: Map<Element, Element>, win: Window) => void): void {
 	const sized = createSizedFrame(captured);
@@ -92,10 +82,6 @@ export function withStandaloneFrame(captured: Captured, fn: (map: Map<Element, E
 /**
  * Walks two structurally-identical trees in lockstep, recording clone->copy pairs.
  * The frame copy is a deep importNode of the clone, so children align by index.
- *
- * @param clone - a working-clone element
- * @param framed - its in-frame counterpart
- * @param map - accumulates the element correspondence
  */
 export function zip(clone: Element, framed: Element, map: Map<Element, Element>): void {
 	map.set(clone, framed);

@@ -9,3 +9,4 @@ test/.golden-work/
 test/.probe/
 *.log
 .DS_Store
+test/.build-hash.json

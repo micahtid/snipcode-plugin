@@ -1,14 +1,9 @@
 /**
- * convert/bem-classes.ts: the generated class rule, and how its name is made
+ * convert/bem-classes.ts: what a generated class is called.
  *
- * Pipeline position: convert, a helper for the bem emitter
- * Reads from Captured: nothing
- * Writes to Captured: nothing
- *
- * Why this exists: both the dedup pass in convert/bem.ts and the base-class factoring in
- * convert/bem-factor.ts create classes and must name them the same way, from the same
- * per-tag counters, or the two would collide. The rule shape and the naming live here so
- * there is one answer to what a generated class is called.
+ * Both the dedup pass in convert/bem.ts and the base-class factoring in convert/bem-factor.ts
+ * create classes, and they must name them the same way from the same per-tag counters or the
+ * two would collide. The rule shape and the naming live here so there is one answer.
  */
 
 /** One generated class and the declarations it carries. */

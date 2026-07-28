@@ -1,31 +1,17 @@
 /**
- * convert/assets.ts: split inline svgs, data-uri images, and data-uri fonts into referenced files
+ * convert/assets.ts: lifting inline svgs, images, and fonts into their own files.
  *
- * Pipeline position: convert. This is a delivery-time split, after the document is assembled.
- * Reads from Captured: nothing. It operates on the assembled document string.
- * Writes to Captured: nothing. It returns the file set.
+ * Runs last in convert, on the assembled document. The self-contained form renders and grades
+ * as one file but is hard to read: a 30-line icon sits in the middle of the markup and an
+ * embedded font is hundreds of kilobytes dwarfing the stylesheet. Each is lifted out and
+ * referenced instead. The caller keeps the single-file document too; this is delivery shape only.
  *
- * Why this exists: the html-shaped output is one self-contained document with its
- * svg icons, data-uri images, and @font-face fonts inlined. That renders and grades as
- * a single file, but it is hard to read and reuse. A 30-line icon sits in the middle of
- * the markup, a base64 image is an unreadable wall, and an embedded font is hundreds of
- * KB that dwarf the stylesheet a user actually reads. This lifts each inline <svg>, each
- * data: image, and each @font-face src font into its own file and rewrites the document
- * to reference it (<img src="icon-1.svg">, url("image-1.png"), url("font-1.woff2")), so
- * the sidebar can present them as separate, switchable files. The caller keeps the
- * original self-contained document for preview and grading. This split is purely the
- * user-facing delivery shape.
- *
- * Render fidelity: an svg loaded through <img> no longer inherits the page's color.
- * So each icon's currentColor is resolved by laying the document out in a hidden
- * iframe and reading the svg's computed color. That computed color is ground truth
- * whether it is set inline, by a presentation attribute, or by a class rule, so it is
- * correct for every output format, and it is baked into the file before the icon is
- * detached. The same computed box, its size, display, and vertical-align, carries onto
- * the replacement <img> so it lays out where the svg did. An svg taken out of normal
- * flow by a non-static position or a transform cannot be reproduced by an in-flow <img>,
- * so it is left inline. The same goes for a sprite whose <use> points outside itself.
- * What lifts is faithful. What would not stays put.
+ * One fidelity catch: an svg loaded through <img> no longer inherits the page's color, so each
+ * icon's currentColor is resolved by laying the document out in a hidden iframe and reading the
+ * computed color, which is ground truth whatever set it. The computed box carries onto the
+ * replacement <img> so it lays out where the svg did. An svg taken out of flow by position or
+ * transform, or a sprite whose <use> points outside itself, cannot be reproduced that way and
+ * is left inline. What lifts is faithful; what would not stays put.
  */
 import type { AssetFile } from '../types';
 import { escapeHtmlAttr } from './document';
@@ -52,7 +38,6 @@ const DATA_IMG_URL = /url\(\s*(["']?)(data:image\/[^"')]+)\1\s*\)/gi;
  * failure the document is returned whole as the only file, so the panel always has
  * something to show.
  *
- * @param documentHtml - the self-contained html-shaped output
  * @param warnings - appended to if the split is skipped
  * @returns index.html first, then the extracted svg/image files in encounter order
  */
