@@ -205,7 +205,7 @@ function scanContainers(root: Element): Element[] {
 }
 
 /** True when a container's children are visually centered inside it, by declaration or by gaps. */
-export function isCentered(container: Element, kids: Element[]): boolean {
+function isCentered(container: Element, kids: Element[]): boolean {
 	const computed = window.getComputedStyle(container);
 	if (computed.textAlign === 'center') return true;
 
@@ -429,6 +429,23 @@ function fillsParent(child: Element, parent: Element): boolean {
 	const outer = parent.getBoundingClientRect();
 	if (outer.width <= 0 || outer.height <= 0) return false;
 	return inner.width >= outer.width * WRAPPER_FILL_SHARE && inner.height >= outer.height * WRAPPER_FILL_SHARE;
+}
+
+/**
+ * Builds the lookup from any element to the section that contains it, or null when no section
+ * does.
+ *
+ * The walk needs it to spend each section's budget, and the decorative pass needs it to say
+ * where an effect was seen. Two climbs with two stopping rules would let the same element be
+ * attributed to two different sections, so there is one climb.
+ */
+export function sectionFinder(roots: Element[]): (el: Element) => Element | null {
+	const known = new Set(roots);
+	return (el: Element): Element | null => {
+		let current: Element | null = el;
+		while (current && !known.has(current)) current = current.parentElement;
+		return current;
+	};
 }
 
 /** True when an element is the page's own wrapper rather than one of its sections. */

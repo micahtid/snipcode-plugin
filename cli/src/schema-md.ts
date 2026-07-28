@@ -5,16 +5,21 @@
  * agent can drop straight into a redesign prompt. Pure formatting over the schema the
  * inspector produced, defensive about optional fields so a thin page still renders.
  *
- * Everything the inspector measures renders here, one line each. The component blueprints
- * used to be extracted and then dropped, so a card spec that said `border: none` sat in
- * schema.json while the agent reading schema.md invented borders. Data that never reaches
- * the reader may as well not have been measured.
+ * Everything the inspector measures renders here, one line each. The component blueprints used
+ * to be extracted and then dropped, so a card spec that said `border: none` sat in schema.json
+ * while the agent reading schema.md invented borders. Data that never reaches the reader may
+ * as well not have been measured.
+ *
+ * The one thing held back is a fact the schema cannot place. A background effect names the
+ * section it was seen in; one that names no section is left in schema.json and kept out of
+ * here, because with nowhere attached it reads as permission to paint the effect anywhere,
+ * which is drift the reader has no way to check.
  *
  * An unmeasured layout renders as `unknown (not measured)`, never as a default. The schema is
  * a hard contract, so a value it did not measure has to read as a gap and hand the decision
  * back to the agent's judgment.
  */
-import type { PageSchema } from '../../core/src/inspect/schema/types';
+import type { BackgroundEffect, PageSchema, SectionBlueprint } from '../../core/src/inspect/schema/types';
 import type { SchemaResult } from '../../core/src/schema';
 
 /** Provenance stamp written into every schema output so an agent can spot a stale file. */
@@ -166,9 +171,9 @@ function renderComponents(schema: PageSchema, push: (s?: string) => void): void 
 
 	if (decorative) {
 		const bits: string[] = [`illustration ${decorative.illustrationStyle}`];
-		if (decorative.backgroundEffects?.length) bits.push(`effects ${decorative.backgroundEffects.join(', ')}`);
+		const effects = locatedEffects(decorative.backgroundEffects ?? [], schema.sections ?? []);
+		if (effects.length) bits.push(`effects ${effects.join(', ')}`);
 		if (decorative.accentTreatments?.length) bits.push(`accents ${decorative.accentTreatments.join(', ')}`);
-		if (decorative.hasBlobs) bits.push('blobs');
 		push(`**Decorative**: ${bits.join(' · ')}`);
 	}
 
@@ -177,4 +182,39 @@ function renderComponents(schema: PageSchema, push: (s?: string) => void): void 
 		push(`**Breakpoints**: ${breakpoints.join(', ')} · mobile nav ${responsive.mobileNavStyle} · grids ${responsive.gridCollapseBehavior}`);
 	}
 	push();
+}
+
+/**
+ * The background effects that name a section, each rendered as "gradient (hero)".
+ *
+ * An effect the schema could not place is left out. With nowhere attached it reads as
+ * permission to paint the effect wherever convention suggests, which is how a rebuild put
+ * gradients into a hero whose measured background is flat. Nothing is lost by dropping it: a
+ * section actually painted as a gradient states the whole gradient on its own bg line, and the
+ * unplaced entries stay in schema.json for anyone inspecting the measurement.
+ */
+function locatedEffects(effects: BackgroundEffect[], sections: SectionBlueprint[]): string[] {
+	const names = sectionNames(sections);
+	const out: string[] = [];
+	for (const entry of effects) {
+		const name = entry.section === undefined ? undefined : names[entry.section];
+		if (name) out.push(`${entry.effect} (${name})`);
+	}
+	return out;
+}
+
+/**
+ * One name per section: its type, carrying its position among sections of the same type when
+ * the page has more than one, so "logos 2" always points at exactly one section.
+ */
+function sectionNames(sections: SectionBlueprint[]): string[] {
+	const totals = new Map<string, number>();
+	for (const s of sections) totals.set(s.type, (totals.get(s.type) ?? 0) + 1);
+
+	const seen = new Map<string, number>();
+	return sections.map((s) => {
+		const nth = (seen.get(s.type) ?? 0) + 1;
+		seen.set(s.type, nth);
+		return (totals.get(s.type) ?? 0) > 1 ? `${s.type} ${nth}` : s.type;
+	});
 }

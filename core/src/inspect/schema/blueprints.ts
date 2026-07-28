@@ -11,6 +11,8 @@
  * changes, a card with its inner layout, the nav with its position and blur. The decorative
  * and responsive passes cover the rest of the page's visual language, the gradients, blobs,
  * illustration mix, and breakpoint behavior, which is the part a token list always misses.
+ * Every effect the decorative pass reports names the section it was seen in, because a
+ * decorative fact with nowhere attached is read as permission to paint it anywhere.
  *
  * A blueprint is what an agent actually reads, so every value in one crosses the same gate the
  * token list does. They are two paths to the same reader, and a radius that printed as
@@ -18,10 +20,10 @@
  * disagreeing with itself.
  */
 import { classNameOf, isElementVisible } from './classify';
-import { contentChildren, contentRoot } from './geometry';
+import { contentChildren, contentRoot, sectionFinder } from './geometry';
 import { hexToRgb, oklabDistance, rgbToOklab } from './oklab';
 import { effectiveBackground, groupBy, isTransparentColor, normalizeColor, paddingShorthand, paintedShadow, radiusShorthand, type WalkedElement } from './shared';
-import type { ButtonBlueprint, CardBlueprint, DecorativeInfo, NavBlueprint, ResponsiveInfo, StateRule } from './types';
+import type { BackgroundEffect, ButtonBlueprint, CardBlueprint, DecorativeInfo, NavBlueprint, ResponsiveInfo, StateRule } from './types';
 
 /** How many of a card's blocks the inner-layout string names. */
 const MAX_CARD_PARTS = 6;
@@ -38,6 +40,27 @@ const CONTRAST_FLOOR = 0.25;
 /** How many of the nav's links are probed against the sheets, and how far up from each one. */
 const MAX_NAV_LINK_PROBES = 12;
 const MAX_NAV_LINK_CLIMB = 4;
+/** Ceiling on the decorative reading, so a feed of thousands of nodes cannot stall the pass. */
+const MAX_DECORATIVE_ELEMENTS = 5000;
+/** Blur past this radius, in px, is a decorative blob rather than a soft edge on a real box. */
+const BLOB_BLUR_PX = 20;
+/** A round box wider than this is a blob; anything smaller is a chip or an avatar. */
+const MIN_BLOB_WIDTH = 80;
+/** How many images and svgs the media mix reads. */
+const MAX_MEDIA_SAMPLES = 30;
+/** An svg smaller than this in both axes is an icon inside something, not the page's artwork. */
+const MIN_ILLUSTRATION_SVG_PX = 40;
+/** Share of the media one kind must hold, and how many of it, before it names the page's mix. */
+const MEDIA_MAJORITY = 0.6;
+const MIN_MEDIA_ITEMS = 3;
+/** Raster image formats, which is what separates a photo-led page from a drawn one. */
+const RASTER_EXTENSION = /\.(?:jpe?g|png|webp|avif)/;
+/** Controls the accent reading probes, and the badge shapes it counts. */
+const ACCENT_PROBE_SELECTOR = 'button, [class*="btn"]';
+const BADGE_SELECTOR = '[class*="badge"], [class*="pill"], [class*="chip"], [class*="tag"]';
+const MAX_ACCENT_PROBES = 10;
+/** Fewest badge-shaped elements before pill badges read as the page's accent language. */
+const MIN_PILL_BADGES = 2;
 
 /**
  * Extracts the top button variants with their full visual spec and hover/active states.
@@ -303,67 +326,98 @@ function hasBackdropBlur(computed: CSSStyleDeclaration): boolean {
 	return [computed.backdropFilter, prefixed].some((value) => typeof value === 'string' && value !== '' && value !== 'none');
 }
 
-/** Detects the page's decorative language: blobs, gradients, illustration style, accents. */
-export function extractDecorativeInfo(): DecorativeInfo {
-	let hasBlobs = false;
-	let hasGradientBgs = false;
-	let hasPatterns = false;
-	const backgroundEffects = new Set<string>();
+/**
+ * Detects the page's decorative language: blobs, located background effects, illustration mix,
+ * and accent treatments.
+ *
+ * Every background effect carries the section it was seen in. Stated page-wide it was true and
+ * useless: an agent read `effects gradient` as permission and painted gradients into a hero
+ * whose measured background is flat. An effect no section holds carries no location, and the
+ * renderer drops it rather than offering the reader a fact it cannot place.
+ *
+ * The illustration mix stays page-wide on purpose. It describes what kind of media the page
+ * uses, which has no single location, and nothing in it licenses painting anything.
+ */
+export function extractDecorativeInfo(sectionRoots: Element[]): DecorativeInfo {
+	const findSection = sectionFinder(sectionRoots);
+	const indexOfSection = new Map<Element, number>(sectionRoots.map((el, index) => [el, index]));
+	const effects = new Map<string, BackgroundEffect>();
 	const accentTreatments = new Set<string>();
+	let hasBlobs = false;
 
+	// One entry per effect per section: a page with gradients in three sections reports three,
+	// and a section painting two gradients reports one.
+	const record = (effect: string, el: Element): void => {
+		const root = findSection(el);
+		const section = root ? indexOfSection.get(root) : undefined;
+		const key = `${effect}|${section ?? ''}`;
+		if (!effects.has(key)) effects.set(key, section === undefined ? { effect } : { effect, section });
+	};
+
+	// Every element, not a spread sample of them. A strided sample lands on different elements
+	// as soon as the page's element count moves by one, so two reads of one page reported the
+	// gradient in different sections. A contract that answers differently each time it is read
+	// is not a measurement.
 	const allElements = document.querySelectorAll('*');
-	const sampleSize = Math.min(allElements.length, 200);
-	for (let i = 0; i < sampleSize; i++) {
-		const el = allElements[Math.floor((i * allElements.length) / sampleSize)]!;
+	const examined = Math.min(allElements.length, MAX_DECORATIVE_ELEMENTS);
+	for (let i = 0; i < examined; i++) {
+		const el = allElements[i]!;
+		// An element that paints no box carries no design fact. A live page declared a gradient
+		// on a 0x0 node and the schema reported a gradient in that node's section, which is an
+		// effect the reader can see nowhere on the page.
+		if (!isElementVisible(el)) continue;
 		const computed = window.getComputedStyle(el);
 
-		if (computed.backgroundImage && computed.backgroundImage.includes('gradient')) {
-			hasGradientBgs = true;
-			backgroundEffects.add('gradient');
-		}
-		if (computed.backdropFilter && computed.backdropFilter !== 'none') backgroundEffects.add('backdrop-blur');
-		if (computed.filter && computed.filter.includes('blur') && parseFloat(computed.filter.replace(/[^0-9.]/g, '')) > 20) {
+		if (computed.backgroundImage && computed.backgroundImage.includes('gradient')) record('gradient', el);
+		if (computed.backdropFilter && computed.backdropFilter !== 'none') record('backdrop-blur', el);
+		if (computed.filter && computed.filter.includes('blur') && parseFloat(computed.filter.replace(/[^0-9.]/g, '')) > BLOB_BLUR_PX) {
 			hasBlobs = true;
-			backgroundEffects.add('blur-blobs');
+			record('blur-blobs', el);
 		}
-		if (computed.borderRadius === '50%' || computed.borderRadius === '9999px') {
-			if (el.getBoundingClientRect().width > 80) hasBlobs = true;
-		}
-		if (computed.backgroundImage && (computed.backgroundImage.includes('repeating') || computed.backgroundImage.includes('url('))) hasPatterns = true;
+		const round = computed.borderRadius === '50%' || computed.borderRadius === '9999px';
+		if (round && el.getBoundingClientRect().width > MIN_BLOB_WIDTH) hasBlobs = true;
 	}
 
-	let svgImgCount = 0;
-	let rasterCount = 0;
-	for (const img of Array.from(document.querySelectorAll('img')).slice(0, 30)) {
-		const src = (img.getAttribute('src') || '').toLowerCase();
-		if (src.includes('.svg') || src.startsWith('data:image/svg')) svgImgCount++;
-		else if (src.includes('.jpg') || src.includes('.jpeg') || src.includes('.png') || src.includes('.webp') || src.includes('.avif')) rasterCount++;
-	}
-	let significantSvgCount = 0;
-	for (const svg of Array.from(document.querySelectorAll('svg')).slice(0, 30)) {
-		const rect = svg.getBoundingClientRect();
-		if (rect.width > 40 && rect.height > 40) significantSvgCount++;
-	}
-
-	const totalSvgs = svgImgCount + significantSvgCount;
-	const totalMedia = totalSvgs + rasterCount;
-	const svgRatio = totalMedia > 0 ? Math.round((totalSvgs / totalMedia) * 100) / 100 : 0;
-	const photoRatio = totalMedia > 0 ? Math.round((rasterCount / totalMedia) * 100) / 100 : 0;
-
-	let illustrationStyle = 'none';
-	if (totalMedia === 0) illustrationStyle = 'none';
-	else if (svgRatio > 0.6 && totalSvgs >= 3) illustrationStyle = 'icon-based';
-	else if (photoRatio > 0.6 && rasterCount >= 3) illustrationStyle = 'photo';
-	else if (totalMedia >= 3) illustrationStyle = 'mixed';
-
-	for (const btn of Array.from(document.querySelectorAll('button, [class*="btn"]')).slice(0, 10)) {
+	for (const btn of Array.from(document.querySelectorAll(ACCENT_PROBE_SELECTOR)).slice(0, MAX_ACCENT_PROBES)) {
 		const computed = window.getComputedStyle(btn);
 		if (computed.boxShadow.includes('0px 4px 0') || computed.boxShadow.includes('0 4px 0')) accentTreatments.add('hard-shadow-buttons');
 		if (computed.backgroundImage?.includes('gradient')) accentTreatments.add('gradient-buttons');
 	}
-	if (document.querySelectorAll('[class*="badge"], [class*="pill"], [class*="chip"], [class*="tag"]').length >= 2) accentTreatments.add('pill-badges');
+	if (document.querySelectorAll(BADGE_SELECTOR).length >= MIN_PILL_BADGES) accentTreatments.add('pill-badges');
 
-	return { hasBlobs, hasGradientBgs, hasPatterns, illustrationStyle, svgRatio, photoRatio, backgroundEffects: Array.from(backgroundEffects), accentTreatments: Array.from(accentTreatments) };
+	return {
+		hasBlobs,
+		illustrationStyle: readIllustrationStyle(),
+		backgroundEffects: Array.from(effects.values()),
+		accentTreatments: Array.from(accentTreatments),
+	};
+}
+
+/** Names the page's media mix from the share of it that is drawn rather than photographed. */
+function readIllustrationStyle(): string {
+	let svgImgCount = 0;
+	let rasterCount = 0;
+	for (const img of Array.from(document.querySelectorAll('img')).slice(0, MAX_MEDIA_SAMPLES)) {
+		const src = (img.getAttribute('src') || '').toLowerCase();
+		if (src.includes('.svg') || src.startsWith('data:image/svg')) svgImgCount++;
+		else if (RASTER_EXTENSION.test(src)) rasterCount++;
+	}
+	let significantSvgCount = 0;
+	for (const svg of Array.from(document.querySelectorAll('svg')).slice(0, MAX_MEDIA_SAMPLES)) {
+		const rect = svg.getBoundingClientRect();
+		if (rect.width > MIN_ILLUSTRATION_SVG_PX && rect.height > MIN_ILLUSTRATION_SVG_PX) significantSvgCount++;
+	}
+
+	const totalSvgs = svgImgCount + significantSvgCount;
+	const totalMedia = totalSvgs + rasterCount;
+	if (totalMedia === 0) return 'none';
+	// Both shares are rounded to the same two places the ratios were reported in, so the two
+	// thresholds compare against one number rather than each against its own precision.
+	const svgShare = Math.round((totalSvgs / totalMedia) * 100) / 100;
+	const photoShare = Math.round((rasterCount / totalMedia) * 100) / 100;
+	if (svgShare > MEDIA_MAJORITY && totalSvgs >= MIN_MEDIA_ITEMS) return 'icon-based';
+	if (photoShare > MEDIA_MAJORITY && rasterCount >= MIN_MEDIA_ITEMS) return 'photo';
+	return totalMedia >= MIN_MEDIA_ITEMS ? 'mixed' : 'none';
 }
 
 /**

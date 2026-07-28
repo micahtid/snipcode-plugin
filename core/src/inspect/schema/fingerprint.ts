@@ -1,18 +1,15 @@
 /**
  * inspect/schema/fingerprint.ts: compact style fingerprints + abbreviations
  *
- * Pipeline position: inspect, page-scoped. It reads the live dom directly and does not run the element pipeline.
+ * Pipeline position: inspect, page-scoped. See inspect/schema/extract.ts for the whole pass.
  * Reads from DOM: document/window. This runs live, on per-element computed styles.
- * Writes to: nothing. This is pure computation.
+ * Writes to: nothing.
  *
- * Principles applied: none. This is computation.
- *
- * Why this exists: the schema collapses elements that look identical into a single
- * style-map entry. A fingerprint is the sorted, abbreviated list of an element's
- * non-default design properties, so two elements with the same fingerprint share a
- * style. The abbreviations keep the style map compact, and they must match the
- * abbreviation legend in inspect/prompts.ts so the ai pass can decode them. Ported
- * by rewriting from v1 schema/style-fingerprint.ts.
+ * Why this exists: the schema collapses elements that look identical into a single style-map
+ * entry. A fingerprint is the sorted, abbreviated list of an element's non-default design
+ * properties, so two elements with the same fingerprint share a style. The abbreviations keep
+ * the style map compact, and they are what the style map's keys are written in, so renaming one
+ * renames it everywhere that map is read.
  */
 
 /** The design-relevant properties a fingerprint is built from. */
@@ -65,8 +62,8 @@ const DEFAULT_VALUES: Record<string, Set<string>> = {
 	'cursor': new Set(['auto']),
 };
 
-/** Property-name abbreviations for compact style-map entries. The legend is mirrored in the prompt. */
-export const PROP_ABBREVIATIONS: Record<string, string> = {
+/** Property-name abbreviations, which are the keys the style map is written in. */
+const PROP_ABBREVIATIONS: Record<string, string> = {
 	'display': 'd', 'position': 'p', 'width': 'w', 'height': 'h',
 	'max-width': 'mw', 'max-height': 'mh',
 	'margin-top': 'mt', 'margin-right': 'mr', 'margin-bottom': 'mb', 'margin-left': 'ml',
@@ -87,7 +84,7 @@ export const PROP_ABBREVIATIONS: Record<string, string> = {
 };
 
 /** A fingerprint string plus the abbreviated non-default properties it was built from. */
-export interface FingerprintResult {
+interface FingerprintResult {
 	fingerprint: string;
 	properties: Record<string, string>;
 }

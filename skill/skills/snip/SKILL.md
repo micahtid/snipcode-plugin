@@ -36,7 +36,7 @@ Component-extraction flow ("extract the login button on <url>"):
      and its 'text' and 'rect' for drift verification.
   3. Run 'extract <url> --selector "<selector>"'. Pass --expect-text / --expect-rect from the
      candidate so a shifted page fails loudly instead of snipping the wrong node.
-  4. The output is deterministic and pixel-correct. Your remaining job is judgment: see NAMING.
+  4. Your remaining job is judgment: see NAMING.
 
 The flow is stateless: extract relaunches the browser and re-resolves the selector, so there is
 no session to keep alive between commands.

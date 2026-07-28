@@ -5,14 +5,9 @@
  * Reads from DOM: nothing. These are type definitions.
  * Writes to: nothing. These are type definitions.
  *
- * Principles applied: none. These are type definitions.
- *
- * Why this exists: the schema inspector walks the page and produces a
- * compressed design-system schema, the PageSchema below. Defining its shape and
- * every sub-type in one place lets the extractor, the optimizer, and the ai pass
- * agree on the contract. Ported from v1 schema/types.ts, the output types only.
- * v1's re-exports of capture-side types are dropped, and the extractor reads the live
- * dom directly.
+ * Why this exists: the schema inspector walks the page and produces a compressed design-system
+ * schema, the PageSchema below. Defining its shape and every sub-type in one place lets the
+ * extractor, the optimizer, and the renderer agree on one contract instead of three.
  */
 
 /**
@@ -157,15 +152,25 @@ export interface NavBlueprint {
 	linkCount: number;
 }
 
-/** The page's decorative language: blobs, gradients, illustration style, accents. */
+/**
+ * One background effect and the section it was seen in.
+ *
+ * The location is the point. An effect asserted of the whole page is true and useless as a
+ * constraint: with nowhere attached, an agent reads it as permission to paint the effect
+ * wherever convention suggests, and a rebuild put two gradients into a hero the schema
+ * measured as flat. `section` indexes the schema's own sections list, and is absent when the
+ * effect sits outside every section.
+ */
+export interface BackgroundEffect {
+	effect: string; // "gradient", "backdrop-blur", or "blur-blobs".
+	section?: number;
+}
+
+/** The page's decorative language: blobs, located effects, illustration mix, accents. */
 export interface DecorativeInfo {
 	hasBlobs: boolean;
-	hasGradientBgs: boolean;
-	hasPatterns: boolean;
 	illustrationStyle: string; // "none", "icon-based", "photo", "mixed".
-	svgRatio: number;
-	photoRatio: number;
-	backgroundEffects: string[];
+	backgroundEffects: BackgroundEffect[];
 	accentTreatments: string[];
 }
 

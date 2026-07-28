@@ -10,10 +10,12 @@
  */
 import { createServer, type Server } from 'node:http';
 import { readFile, rm } from 'node:fs/promises';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { join, dirname, extname } from 'node:path';
+import * as GUIDANCE from '../instructions/guidance';
+import { composeSkills } from '../cli/src/gen-skill';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = dirname(HERE);
@@ -107,6 +109,88 @@ function startCrossOriginServer(): Promise<{ server: Server; url: string }> {
 	});
 }
 
+/** Every exported guidance block, flattened, so a rule can be asserted wherever it lives. */
+function guidanceBlocks(): [name: string, text: string][] {
+	const out: [string, string][] = [];
+	for (const [name, value] of Object.entries(GUIDANCE)) {
+		if (typeof value === 'string') out.push([name, value]);
+		else if (value && typeof value === 'object') {
+			for (const [key, text] of Object.entries(value as Record<string, unknown>)) {
+				if (typeof text === 'string') out.push([`${name}.${key}`, text]);
+			}
+		}
+	}
+	return out;
+}
+
+/** Every source file under a directory, recursively. */
+function sourceFiles(dir: string): string[] {
+	const out: string[] = [];
+	for (const entry of readdirSync(dir)) {
+		const path = join(dir, entry);
+		if (statSync(path).isDirectory()) out.push(...sourceFiles(path));
+		else out.push(path);
+	}
+	return out;
+}
+
+/**
+ * The guidance surface, asserted directly rather than through a run.
+ *
+ * The rule this plan strengthened was already written down and was still ignored, and the
+ * guidance had no tests at all, so the parts that can be held down mechanically are. Each check
+ * keys on a short phrase, not a whole sentence, so rewording survives and dropping a rule does
+ * not. A failure here is a decision to make, never a string to silence.
+ */
+function checkGuidance(): void {
+	process.stdout.write('\nguidance:\n');
+	// Matched against one line, so a phrase that happens to wrap still reads as itself and
+	// rewrapping a paragraph is never a failure.
+	const REDESIGN = GUIDANCE.REDESIGN.replace(/\s+/g, ' ');
+	const INLINE = GUIDANCE.INLINE;
+
+	check('REDESIGN states the element list is closed', /element list is complete/.test(REDESIGN));
+	check('REDESIGN says an unlisted element does not exist in that section', /does not exist in that section/.test(REDESIGN));
+	check('REDESIGN argues an invented element has no spec to be built from',
+		/no spec for it/.test(REDESIGN) && /guess/.test(REDESIGN));
+	check('REDESIGN keeps the label-above-a-heading illustration', /label above a heading/.test(REDESIGN));
+	check('REDESIGN states what is hard in every use', /Hard in every use/.test(REDESIGN));
+	check('REDESIGN scopes the page-level arrangement to a reference rebuild',
+		/page-level arrangement/.test(REDESIGN) && /rebuilding the reference page/.test(REDESIGN));
+	check("REDESIGN defers to the user's own structure", /arrangement is theirs/.test(REDESIGN));
+	check('REDESIGN states the reference-rebuild default', /That is the default/.test(REDESIGN));
+	check('REDESIGN binds an effect to the section it was measured in', /Use it in that section and nowhere else/.test(REDESIGN));
+	check('INLINE.schema carries the two-level form',
+		/hard contract/.test(INLINE.schema) && /only when rebuilding the reference page/.test(INLINE.schema));
+
+	// A thing the schema names but never specifies has to be left out, or the agent styles it
+	// from guesswork. Silence is the other case, and rules 5 and 6 still fill that by judgment.
+	const RULES = GUIDANCE.RULES.replace(/\s+/g, ' ');
+	check('RULES refuses to build what the schema does not specify', /Build only what the schema specifies/.test(RULES));
+	check('RULES names the unspecified effect as the case', /never specifies is one you do not paint/.test(RULES));
+	check('RULES keeps silence separate from an unspecified value', /This is not the same as silence/.test(RULES));
+	check('RULES does not license mixing a shade off the palette', !/one visible step lighter or darker/.test(RULES));
+
+	const dashed = guidanceBlocks().filter(([, text]) => text.includes('—'));
+	check('no guidance block carries an em dash', dashed.length === 0, dashed.map(([n]) => n).join(', '));
+
+	// Editing guidance and forgetting to regenerate ships stale rules to every agent that reads
+	// the skill. The text is composed in memory from the same source the generator uses, since
+	// shelling out to gen:skill would rewrite tracked files as a side effect of running tests.
+	const stale = composeSkills().filter(({ path, text }) => {
+		if (!existsSync(path)) return true;
+		// Line endings are the checkout's business, not the guidance's.
+		return readFileSync(path, 'utf8').replace(/\r\n/g, '\n') !== text.replace(/\r\n/g, '\n');
+	});
+	check('the committed SKILL.md files match the current guidance', stale.length === 0,
+		`${stale.map((s) => s.path).join(', ')}: run npm run gen:skill`);
+
+	// The comment standard the cleaning pass set, held after the pass that set it.
+	const commented = [...sourceFiles(join(ROOT, 'core', 'src', 'inspect', 'schema')), join(ROOT, 'cli', 'src', 'schema-md.ts')];
+	const withDashes = commented.filter((path) => readFileSync(path, 'utf8').includes('—'));
+	check('no schema module carries an em dash', withDashes.length === 0, withDashes.join(', '));
+}
+
 async function main(): Promise<void> {
 	if (!existsSync(CLI)) {
 		process.stdout.write(`cli not built at ${CLI}; run \`npm run build\` first\n`);
@@ -114,6 +198,7 @@ async function main(): Promise<void> {
 		return;
 	}
 	await rm(OUT_BASE, { recursive: true, force: true });
+	checkGuidance();
 	const { server, base } = await startServer();
 	const cdn = await startCrossOriginServer();
 	const sample = `${base}/sample.html`;
@@ -299,6 +384,33 @@ async function main(): Promise<void> {
 		check('hover rules inside @layer are lifted', fwStates.some((s) => s.state === 'hover'), JSON.stringify(fwStates.map((s) => s.selector)));
 		check('an escaped utility-class state selector matches its element', fwStates.some((s) => s.selector.includes('hover\\:underline-x')), JSON.stringify(fwStates.map((s) => s.selector)));
 
+		// --- decorative effects carry the section they were seen in ---
+		// An effect stated for the whole page reads as permission to paint it anywhere, which is
+		// how a rebuild put a gradient into a hero the schema measured as flat. Every effect
+		// names a section, and one the schema cannot place is never shown.
+		process.stdout.write('\nschema (located effects):\n');
+		const fwEffects = (fwSchema.decorative?.backgroundEffects as any[]) ?? [];
+		const fwDecorLine = fwMd.split('\n').find((l: string) => l.startsWith('**Decorative**')) ?? '';
+		const heroIndex = fwSections.indexOf(heroSection);
+		check('the gradient hero yields an effect located at the hero section',
+			fwEffects.some((e) => e.effect === 'gradient' && e.section === heroIndex), JSON.stringify(fwEffects));
+		check('schema.md names the section an effect was seen in', fwDecorLine.includes('gradient (hero)'), fwDecorLine);
+		check('an effect in one of two same-typed sections carries its position', fwDecorLine.includes('gradient (logos 2)'), fwDecorLine);
+		// A gradient declared on a zero-size node paints nothing, so it is not an effect.
+		const emptyIndex = fwSections.findIndex((s) => s.layoutMeasured === false);
+		check('an effect declared on a node with no box is not reported',
+			emptyIndex >= 0 && !fwEffects.some((e) => e.section === emptyIndex), JSON.stringify([emptyIndex, fwEffects]));
+		// The blob is out of flow on the page wrapper, so no section holds it.
+		const unplaced = fwEffects.filter((e) => e.section === undefined);
+		check('an effect no section holds is recorded without a location',
+			unplaced.length === 1 && unplaced[0].effect === 'blur-blobs', JSON.stringify(fwEffects));
+		check('an unlocated effect never reaches schema.md', !fwDecorLine.includes('blur-blobs'), fwDecorLine);
+		check('schema.md prints no bare blobs assertion', !/\bblobs\b/.test(fwMd) && fwSchema.decorative?.hasBlobs === true, fwDecorLine);
+		// Fields measured and never delivered are gone rather than left in the payload unread.
+		check('the decorative payload carries no undelivered field',
+			Object.keys(fwSchema.decorative ?? {}).join(',') === 'hasBlobs,illustrationStyle,backgroundEffects,accentTreatments',
+			JSON.stringify(Object.keys(fwSchema.decorative ?? {})));
+
 		// Delivery: the blueprints reach schema.md and the cli payload, not just schema.json.
 		check('schema.md renders the components section', fwMd.includes('## Components'));
 		check('schema.md renders the nav line', /\*\*Nav\*\* \(header\)/.test(fwMd), fwMd.slice(fwMd.indexOf('## Components'), fwMd.indexOf('## Components') + 200));
@@ -353,9 +465,38 @@ async function main(): Promise<void> {
 		const apButtons = (apSchema.buttons as any[]) ?? [];
 		check('a pill radius is gated in the component blueprint too', apButtons.length > 0 && apButtons.every((b) => !/e\+/.test(b.borderRadius)) && apButtons.some((b) => b.borderRadius === '9999px'), JSON.stringify(apButtons.map((b) => b.borderRadius)));
 
+		// The effect reading covers the document, not a spread sample of it. A sample lands on
+		// different elements the moment the page's element count moves, so two reads of one page
+		// named the gradient in different sections. This one sits past four thousand filler nodes.
+		const apMd = readFileSync(ap.json.markdown as string, 'utf8');
+		const apEffects = (apSchema.decorative?.backgroundEffects as any[]) ?? [];
+		const closingIndex = apSections.length - 1;
+		check('an effect four thousand elements deep is still found',
+			apEffects.some((e) => e.effect === 'gradient' && e.section === closingIndex), JSON.stringify(apEffects));
+		// The page holds several sections of this type, so the name has to carry its position.
+		const closingType = apSections[closingIndex]?.type;
+		const sameType = apSections.filter((s) => s.type === closingType).length;
+		const closingName = sameType > 1 ? `${closingType} ${sameType}` : String(closingType);
+		check('schema.md names the deep section the effect sits in',
+			apMd.includes(`gradient (${closingName})`),
+			apMd.split('\n').find((l: string) => l.startsWith('**Decorative**')) ?? '');
+
 		// No media query says anything, so neither responsive field asserts anything.
 		check('a page with no responsive nav evidence reports unknown', apSchema.responsive?.mobileNavStyle === 'unknown', JSON.stringify(apSchema.responsive));
 		check('a page with no grid evidence reports unknown', apSchema.responsive?.gridCollapseBehavior === 'unknown', JSON.stringify(apSchema.responsive));
+
+		// --- the same page read twice reads the same ---
+		// Ordering and sampling decide what the schema reports. Left unpinned, a later change to
+		// either could introduce drift that no single run would ever show.
+		process.stdout.write('\nschema (determinism):\n');
+		const again = await runCli(['schema', framework, '--out', join(OUT_BASE, 'framework-again')]);
+		const stamped = (path: string): string => {
+			const parsed = JSON.parse(readFileSync(path, 'utf8'));
+			delete parsed.generated; // The stamp is the run's time, and is meant to differ.
+			return JSON.stringify(parsed);
+		};
+		check('two consecutive runs over one page produce identical json',
+			again.code === 0 && stamped(again.json.schema as string) === stamped(fw.json.schema as string), again.raw.slice(0, 160));
 
 		// --- a page discovery could not resolve into sections ---
 		process.stdout.write('\nschema (unresolved page):\n');

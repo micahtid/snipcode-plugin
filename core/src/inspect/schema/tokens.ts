@@ -52,7 +52,7 @@ const MODULAR_SCALES: Array<{ name: string; ratio: number }> = [
 ];
 
 /** The spacing grid a page's values sit on, and the values that do not. */
-export interface SpacingAnalysis {
+interface SpacingAnalysis {
 	baseUnit: number;
 	gridCompliance: number;
 	offGrid: string[];

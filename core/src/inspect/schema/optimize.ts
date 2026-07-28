@@ -3,21 +3,19 @@
  *
  * Pipeline position: inspect, page-scoped. It post-processes the extracted schema.
  * Reads from DOM: nothing. It operates on the extracted schema.
- * Writes to: nothing. It returns an optimized copy.
+ * Writes to: nothing. It returns a size-reduced copy.
  *
- * Principles applied: none. This is transformation.
- *
- * Why this exists: the raw schema can be large, and the ai pass pays per token, so
- * this trims it before the prompt: dedupe and cap the color palette, sort and bound
- * spacing, merge near-identical style entries, and apply hard caps on the style
- * map, structure, states, sections, and blueprints. The caps keep the prompt small,
- * a simpler defense against a slow model than any timeout. Ported by rewriting
- * from v1 schema/schema-optimizer.ts.
+ * Why this exists: the raw schema can be large, and schema.md has to stay short enough for an
+ * agent to read in one pass, so this trims it first: dedupe and cap the color palette, sort and
+ * bound spacing, merge near-identical style entries, and cap the style map, structure, states,
+ * sections, and blueprints. Trimming is not free of meaning. A cap can cut the section an
+ * effect names, so anything that points at a section is reconciled here rather than left to
+ * the renderer to discover broken.
  */
 import { weightedContexts } from './tokens';
 import type { PageSchema } from './types';
 
-/** Returns a size-reduced copy of the schema, ready to serialize for the prompt. */
+/** Returns a size-reduced copy of the schema, ready to serialize and render. */
 export function optimizeSchema(schema: PageSchema): PageSchema {
 	const optimized: PageSchema = { ...schema };
 
@@ -42,8 +40,22 @@ export function optimizeSchema(schema: PageSchema): PageSchema {
 	if (optimized.contentPatterns.length > 8) optimized.contentPatterns = optimized.contentPatterns.slice(0, 8);
 	if (optimized.buttons.length > 4) optimized.buttons = optimized.buttons.slice(0, 4);
 	if (optimized.cards.length > 3) optimized.cards = optimized.cards.slice(0, 3);
+	optimized.decorative = dropUnplacedEffects(optimized.decorative, optimized.sections.length);
 
 	return optimized;
+}
+
+/**
+ * Drops background effects whose section index falls outside the trimmed sections list.
+ *
+ * The extractor indexes an effect against every discovered section, and the cap above can cut
+ * the section it named. An index pointing past the list is not a location, and a located fact
+ * that cannot be placed is worse than no fact at all.
+ */
+function dropUnplacedEffects(decorative: PageSchema['decorative'], sectionCount: number): PageSchema['decorative'] {
+	const effects = decorative?.backgroundEffects ?? [];
+	const placed = effects.filter((entry) => entry.section === undefined || entry.section < sectionCount);
+	return placed.length === effects.length ? decorative : { ...decorative, backgroundEffects: placed };
 }
 
 /**

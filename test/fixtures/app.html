@@ -56,6 +56,9 @@
   .filler span { font-size: 11px; color: #dddddd; }
 
   .closing { padding: 56px 32px; }
+  /* A gradient four thousand elements into the document, which is past where a spread sample
+     could ever land. The reading has to reach it, and has to name the section holding it. */
+  .closing-rule { height: 4px; max-width: 120px; margin: 0 0 16px; background-image: linear-gradient(90deg, #7b3fa0, #0b7a5a); }
   .closing h2 { font-size: 20px; margin: 0 0 8px; }
   .closing p { color: #7b3fa0; margin: 0; }
 </style>
@@ -119,6 +122,7 @@
   <section class="band filler" id="filler"></section>
 
   <section class="closing">
+    <div class="closing-rule"></div>
     <h2>Colophon</h2>
     <p>Set in the system stack, on a thirteen pixel base.</p>
   </section>

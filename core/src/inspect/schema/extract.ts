@@ -1,23 +1,17 @@
 /**
  * inspect/schema/extract.ts: the page-schema extractor
  *
- * Pipeline position: inspect, page-scoped. It reads the live dom directly and does not run the element pipeline.
+ * Pipeline position: inspect, page-scoped. This is the whole pass; the others are its steps.
  * Reads from DOM: document/window. This runs live, so the whole page must be loaded.
- * Writes to: nothing. This is pure extraction, and it returns a PageSchema.
+ * Writes to: nothing. It returns a PageSchema.
  *
- * Principles applied: none. This is extraction.
- *
- * Why this exists: the schema inspector turns a whole page into a compressed
- * design-system schema. It walks the visible dom, stratified by section so a long
- * page samples evenly, collects the color / font / spacing / radius / shadow
- * tokens, dedupes elements into a style map and a structure tree, lifts
- * interactive-state rules from the readable stylesheets, and detects section
- * blueprints and the button, card, and nav component blueprints plus the page's
- * decorative and responsive language. The result is optimized (inspect/schema/optimize.ts) and,
- * with a key, synthesized by the ai pass (inspect/ai.ts). Ported by rewriting from
- * v1 schema/schema-extractor.ts as plain functions, dropping the class/logger
- * ceremony and v1's discarded root-variable pass. Cross-origin stylesheets are read
- * only when same-origin-readable, matching the other page-scoped inspectors.
+ * Why this exists: the schema inspector turns a whole page into a compressed design-system
+ * schema. It walks the visible dom, stratified by section so a long page samples evenly,
+ * collects the color, font, spacing, radius, and shadow tokens, dedupes elements into a style
+ * map and a structure tree, lifts interactive-state rules from the readable stylesheets, and
+ * detects section blueprints and the button, card, and nav component blueprints plus the page's
+ * decorative and responsive language. The result is size-reduced in optimize.ts and rendered
+ * for the reader in cli/src/schema-md.ts.
  *
  * This file is the order of operations and nothing else. Each pass lives in its own
  * module: the sample in walk.ts, the design tokens in tokens.ts, the style map and
@@ -47,8 +41,9 @@ import type { PageSchema } from './types';
 /** Builds the complete page schema from the live dom. */
 export async function extractPageSchema(): Promise<PageSchema> {
 	// Discovery runs first and once. The walk stratifies its budget over these sections, the
-	// section pass describes them, and the nav bar is scored among them, so all three readings
-	// agree on what a section is instead of each deriving its own answer.
+	// section pass describes them, the nav bar is scored among them, and the decorative pass
+	// says which one each effect was seen in, so every reading agrees on what a section is
+	// instead of each deriving its own answer.
 	const sectionRoots = discoverSections();
 	const navBar = findNavBar(sectionRoots);
 	const walked = walkDOM(sectionRoots);
@@ -73,7 +68,7 @@ export async function extractPageSchema(): Promise<PageSchema> {
 	const buttons = extractButtonBlueprints(walked, states);
 	const cards = extractCardBlueprints(walked, states);
 	const nav = extractNavBlueprint(navBar);
-	const decorative = extractDecorativeInfo();
+	const decorative = extractDecorativeInfo(sectionRoots);
 	const responsive = extractResponsiveInfo(rules, navBar);
 
 	const consistency = analyzeConsistency(colors, radii, shadows, spacingAnalysis);

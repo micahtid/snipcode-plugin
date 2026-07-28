@@ -22,7 +22,7 @@
  */
 import { computeFingerprint } from './fingerprint';
 import { classifyElement, isElementVisible, SKIP_TAGS } from './classify';
-import { hasDirectText } from './geometry';
+import { hasDirectText, sectionFinder } from './geometry';
 import { groupBy, gradientStops, isTransparentColor, normalizeColor, type PseudoColor, type WalkedElement } from './shared';
 import type { ComponentPattern } from './types';
 
@@ -81,14 +81,9 @@ export function walkDOM(sectionRoots: Element[]): WalkedElement[] {
 		sectionBudgets.set(sec.el, MIN_SECTION_BUDGET + Math.round(pool * proportion));
 	}
 
-	const sectionRootSet = new Set(sectionRoots);
 	const sectionSeen = new Map<Element, number>();
 	const sectionRecorded = new Map<Element, number>();
-	const findSection = (el: Element): Element | null => {
-		let current: Element | null = el;
-		while (current && !sectionRootSet.has(current)) current = current.parentElement;
-		return current;
-	};
+	const findSection = sectionFinder(sectionRoots);
 
 	const walk = (parent: Element, depth: number): void => {
 		if (depth > MAX_DEPTH) return;

@@ -9,9 +9,7 @@
  * The division of labor, stated once: the plugin is deterministic eyes and hands (load a
  * page, harvest its elements, extract and convert markup); the agent provides every
  * judgment layer (which element, polish-style naming, redesign). The plugin makes zero
- * llm calls. The naming and redesign notes below are the prompt guidance that used to
- * live in the extension's byok polish and the marketing-site generation templates,
- * ported here because that judgment is now the agent's.
+ * llm calls, so the naming and redesign blocks below are the whole of that judgment layer.
  */
 
 /** Skill-priority rule, for the skills only: snipcode output is the authority, no competing skills. */
@@ -38,7 +36,7 @@ export const SNIP_FLOW = `Component-extraction flow ("extract the login button o
      and its 'text' and 'rect' for drift verification.
   3. Run 'extract <url> --selector "<selector>"'. Pass --expect-text / --expect-rect from the
      candidate so a shifted page fails loudly instead of snipping the wrong node.
-  4. The output is deterministic and pixel-correct. Your remaining job is judgment: see NAMING.
+  4. Your remaining job is judgment: see NAMING.
 
 The flow is stateless: extract relaunches the browser and re-resolves the selector, so there is
 no session to keep alive between commands.`;
@@ -87,14 +85,17 @@ in the DOM. The plugin refuses to snip it and instead hands you the element's sc
 plugin cannot do.`;
 
 /** schema command guidance. */
-export const SCHEMA = `schema returns a whole-page design reference in two parts:
+export const SCHEMA = `schema returns a whole-page design reference in three parts:
 - tokens: color palette ranked by usage, font families and scale, spacing rhythm, radii, shadows.
-- layout: a section blueprint (header, hero, cards, footer) with grid/flex, column counts, max-widths.
+- layout: every section in order, each with its measured layout, column count and ratio, max width,
+  background, ordered element list, and the count and size of the items it repeats.
+- components: the button, card, and nav specs, the page's breakpoints, and each decorative effect
+  with the section it was measured in.
 schema.md is a rendered summary you can drop straight into a redesign prompt. It is the schema and
 nothing else; when you need a concrete sample of how the site composes its tokens, run extract on
 one representative element.`;
 
-/** Naming guidance, ported from the extension's byok polish prompt. The agent's job after extract. */
+/** Naming guidance: the agent's job after extract, and the only part of it that is theirs. */
 export const NAMING = `After extract, the markup and css are deterministic and pixel-correct but carry generated class
 names (block__tag-n). Your judgment layer, all render-neutral, is:
 - Rename generated classes to semantic ones. When an element has a base class plus a modifier
@@ -103,17 +104,46 @@ names (block__tag-n). Your judgment layer, all render-neutral, is:
   (a nav container to <nav>, a heading div to <h2>).
 Never change declarations, sizes, colors, or geometry: those are already correct.`;
 
-/** Redesign guidance for the schema-reference flow. */
+/**
+ * Redesign guidance for the schema-reference flow.
+ *
+ * Hardness follows ownership, which is why the contract has two levels rather than one. The
+ * design language is the schema's everywhere. The page-level arrangement is the schema's only
+ * when the job is to rebuild the reference page; when the user brings their own structure, it
+ * is theirs, and applying one hardness to both made the guidance wrong for every use but one.
+ */
 export const REDESIGN = `When redesigning with a page as reference, the schema is a hard contract, not a soft starting point.
-Follow it exactly. Use its exact token values (colors, type scale, spacing rhythm, radii, shadows),
-never substitutes or "improved" alternatives. Reproduce its layout as measured: the section order,
-the column counts, the max widths, and the way each section stacks. A section the schema marks
-single-column stays a single column. It does not become two columns side by side just because that
-is the common pattern for that kind of section. Do not add elements the schema does not show, even
-familiar ones like a small label above a heading, and do not drop or reorder what it does show. Make
-no assumptions from convention. An items count is a count: a section that reports 15 items gets 15,
-at the size given, not a tidier number. The only part that is yours is the words: the copy and
-content that fill the structure the schema gives you.
+It binds at two levels: its design language in every use, and its page-level arrangement when you
+are rebuilding the reference page.
+
+Hard in every use:
+- Token values. Its colors, type scale, spacing rhythm, radii, and shadows exactly, never
+  substitutes or "improved" alternatives.
+- Component specs. A button, card, or nav you build is the one the schema measured, down to its
+  fill, radius, padding, border, and shadow.
+- The internal shape of every section you use: its element list, its measured layout pattern, its
+  columns and ratio, and its items line. A section marked single-column stays a single column. It
+  does not become two columns side by side because that is the common pattern for its kind. An
+  items count is a count: a section reporting 15 items gets 15, at the size given, not a tidier
+  number.
+
+The page-level arrangement, meaning which sections exist and what order they run in, is hard only
+when you are rebuilding the reference page itself. That is the default: with no structure of the
+user's own in play, reproduce the reference's arrangement exactly. When the user brings their own
+page or describes their own structure, that arrangement is theirs. Do not reorder it, drop from it,
+or add the reference's sections to it. Build every section they do use to its measured shape, in
+the schema's tokens and component specs. They are asking for this page's design language on their
+structure, not for this page.
+
+A section's element list is complete. An element the list does not name does not exist in that
+section, however conventional it looks there, such as a small label above a heading. Adding one is
+drift twice over: it was not on the page, and the schema holds no spec for it, so its color, radius,
+and padding can only be guessed, which is the guesswork the schema exists to replace. Do not drop or
+reorder what the list does show. The only part that is yours is the words: the copy and content that
+fill the structure the schema gives you.
+
+A decorative effect names the section it was measured in, as \`gradient (hero)\`. Use it in that
+section and nowhere else. A section's own \`bg\` line is the whole of its background.
 
 Read the gaps as gaps. A section typed \`content\`, a layout marked \`unknown (not measured)\`, and a
 responsive field reading \`unknown\` are all the schema saying it did not measure that, not saying
@@ -143,21 +173,28 @@ has content, keep it as it is and change only what they ask you to change.
    it. When two schema colors are too close to read, use the nearest one in the palette that reads
    clearly. Never ship dark on dark or light on light.
 6. Fill image slots. When a layout expects an image you do not have, draw a neutral placeholder
-   sized to the slot: a filled block in a schema color one visible step lighter or darker than the
+   sized to the slot: a filled block in the nearest schema color that reads as separate from the
    surface behind it, with the icon below centered inside, plus a short label when it helps. Replace
-   only the image, never the whole component around it. Do not invent CSS art, fake charts, or
-   decorative shapes to stand in for a missing image, and never leave a bare white or empty gap.
+   only the image, never the whole component around it. The placeholder stands in for the image
+   the schema listed, so it is not an element the list does not name. Do not invent CSS art, fake
+   charts, or decorative shapes to stand in for a missing image, and never leave a bare white or
+   empty gap.
    Keep the placeholder self-contained, so no external image service or remote URL. Use this icon
    exactly:
    ${PLACEHOLDER_ICON}
-7. Write plain copy. When you generate text, keep it concise and in plain English. Say what the
+7. Build only what the schema specifies. When it names something but gives you no values to build
+   that thing with, leave the thing out. An effect it places in a section but never specifies is
+   one you do not paint, and a shade near the palette but not in it is one you do not mix. This is
+   not the same as silence. Where the schema measured nothing and the page still needs an answer,
+   your judgment fills it, as in rules 5 and 6.
+8. Write plain copy. When you generate text, keep it concise and in plain English. Say what the
    thing does. Avoid em dashes, and avoid filler that imitates marketing without meaning.
-8. Precedence. The schema wins on anything it measures. These rules govern what it does not.
+9. Precedence. The schema wins on anything it measures. These rules govern what it does not.
    When they conflict, favor the schema and use your judgment.`;
 
 /** The guidance slice echoed inline on each command's json result. */
 export const INLINE: Record<'candidates' | 'extract' | 'schema', string> = {
 	candidates: 'Pick a target, then: snipcode extract <url> --selector "<selector>" --expect-text "<text>". See CANDIDATES.',
 	extract: 'Output is deterministic and pixel-correct; your job is semantic naming and tags. See NAMING. If builderDetected, rebuild from element.png. See EXTRACT.',
-	schema: 'The schema is a hard contract: match its tokens and layout exactly, and add nothing it does not show. See REDESIGN and RULES.',
+	schema: "The schema is a hard contract: match its tokens, component specs, and each section's measured shape exactly, and add nothing it does not show. Its page-level section order binds only when rebuilding the reference page, not when the user brings their own structure. See REDESIGN and RULES.",
 };

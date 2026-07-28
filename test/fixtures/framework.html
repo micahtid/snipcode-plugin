@@ -63,7 +63,9 @@
 
   /* A section with nothing measurable in it: its only child paints no box. */
   ._r1s2 { min-height: 96px; background: #f5f5f5; }
-  ._r3t4 { display: block; width: 0; height: 0; }
+  /* It declares a gradient it can never paint, because it has no box to paint one in. A
+     declaration on a zero-size node is not an effect the page shows. */
+  ._r3t4 { display: block; width: 0; height: 0; background-image: linear-gradient(#ffffff, #f0f0f0); }
 
   /* A logo marquee: a track wider than the section, animated through a fixed window. Its
      items are boxes in a row, but they are not the section's columns. */
@@ -73,9 +75,16 @@
 
   /* The same marquee written for a seamless loop: the whole run is duplicated so the track has
      no visible seam. The dom holds twelve boxes and the page shows six brands. */
-  ._x1y2 { background: #ffffff; padding: 40px 0; overflow: hidden; }
+  /* The second marquee fades out behind its track. Two sections on this page type as logos, so
+     the effect located here can only be named unambiguously with its position among them. */
+  ._x1y2 { background-image: linear-gradient(90deg, #ffffff 0%, #f0f0f0 100%); padding: 40px 0; overflow: hidden; }
   ._x3z4 { display: flex; gap: 56px; width: 2400px; align-items: center; }
   ._x3z4 > * { width: 120px; height: 36px; background: #f0f0f0; border-radius: 6px; font-size: 13px; text-align: center; line-height: 36px; }
+
+  /* A blurred blob positioned out of flow on the page wrapper. Discovery never returns it and
+     no section contains it, so the effect it carries has nowhere to be reported and must not
+     reach schema.md. It paints an existing palette color so only the effect is new. */
+  ._blob1 { position: absolute; top: 320px; left: -90px; width: 320px; height: 320px; border-radius: 50%; background: #ff6b4a; filter: blur(48px); opacity: 0.35; }
 
   ._u5v6 { padding: 48px 32px; text-align: center; color: #6b6b6b; border-top-width: 1px; border-top-color: #2d2d2d; }
   /* Four different side colors: the shorthand for this element serializes as four colors,
@@ -125,6 +134,10 @@
 </head>
 <body>
 <div class="_a1f2"><div class="_b3c4"><div class="_c0d1">
+
+  <!-- Out of flow on the wrapper, so it belongs to no section. Its blur is a real effect the
+       schema cannot place, and an unplaceable effect is not offered to the reader. -->
+  <div class="_blob1"></div>
 
   <header class="_h1a2">
     <div class="_d5e6"><div class="_f7a8">

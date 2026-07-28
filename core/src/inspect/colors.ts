@@ -11,10 +11,8 @@
  * perceptually clustered so near-duplicate shades collapse into one swatch, most-
  * used first. Clustering is greedy in Oklab space, the perceptually uniform color
  * model, so visually identical colors that differ by a hex digit merge while
- * distinct colors stay apart. The color-valued css custom properties ride along as
- * context for the optional ai role pass (inspect/ai.ts). Ported by rewriting from v1
- * colors/color-extractor.ts, preserving the Oklab clustering verbatim and dropping
- * the per-element / oklch / member-count fields the panel never showed.
+ * distinct colors stay apart. The color-valued css custom properties ride along, since a page
+ * that names its palette has said more about it than the painted values alone can.
  */
 import type { ColorReport } from './types';
 

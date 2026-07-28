@@ -48,7 +48,7 @@ export const BUTTON_SELECTOR = 'button, a[class*="btn"], a[class*="button"]';
 const MAX_BACKDROP_CLIMB = 24;
 
 /** One color parsed out of a css value: channels plus alpha. */
-export interface Rgba {
+interface Rgba {
 	r: number;
 	g: number;
 	b: number;
@@ -178,7 +178,7 @@ export function paddingShorthand(computed: CSSStyleDeclaration): string {
 }
 
 /** The token kinds the gate knows, each with its own idea of what one sane value looks like. */
-export type TokenKind = 'color' | 'radius' | 'spacing' | 'font-size' | 'shadow';
+type TokenKind = 'color' | 'radius' | 'spacing' | 'font-size' | 'shadow';
 
 /** A radius past this share of the viewport's shorter side is a pill, not a measured corner. */
 const PILL_RADIUS_SHARE = 0.5;

@@ -6,6 +6,12 @@
  * from the CLI --help or the JSON guidance fields, which read the same source. The two
  * flows are separate skills so each trigger description stays sharp and each skill loads
  * only its own flow. Run via `npm run gen:skill` whenever the guidance changes.
+ *
+ * Composing and writing are separate. They used to be one step that ran on import, so the
+ * only way to see the text the generator would produce was to let it rewrite the tracked
+ * files. Editing guidance and forgetting to regenerate then shipped stale rules to every
+ * agent reading the skill, with nothing to catch it. `composeSkills` returns the files
+ * without touching disk, which is what lets the suite compare them to what is committed.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -69,10 +75,27 @@ const SKILLS: { name: string; description: string; sections: [string, string][] 
 	},
 ];
 
-for (const { name, description, sections } of SKILLS) {
-	const dir = join(SKILLS_DIR, name);
-	mkdirSync(dir, { recursive: true });
-	const path = join(dir, 'SKILL.md');
-	writeFileSync(path, skillFile(name, description, sections));
-	process.stdout.write(`wrote ${path}\n`);
+/** One composed skill file: where it belongs on disk and the text that belongs in it. */
+export interface ComposedSkill {
+	path: string;
+	text: string;
 }
+
+/** Composes every skill file from the current guidance, writing nothing. */
+export function composeSkills(): ComposedSkill[] {
+	return SKILLS.map(({ name, description, sections }) => ({
+		path: join(SKILLS_DIR, name, 'SKILL.md'),
+		text: skillFile(name, description, sections),
+	}));
+}
+
+/** Writes the composed skills to disk. Runs only when this module is the entry point. */
+function writeSkills(): void {
+	for (const { path, text } of composeSkills()) {
+		mkdirSync(dirname(path), { recursive: true });
+		writeFileSync(path, text);
+		process.stdout.write(`wrote ${path}\n`);
+	}
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) writeSkills();
