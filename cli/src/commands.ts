@@ -125,12 +125,6 @@ export async function runSchema(args: Args): Promise<void> {
 			// Stamp every schema output with the version and time it was generated, so an agent
 			// can tell a fresh run from a stale file an older version left on disk.
 			const stamp: SchemaStamp = { by: 'snipcode', version: __SNIPCODE_VERSION__, at: new Date().toISOString() };
-			// The schema command no longer writes a full-page screenshot: the tokens and layout
-			// blueprint are the whole reference, and the extension proved the first-generation
-			// schema needs no visual iteration. Re-enable by uncommenting these two lines and the
-			// `screenshot` field below if a visual reference is wanted again.
-			// const shot = await driver.fullScreenshot();
-			// const shotPath = writeOut(outDir, 'screenshot.png', shot);
 			const jsonPath = writeOut(outDir, 'schema.json', JSON.stringify({ generated: stamp, ...result.schema }, null, 2));
 			const mdPath = writeOut(outDir, 'schema.md', renderSchemaMd(result, stamp));
 			emit({
@@ -138,7 +132,6 @@ export async function runSchema(args: Args): Promise<void> {
 				generated: stamp,
 				schema: jsonPath,
 				markdown: mdPath,
-				// screenshot: shotPath,
 				// Echo every measured block, not just tokens and sections: an agent that reads
 				// the payload instead of the files should see the same schema the files carry.
 				tokens: result.schema.tokens,

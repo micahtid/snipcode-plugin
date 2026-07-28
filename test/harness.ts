@@ -22,7 +22,6 @@ const MIME: Record<string, string> = { '.html': 'text/html', '.css': 'text/css',
 export interface CliResult {
 	code: number;
 	// Parsed cli output is arbitrary JSON; `any` keeps the assertions readable.
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	json: any;
 	raw: string;
 }
@@ -32,7 +31,6 @@ export function runCli(args: string[]): Promise<CliResult> {
 	return new Promise((resolve) => {
 		execFile(process.execPath, [CLI, ...args], { maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
 			const code = err && typeof (err as { code?: unknown }).code === 'number' ? (err as { code: number }).code : 0;
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			let json: any = {};
 			try {
 				json = JSON.parse(stdout);
