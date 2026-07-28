@@ -48,25 +48,42 @@ ${REDESIGN}
 ${RULES}
 `;
 
-/** Parse argv (after the command + url) into the flag bag. Value flags consume the next token. */
-function parseFlags(rest: string[]): Partial<Args> {
+/** The flags that take a value, mapped to the Args field each one fills. */
+const VALUE_FLAGS: Record<string, keyof Args> = {
+	'--selector': 'selector',
+	'--format': 'format',
+	'--out': 'out',
+	'--expect-text': 'expectText',
+	'--expect-rect': 'expectRect',
+};
+
+/**
+ * Parse argv (after the command and url) into the flag bag. Value flags consume the next token.
+ *
+ * An unrecognized flag is an error, not a shrug. It used to be ignored so that a future flag
+ * would not hard-fail an older cli, but the cli and the skill ship in one package and upgrade
+ * together, so there is no such pairing. What it actually did was turn `--selctor "#login"`
+ * into a confusing MISSING_SELECTOR, and a mistyped `--format` into a silent default.
+ */
+function parseFlags(rest: string[]): { args: Partial<Args> } | { error: string } {
 	const args: Partial<Args> = {};
 	for (let i = 0; i < rest.length; i++) {
-		const flag = rest[i];
-		const value = rest[i + 1];
-		switch (flag) {
-			case '--selector': if (value !== undefined) { args.selector = value; i++; } break;
-			case '--format': if (value !== undefined) { args.format = value; i++; } break;
-			case '--out': if (value !== undefined) { args.out = value; i++; } break;
-			case '--expect-text': if (value !== undefined) { args.expectText = value; i++; } break;
-			case '--expect-rect': if (value !== undefined) { args.expectRect = value; i++; } break;
-			case '--headed': args.headed = true; break;
-			default:
-				// Unknown flags are ignored so future flags do not hard-fail an older cli.
-				break;
+		const flag = rest[i]!;
+		const field = VALUE_FLAGS[flag];
+		if (field) {
+			const value = rest[i + 1];
+			if (value === undefined) return { error: `${flag} needs a value` };
+			args[field] = value as never;
+			i++;
+			continue;
 		}
+		if (flag === '--headed') {
+			args.headed = true;
+			continue;
+		}
+		return { error: `unknown flag "${flag}"; expected one of: ${[...Object.keys(VALUE_FLAGS), '--headed'].join(', ')}` };
 	}
-	return args;
+	return { args };
 }
 
 async function main(): Promise<void> {
@@ -86,7 +103,12 @@ async function main(): Promise<void> {
 		emitError('MISSING_URL', `${command} requires a <url> as its first argument`);
 		return;
 	}
-	const args: Args = { url, ...parseFlags(argv.slice(2)) };
+	const parsed = parseFlags(argv.slice(2));
+	if ('error' in parsed) {
+		emitError('UNKNOWN_FLAG', parsed.error);
+		return;
+	}
+	const args: Args = { url, ...parsed.args };
 
 	switch (command) {
 		case 'candidates': await runCandidates(args); break;

@@ -254,6 +254,22 @@ async function main(): Promise<void> {
 		const badFmt = await runCli(['extract', sample, '--selector', '#login', '--format', 'crayon', '--out', join(OUT_BASE, 'badfmt')]);
 		check('unknown format fails BAD_FORMAT', badFmt.code === 1 && (badFmt.json.error?.code) === 'BAD_FORMAT');
 
+		// A typo used to be ignored, so `--selctor` surfaced as a confusing MISSING_SELECTOR and
+		// a mistyped flag with a value silently ran the default. The cli and the skill ship in
+		// one package and upgrade together, so there is no older-cli case to stay quiet for.
+		const typo = await runCli(['extract', sample, '--selctor', '#login', '--out', join(OUT_BASE, 'typo')]);
+		check('an unknown flag fails UNKNOWN_FLAG', typo.code === 1 && (typo.json.error?.code) === 'UNKNOWN_FLAG', typo.raw.slice(0, 160));
+		check('the UNKNOWN_FLAG message names the flag', String(typo.json.error?.message ?? '').includes('--selctor'), typo.raw.slice(0, 160));
+
+		// A malformed --expect-rect used to be dropped, leaving the caller believing rect
+		// verification was on while only the text was checked.
+		const badRect = await runCli(['extract', sample, '--selector', '#login', '--expect-rect', '{oops', '--out', join(OUT_BASE, 'badrect')]);
+		check('a malformed --expect-rect fails BAD_EXPECT_RECT', badRect.code === 1 && (badRect.json.error?.code) === 'BAD_EXPECT_RECT', badRect.raw.slice(0, 160));
+		const partialRect = await runCli(['extract', sample, '--selector', '#login', '--expect-rect', '{"x":1,"y":2}', '--out', join(OUT_BASE, 'partialrect')]);
+		check('an --expect-rect missing a side fails too', partialRect.code === 1 && (partialRect.json.error?.code) === 'BAD_EXPECT_RECT', partialRect.raw.slice(0, 160));
+		const goodRect = await runCli(['extract', sample, '--selector', '#login', '--expect-rect', '{"x":0,"y":0,"w":10000,"h":10000}', '--out', join(OUT_BASE, 'goodrect')]);
+		check('a well-formed --expect-rect is still accepted', goodRect.code === 0 || goodRect.json.error?.code === 'PAGE_SHIFTED', goodRect.raw.slice(0, 160));
+
 		// --- extract other formats ---
 		// Each format is asserted on its content, not just its exit code. The three shapes
 		// differ: tailwind moves the styling into the class attribute, jsx wraps the markup in

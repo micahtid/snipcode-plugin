@@ -52,8 +52,13 @@ export async function runExtract(args: Args): Promise<void> {
 		emitError('BAD_FORMAT', (err as Error).message);
 		return;
 	}
+	const expectation = buildExpectation(args);
+	if ('error' in expectation) {
+		emitError('BAD_EXPECT_RECT', expectation.error);
+		return;
+	}
 	const outDir = ensureOutDir(args.out);
-	const expect = buildExpectation(args);
+	const expect = expectation.expect;
 
 	try {
 		await withPage(args.url, { headless: !args.headed }, async (driver) => {
@@ -143,19 +148,37 @@ export async function runSchema(args: Args): Promise<void> {
 	}
 }
 
-/** Build the drift-verification expectation from --expect-text / --expect-rect, when given. */
-function buildExpectation(args: Args): { text?: string; rect?: { x: number; y: number; w: number; h: number } } | undefined {
-	const expect: { text?: string; rect?: { x: number; y: number; w: number; h: number } } = {};
+/** The recorded candidate a snip is verified against, when the caller passed one. */
+interface Expectation {
+	text?: string;
+	rect?: { x: number; y: number; w: number; h: number };
+}
+
+/**
+ * Build the drift-verification expectation from --expect-text / --expect-rect, when given.
+ *
+ * A malformed --expect-rect is an error rather than a value to drop. Dropping it left the
+ * caller believing rect verification was on while only the text was being checked, which is
+ * the one thing a verification flag must never do.
+ */
+function buildExpectation(args: Args): { expect: Expectation | undefined } | { error: string } {
+	const expect: Expectation = {};
 	if (args.expectText) expect.text = args.expectText;
 	if (args.expectRect) {
+		let parsed: unknown;
 		try {
-			const rect = JSON.parse(args.expectRect) as { x: number; y: number; w: number; h: number };
-			if (['x', 'y', 'w', 'h'].every((k) => typeof (rect as Record<string, unknown>)[k] === 'number')) expect.rect = rect;
+			parsed = JSON.parse(args.expectRect);
 		} catch {
-			// A malformed --expect-rect is ignored rather than failing the snip; text still verifies.
+			return { error: `--expect-rect is not valid json: ${args.expectRect}` };
 		}
+		const rect = parsed as Record<string, unknown>;
+		const sides = ['x', 'y', 'w', 'h'];
+		if (!rect || typeof rect !== 'object' || !sides.every((k) => typeof rect[k] === 'number')) {
+			return { error: `--expect-rect needs every one of ${sides.join(', ')} as a number: ${args.expectRect}` };
+		}
+		expect.rect = { x: rect['x'] as number, y: rect['y'] as number, w: rect['w'] as number, h: rect['h'] as number };
 	}
-	return expect.text || expect.rect ? expect : undefined;
+	return { expect: expect.text || expect.rect ? expect : undefined };
 }
 
 /** Map an error to the JSON error contract, saving a screenshot for the blocked case. */
