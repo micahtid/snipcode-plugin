@@ -11,7 +11,7 @@
  * than extracting the wrong node.
  */
 import type { OutputFormat } from './types';
-import { harvestCandidates, type CandidateInventory, type CandidateRect } from './candidates';
+import { harvestCandidates, normalizedText, rectOf, type CandidateInventory, type CandidateRect } from './candidates';
 import { extractElement } from './pipeline';
 import { buildSchema, type SchemaResult } from './schema';
 
@@ -40,22 +40,6 @@ interface ExtractOutcome {
 /** Center-distance tolerance (px) and size tolerance (fraction) for the drift check. */
 const RECT_SHIFT_PX = 40;
 const RECT_SIZE_TOLERANCE = 0.35;
-
-/** Document-absolute rect, folding in scroll, matching what candidates recorded. */
-function rectOf(el: Element): CandidateRect {
-	const r = el.getBoundingClientRect();
-	return {
-		x: Math.round(r.left + window.scrollX),
-		y: Math.round(r.top + window.scrollY),
-		w: Math.round(r.width),
-		h: Math.round(r.height),
-	};
-}
-
-/** Loose text of an element, normalized for comparison against a recorded snippet. */
-function normalizedText(el: Element): string {
-	return ((el as HTMLElement).innerText ?? el.textContent ?? '').replace(/\s+/g, ' ').trim();
-}
 
 /**
  * True when the resolved element is close enough to what the candidate recorded. Text

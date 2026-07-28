@@ -39,8 +39,12 @@ const EFFECT_PROPS = [
 	'mix-blend-mode', 'background-blend-mode', 'box-shadow',
 ];
 
-/** Computed values that mean "default" and need no baking. */
-function isDefault(value: string): boolean {
+/**
+ * Whether an effect value paints nothing, so baking it would add a declaration that changes
+ * nothing. Unlike the animation check this needs no property name: every effect property in
+ * EFFECT_PROPS spells "no effect" the same three ways.
+ */
+function isEffectDefault(value: string): boolean {
 	const v = value.trim();
 	return v === '' || v === 'none' || v === 'normal';
 }
@@ -58,7 +62,7 @@ export function apply(captured: Captured): Captured {
 		for (const prop of EFFECT_PROPS) {
 			if (baked.has(prop)) continue;
 			const raw = computed.getPropertyValue(prop);
-			if (isDefault(raw)) continue;
+			if (isEffectDefault(raw)) continue;
 			const value = raw.includes('url(') ? absolutizeUrls(raw, base) : raw;
 			baked.set(prop, value);
 			try {

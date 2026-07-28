@@ -23,6 +23,7 @@
  * back to computed.
  */
 import type { Captured, CssRule } from '../types';
+import { subtreeElements } from './tree';
 
 /** One authored declaration with its cascade rank, before merge. */
 interface RankedDecl {
@@ -233,17 +234,6 @@ export function isInjected(el: Element): boolean {
 		return true;
 	}
 	return false;
-}
-
-/** Depth-first list of element nodes in the subtree, root first, in document order. */
-export function subtreeElements(root: Element): Element[] {
-	const out: Element[] = [];
-	const walk = (el: Element): void => {
-		out.push(el);
-		for (const child of Array.from(el.children)) walk(child);
-	};
-	walk(root);
-	return out;
 }
 
 /**

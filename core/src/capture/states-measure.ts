@@ -42,7 +42,8 @@
  * shim removed, and tags removed, even on error.
  */
 import type { Captured, MeasuredAffected, MeasuredState, MeasuredStateDecl } from '../types';
-import { mediaApplies, subtreeElements } from '../reconcile/match';
+import { mediaApplies } from '../reconcile/match';
+import { subtreeElements } from '../reconcile/tree';
 import { containsDynamicPseudo, findTriggerBearers, safeMatches } from '../reconcile/selector';
 import { getHost } from '../host';
 

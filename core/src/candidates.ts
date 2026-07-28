@@ -74,7 +74,7 @@ const MIN_REPEAT = 3;
 const TEXT_CAP = 80;
 
 /** Document-absolute rect for an element, folding in the current scroll offset. */
-function rectOf(el: Element): CandidateRect {
+export function rectOf(el: Element): CandidateRect {
 	const r = el.getBoundingClientRect();
 	return {
 		x: Math.round(r.left + window.scrollX),
@@ -82,6 +82,11 @@ function rectOf(el: Element): CandidateRect {
 		w: Math.round(r.width),
 		h: Math.round(r.height),
 	};
+}
+
+/** Loose text of an element, normalized for comparison against a recorded snippet. */
+export function normalizedText(el: Element): string {
+	return ((el as HTMLElement).innerText ?? el.textContent ?? '').replace(/s+/g, ' ').trim();
 }
 
 /** Trimmed, capped visible text, or null when the element carries none worth recording. */

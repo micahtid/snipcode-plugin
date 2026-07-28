@@ -11,6 +11,7 @@ import { emit, emitError, ensureOutDir, writeOut, dataUrlToBuffer, normalizeForm
 import { renderSchemaMd, type SchemaStamp } from './schema-md';
 import { INLINE } from '../../instructions/guidance';
 import type { SchemaResult } from '../../core/src/schema';
+import type { AssetFile } from '../../core/src/types';
 
 /** Parsed command-line arguments, already split from argv. */
 export interface Args {
@@ -21,14 +22,6 @@ export interface Args {
 	expectText?: string;
 	expectRect?: string;
 	headed?: boolean;
-}
-
-/** One split-out asset file the pipeline lifted from the artifact. */
-interface AssetFile {
-	name: string;
-	language: 'html' | 'svg' | 'image' | 'json' | 'font';
-	text?: string;
-	dataUrl?: string;
 }
 
 /** candidates: inventory the page and save a full-page screenshot. */

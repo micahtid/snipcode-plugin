@@ -43,8 +43,11 @@ const ANIM_CONTEXT_PROPS = [
 	'animation', 'transition', 'transition-timing-function', 'animation-timing-function', 'will-change',
 ];
 
-/** Computed values that mean "default" and need no baking. */
-function isDefault(prop: string, value: string): boolean {
+/**
+ * Whether an animation-context value is the property's resting default, so baking it would
+ * add a declaration that changes nothing.
+ */
+function isAnimationDefault(prop: string, value: string): boolean {
 	const v = value.trim();
 	if (v === '' || v === 'none' || v === 'auto' || v === 'normal') return true;
 	if (prop === 'perspective' && v === 'none') return true;
@@ -68,7 +71,7 @@ export function apply(captured: Captured): Captured {
 		for (const prop of ANIM_CONTEXT_PROPS) {
 			if (baked.has(prop)) continue;
 			const value = computed.getPropertyValue(prop);
-			if (isDefault(prop, value)) continue;
+			if (isAnimationDefault(prop, value)) continue;
 			baked.set(prop, value);
 			try {
 				(clone as HTMLElement).style.setProperty(prop, value);

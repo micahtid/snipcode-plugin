@@ -37,6 +37,7 @@
  */
 import type { Captured } from '../types';
 import { authoredCascade } from './match';
+import { subtreeElements } from './tree';
 
 /**
  * Runs reconcile: bakes every element's authored cascade onto the detached
@@ -259,13 +260,3 @@ function writeInline(clone: Element, baked: Map<string, string>): void {
 	}
 }
 
-/** Depth-first element list, root first, must match match.ts traversal order. */
-function subtreeElements(root: Element): Element[] {
-	const out: Element[] = [];
-	const walk = (el: Element): void => {
-		out.push(el);
-		for (const child of Array.from(el.children)) walk(child);
-	};
-	walk(root);
-	return out;
-}

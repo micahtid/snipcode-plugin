@@ -11,7 +11,7 @@
  * runCoreTransform and minimizeArtifact are copied from content/index.ts so the
  * phase order has one authoritative home shared with the extension.
  */
-import type { Captured, OutputFormat } from './types';
+import type { AssetFile, Captured, OutputFormat } from './types';
 import { detectBuilder } from './capture/gate';
 import { capture } from './capture';
 import { reconcile } from './reconcile/bake';
@@ -57,7 +57,6 @@ import { assembleHtmlDocument, formatCss, isHtmlShaped } from './convert/format'
 import { splitAssets } from './convert/assets';
 
 /** The lifted-asset entries splitAssets returns, derived so we need not re-export the type. */
-type AssetFile = ReturnType<typeof splitAssets>[number];
 
 /**
  * The reconcile-phase feature handlers, in apply order. Each handles one css/html
