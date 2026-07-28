@@ -1,0 +1,235 @@
+{
+  "url": "http://127.0.0.1:PORT/sample.html",
+  "viewport": {
+    "width": 1440,
+    "height": 900,
+    "devicePixelRatio": 1
+  },
+  "landmarks": [
+    {
+      "role": "banner",
+      "selector": "header",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 1440,
+        "h": 68
+      }
+    },
+    {
+      "role": "nav",
+      "selector": "nav",
+      "rect": {
+        "x": 601,
+        "y": 24,
+        "w": 202,
+        "h": 19
+      }
+    },
+    {
+      "role": "main",
+      "selector": "main.cards",
+      "rect": {
+        "x": 180,
+        "y": 323,
+        "w": 1080,
+        "h": 101
+      }
+    },
+    {
+      "role": "footer",
+      "selector": "footer",
+      "rect": {
+        "x": 0,
+        "y": 472,
+        "w": 1440,
+        "h": 84
+      }
+    }
+  ],
+  "candidates": [
+    {
+      "id": "c1",
+      "selector": "header",
+      "shortSelector": "header",
+      "tag": "header",
+      "role": "section",
+      "text": "Acme Features Pricing Docs Log In",
+      "ariaLabel": null,
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 1440,
+        "h": 68
+      }
+    },
+    {
+      "id": "c2",
+      "selector": "nav",
+      "shortSelector": "nav",
+      "tag": "nav",
+      "role": "nav",
+      "text": "Features Pricing Docs",
+      "ariaLabel": null,
+      "rect": {
+        "x": 601,
+        "y": 24,
+        "w": 202,
+        "h": 19
+      }
+    },
+    {
+      "id": "c3",
+      "selector": "a:nth-of-type(1)",
+      "shortSelector": "a:nth-of-type(1)",
+      "tag": "a",
+      "role": "link",
+      "text": "Features",
+      "ariaLabel": null,
+      "rect": {
+        "x": 601,
+        "y": 24,
+        "w": 69,
+        "h": 19
+      },
+      "repeat": 3
+    },
+    {
+      "id": "c4",
+      "selector": "#login",
+      "shortSelector": "#login",
+      "tag": "button",
+      "role": "button",
+      "text": "Log In",
+      "ariaLabel": null,
+      "rect": {
+        "x": 1328,
+        "y": 16,
+        "w": 80,
+        "h": 35
+      }
+    },
+    {
+      "id": "c5",
+      "selector": "section.hero",
+      "shortSelector": "section.hero",
+      "tag": "section",
+      "role": "card",
+      "text": "Build faster with Acme The toolkit teams reach for.",
+      "ariaLabel": null,
+      "rect": {
+        "x": 0,
+        "y": 68,
+        "w": 1440,
+        "h": 207
+      }
+    },
+    {
+      "id": "c6",
+      "selector": "h1",
+      "shortSelector": "h1",
+      "tag": "h1",
+      "role": "heading",
+      "text": "Build faster with Acme",
+      "ariaLabel": null,
+      "rect": {
+        "x": 32,
+        "y": 132,
+        "w": 1376,
+        "h": 46
+      }
+    },
+    {
+      "id": "c7",
+      "selector": "main.cards",
+      "shortSelector": "main.cards",
+      "tag": "main",
+      "role": "section",
+      "text": "Fast Ship in minutes, not weeks. Simple An API you learn once. Reliable Battle-t…",
+      "ariaLabel": null,
+      "rect": {
+        "x": 180,
+        "y": 323,
+        "w": 1080,
+        "h": 101
+      }
+    },
+    {
+      "id": "c8",
+      "selector": "article:nth-of-type(1)",
+      "shortSelector": "article:nth-of-type(1)",
+      "tag": "article",
+      "role": "card",
+      "text": "Fast Ship in minutes, not weeks.",
+      "ariaLabel": null,
+      "rect": {
+        "x": 212,
+        "y": 323,
+        "w": 323,
+        "h": 101
+      },
+      "repeat": 3
+    },
+    {
+      "id": "c9",
+      "selector": "article:nth-of-type(1) > h3",
+      "shortSelector": "article:nth-of-type(1) > h3",
+      "tag": "h3",
+      "role": "heading",
+      "text": "Fast",
+      "ariaLabel": null,
+      "rect": {
+        "x": 237,
+        "y": 348,
+        "w": 273,
+        "h": 24
+      }
+    },
+    {
+      "id": "c10",
+      "selector": "article:nth-of-type(2) > h3",
+      "shortSelector": "article:nth-of-type(2) > h3",
+      "tag": "h3",
+      "role": "heading",
+      "text": "Simple",
+      "ariaLabel": null,
+      "rect": {
+        "x": 584,
+        "y": 348,
+        "w": 273,
+        "h": 24
+      }
+    },
+    {
+      "id": "c11",
+      "selector": "article:nth-of-type(3) > h3",
+      "shortSelector": "article:nth-of-type(3) > h3",
+      "tag": "h3",
+      "role": "heading",
+      "text": "Reliable",
+      "ariaLabel": null,
+      "rect": {
+        "x": 930,
+        "y": 348,
+        "w": 273,
+        "h": 24
+      }
+    },
+    {
+      "id": "c12",
+      "selector": "footer",
+      "shortSelector": "footer",
+      "tag": "footer",
+      "role": "section",
+      "text": "© 2026 Acme, Inc.",
+      "ariaLabel": null,
+      "rect": {
+        "x": 0,
+        "y": 472,
+        "w": 1440,
+        "h": 84
+      }
+    }
+  ],
+  "guidance": "Pick a target, then: snipcode extract <url> --selector \"<selector>\" --expect-text \"<text>\". See CANDIDATES."
+}

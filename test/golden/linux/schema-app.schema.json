@@ -1,0 +1,350 @@
+{
+  "generated": {
+    "by": "snipcode",
+    "version": "<VERSION>",
+    "at": "<TIME>"
+  },
+  "meta": {
+    "url": "http://127.0.0.1:PORT/app.html",
+    "title": "Meridian",
+    "viewport": {
+      "w": 1440,
+      "h": 900
+    }
+  },
+  "tokens": {
+    "colors": [
+      {
+        "value": "#dddddd",
+        "contexts": [
+          "text"
+        ],
+        "count": 1381,
+        "usage": {
+          "text": 1381
+        }
+      },
+      {
+        "value": "#333333",
+        "contexts": [
+          "text"
+        ],
+        "count": 49,
+        "usage": {
+          "text": 48,
+          "background": 1
+        }
+      },
+      {
+        "value": "#666666",
+        "contexts": [
+          "text"
+        ],
+        "count": 7,
+        "usage": {
+          "text": 7
+        }
+      },
+      {
+        "value": "#999999",
+        "contexts": [
+          "text"
+        ],
+        "count": 5,
+        "usage": {
+          "text": 5
+        }
+      },
+      {
+        "value": "#ffffff",
+        "contexts": [
+          "background",
+          "text"
+        ],
+        "count": 3,
+        "usage": {
+          "background": 2,
+          "text": 1
+        }
+      },
+      {
+        "value": "#0b7a5a",
+        "contexts": [
+          "text",
+          "background"
+        ],
+        "count": 2,
+        "usage": {
+          "text": 1,
+          "background": 1
+        }
+      },
+      {
+        "value": "#eeeef2",
+        "contexts": [
+          "background"
+        ],
+        "count": 2,
+        "usage": {
+          "background": 2
+        }
+      },
+      {
+        "value": "#7b3fa0",
+        "contexts": [
+          "background",
+          "text"
+        ],
+        "count": 2,
+        "usage": {
+          "background": 1,
+          "text": 1
+        }
+      }
+    ],
+    "fonts": [
+      {
+        "family": "system-ui",
+        "sizes": [
+          "11px",
+          "13px",
+          "15px",
+          "20px",
+          "26px",
+          "30px"
+        ],
+        "weights": [
+          400,
+          700
+        ],
+        "usage": "heading"
+      },
+      {
+        "family": "Arial",
+        "sizes": [
+          "13px"
+        ],
+        "weights": [
+          400
+        ],
+        "usage": "ui"
+      }
+    ],
+    "spacing": [
+      "6px",
+      "8px",
+      "10px",
+      "12px",
+      "13px",
+      "14px",
+      "16px",
+      "20px",
+      "22px",
+      "24px",
+      "32px",
+      "40px",
+      "56px",
+      "72px"
+    ],
+    "radii": [
+      "32px",
+      "9999px"
+    ],
+    "shadows": [],
+    "scaleAnalysis": {
+      "ratio": 1.5,
+      "name": "Perfect Fifth",
+      "base": 13,
+      "deviation": 0.138
+    }
+  },
+  "states": [],
+  "sections": [
+    {
+      "type": "nav",
+      "tag": "div",
+      "layout": "split",
+      "layoutMeasured": true,
+      "alignment": "left",
+      "background": "#ffffff",
+      "elements": [],
+      "gridColumns": 2,
+      "columnRatio": "29/71",
+      "gap": "24px",
+      "padding": "14px 32px 14px 32px"
+    },
+    {
+      "type": "hero",
+      "tag": "section",
+      "layout": "centered-stack",
+      "layoutMeasured": true,
+      "alignment": "center",
+      "background": "#f7f7f9",
+      "elements": [
+        "heading",
+        "text"
+      ],
+      "maxWidth": "760px",
+      "padding": "72px 32px 72px 32px"
+    },
+    {
+      "type": "stats",
+      "tag": "section",
+      "layout": "grid-3",
+      "layoutMeasured": true,
+      "alignment": "left",
+      "background": "#ffffff",
+      "elements": [],
+      "gridColumns": 3,
+      "items": {
+        "count": 3,
+        "width": 299,
+        "height": 50,
+        "shape": []
+      },
+      "maxWidth": "960px",
+      "gap": "32px",
+      "padding": "56px 32px 56px 32px"
+    },
+    {
+      "type": "stats",
+      "tag": "section",
+      "layout": "grid-3",
+      "layoutMeasured": true,
+      "alignment": "left",
+      "background": "#ffffff",
+      "elements": [],
+      "gridColumns": 3,
+      "items": {
+        "count": 3,
+        "width": 299,
+        "height": 52,
+        "shape": []
+      },
+      "maxWidth": "960px",
+      "gap": "32px",
+      "padding": "56px 32px 56px 32px"
+    },
+    {
+      "type": "content",
+      "tag": "section",
+      "layout": "single-column",
+      "layoutMeasured": true,
+      "alignment": "left",
+      "background": "#ffffff",
+      "elements": [
+        "text"
+      ],
+      "padding": "56px 32px 56px 32px"
+    },
+    {
+      "type": "content",
+      "tag": "section",
+      "layout": "single-column",
+      "layoutMeasured": true,
+      "alignment": "left",
+      "background": "#ffffff",
+      "elements": [
+        "badge",
+        "button"
+      ],
+      "padding": "56px 32px 56px 32px"
+    },
+    {
+      "type": "content",
+      "tag": "ul",
+      "layout": "centered-stack",
+      "layoutMeasured": true,
+      "alignment": "center",
+      "background": "#ffffff",
+      "elements": [
+        "list"
+      ],
+      "items": {
+        "count": 6,
+        "width": 1376,
+        "height": 27,
+        "shape": []
+      },
+      "padding": "40px 32px 40px 32px"
+    },
+    {
+      "type": "content",
+      "tag": "section",
+      "layout": "single-column",
+      "layoutMeasured": true,
+      "alignment": "left",
+      "background": "#ffffff",
+      "elements": [],
+      "padding": "56px 32px 56px 32px"
+    },
+    {
+      "type": "content",
+      "tag": "section",
+      "layout": "centered-stack",
+      "layoutMeasured": true,
+      "alignment": "center",
+      "background": "#ffffff",
+      "elements": [
+        "subheading",
+        "text"
+      ],
+      "padding": "56px 32px 56px 32px"
+    }
+  ],
+  "contentPatterns": [
+    {
+      "pattern": "heading+text",
+      "occurrences": 2,
+      "elements": [
+        "heading",
+        "text"
+      ]
+    }
+  ],
+  "buttons": [
+    {
+      "variant": "primary",
+      "bg": "#333333",
+      "color": "#ffffff",
+      "borderRadius": "9999px",
+      "padding": "10px 22px 10px 22px",
+      "fontWeight": 400,
+      "fontSize": "13px",
+      "border": "none",
+      "shadow": "",
+      "hover": {},
+      "active": {},
+      "styleTag": "flat"
+    }
+  ],
+  "cards": [],
+  "nav": {
+    "tag": "div",
+    "bg": "#ffffff",
+    "position": "sticky",
+    "height": "43px",
+    "blur": false,
+    "border": "none",
+    "layout": "unknown",
+    "linkCount": 3
+  },
+  "decorative": {
+    "hasBlobs": false,
+    "illustrationStyle": "none",
+    "backgroundEffects": [
+      {
+        "effect": "gradient",
+        "section": 8
+      }
+    ],
+    "accentTreatments": [
+      "pill-badges"
+    ]
+  },
+  "responsive": {
+    "breakpoints": [],
+    "mobileNavStyle": "unknown",
+    "gridCollapseBehavior": "unknown"
+  }
+}

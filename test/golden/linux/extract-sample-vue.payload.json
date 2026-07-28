@@ -1,0 +1,11 @@
+{
+  "url": "http://127.0.0.1:PORT/sample.html",
+  "selector": "#login",
+  "format": "vue",
+  "builderDetected": false,
+  "assets": [],
+  "html": "<template>\n\t<button id=\"login\" class=\"login\" type=\"submit\" data-snip-state=\"0\">Log In<style data-snip-synth=\"\">[data-snip-state=\"0\"]:hover {\n\t\tbackground-color: rgb(30, 78, 140) !important;\n\t}\n\t[data-snip-state=\"0\"] {\n\t\ttransition: all 0.2s ease 0s !important;\n\t}</style></button>\n</template>\n\n<style scoped>\n.login {\n\tcolor: #ffffff;\n\tborder-width: medium;\n\tborder-style: none;\n\tborder-color: currentcolor;\n\tpadding: 0.625rem 1.25rem;\n\tfont-weight: 600;\n\tcursor: pointer;\n\ttransition: background 0.2s;\n\tvisibility: visible;\n\twidth: 4.999025rem;\n\theight: 2.1875rem;\n\tbackground-color: #2b6cb0;\n\tdisplay: block;\n\tborder-radius: 0.625rem;\n\tborder-end-end-radius: 0.625rem;\n\tborder-end-start-radius: 0.625rem;\n\tborder-start-end-radius: 0.625rem;\n\tborder-start-start-radius: 0.625rem;\n\tmargin: 0;\n}\n</style>",
+  "css": ".login { color: rgb(255, 255, 255); border-width: medium; border-style: none; border-color: currentcolor; padding: 0.625rem 1.25rem; font-weight: 600; cursor: pointer; transition: background 0.2s; visibility: visible; width: 4.99902rem; height: 2.1875rem; background-color: rgb(43, 108, 176); display: block; border-radius: 0.625rem; border-end-end-radius: 0.625rem; border-end-start-radius: 0.625rem; border-start-end-radius: 0.625rem; border-start-start-radius: 0.625rem; margin: 0px; }",
+  "warnings": [],
+  "guidance": "Output is deterministic and pixel-correct; your job is semantic naming and tags. See NAMING. If builderDetected, rebuild from element.png. See EXTRACT."
+}

@@ -1,0 +1,11 @@
+{
+  "url": "http://127.0.0.1:PORT/sample.html",
+  "selector": "#login",
+  "format": "tailwind",
+  "builderDetected": false,
+  "assets": [],
+  "html": "<button id=\"login\" class=\"text-white [border-top-width:medium] [border-right-width:medium] [border-bottom-width:medium] [border-left-width:medium] [border-top-style:none] [border-right-style:none] [border-bottom-style:none] [border-left-style:none] [border-top-color:currentcolor] [border-right-color:currentcolor] [border-bottom-color:currentcolor] [border-left-color:currentcolor] pt-[0.625rem] pr-[1.25rem] pb-[0.625rem] pl-[1.25rem] font-semibold [cursor:pointer] [transition-behavior:normal] [transition-duration:0.2s] [transition-timing-function:ease] [transition-delay:0s] [transition-property:background] [visibility:visible] w-[4.999025rem] h-[2.1875rem] bg-[#2b6cb0] block [border-bottom-left-radius:0.625rem] [border-bottom-right-radius:0.625rem] [border-end-end-radius:0.625rem] [border-end-start-radius:0.625rem] [border-start-end-radius:0.625rem] [border-start-start-radius:0.625rem] [border-top-left-radius:0.625rem] [border-top-right-radius:0.625rem] mt-[0] mr-[0] mb-[0] ml-[0]\" type=\"submit\">Log In</button>",
+  "css": ".text-white:hover {\n\tbackground-color: rgb(30, 78, 140) !important;\n}\n.text-white {\n\ttransition: all 0.2s ease 0s !important;\n}",
+  "warnings": [],
+  "guidance": "Output is deterministic and pixel-correct; your job is semantic naming and tags. See NAMING. If builderDetected, rebuild from element.png. See EXTRACT."
+}
