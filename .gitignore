@@ -5,5 +5,7 @@ test/.out/
 test/.dbg*/
 test/.fidelity/
 test/.parity/
+test/.golden-work/
+test/.probe/
 *.log
 .DS_Store
