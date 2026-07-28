@@ -28,7 +28,7 @@
  * What lifts is faithful. What would not stays put.
  */
 import type { AssetFile } from '../types';
-import { escapeHtmlAttr } from './html';
+import { escapeHtmlAttr } from './document';
 import { parseDeclarations } from '../utils/css-split';
 
 /** The color an icon falls back to when nothing in its ancestry sets one. */

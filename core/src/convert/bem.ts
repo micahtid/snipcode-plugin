@@ -1,38 +1,29 @@
 /**
- * convert/bem.ts: inline styles -> bem classes + css/scss
+ * convert/bem.ts: inline styles to bem classes plus a stylesheet.
  *
- * Pipeline position: convert
- * Reads from Captured: clone, inline-styled
- * Writes to Captured: nothing. It deep-copies the clone, so the canonical clone is untouched.
+ * Runs during the convert phase, on a deep copy of the clone, so the canonical clone is
+ * untouched and every format stays derivable from one capture.
  *
- * A format transform of the baked result.
- *
- * Why this exists: the bem-css and bem-scss formats want semantic
- * classes and a separate stylesheet instead of inline styles. This dedups
- * identical declaration sets into shared bem-named classes (block + block__element)
- * and emits either a flat css ruleset or a nested scss block. Like the other
- * emitters it works on a copy of the clone so all 7 formats stay derivable from
- * one capture. Ported from v1 css-to-bem.ts, the inline-to-class dedup, rewritten
- * and dropping the per-case branches.
- *
- * Beyond identical-set dedup it factors a shared base class out of near-identical rules,
- * so a family of button variants ships its common reset once. That pass is
- * convert/bem-factor.ts, and the class naming both passes share is convert/bem-classes.ts.
+ * Serves the html and bem-css formats, which want semantic classes and a separate
+ * stylesheet rather than inline styles. Identical declaration sets dedupe into shared
+ * bem-named classes (block plus block__element). Beyond that it factors a shared base
+ * class out of near-identical rules, so a family of button variants ships its common
+ * reset once; that pass is convert/bem-factor.ts, and the naming both passes share is
+ * convert/bem-classes.ts.
  */
 import type { Captured } from '../types';
 import { snapValue } from './snap';
 import { parseDeclarations, stripImportant } from '../utils/css-split';
-import { atRulesCss, type HtmlOutput } from './html';
+import { atRulesCss, type HtmlOutput } from './document';
 import { firstClassOrTag, sanitize, uniqueElementClass, type ClassRule } from './bem-classes';
 import { applyBaseClasses, factorBaseClasses } from './bem-factor';
 
 /**
- * Emits the snip as bem-classed markup plus a css or scss stylesheet.
+ * Emits the snip as bem-classed markup plus a flat css stylesheet.
  *
  * @param captured - read-only, so a deep copy of the clone is transformed
- * @param scss - true for nested scss output, false for flat css
  */
-export function emitBem(captured: Captured, scss: boolean): HtmlOutput {
+export function emitBem(captured: Captured): HtmlOutput {
 	const work = captured.clone.cloneNode(true) as Element;
 	const block = sanitize(firstClassOrTag(work)) || 'snip';
 	const elements = [work, ...Array.from(work.querySelectorAll('*'))] as HTMLElement[];
@@ -66,7 +57,7 @@ export function emitBem(captured: Captured, scss: boolean): HtmlOutput {
 	const { rules: finalRules, renames } = factorBaseClasses(block, rules, tagCounters);
 	applyBaseClasses(elements, renames);
 
-	const css = (scss ? scssText(block, finalRules) : cssText(finalRules)) + atRulesAppendix(captured);
+	const css = cssText(finalRules) + atRulesAppendix(captured);
 	return { html: work.outerHTML, css };
 }
 
@@ -118,21 +109,6 @@ function declKey(decls: Array<[string, string]>): string {
 /** Flat css: one rule per generated class. */
 function cssText(rules: ClassRule[]): string {
 	return rules.map((r) => `.${r.className} {\n${declLines(r.decls)}\n}`).join('\n\n');
-}
-
-/**
- * Nested scss: the block rule with its element rules nested via `&__...`. Bem
- * names are flat regardless of dom depth, so every element rule nests one level
- * under the block.
- */
-function scssText(block: string, rules: ClassRule[]): string {
-	const root = rules.find((r) => r.isRoot);
-	const children = rules.filter((r) => !r.isRoot);
-	const inner = children
-		.map((r) => `\t&__${r.className.slice(block.length + 2)} {\n${declLines(r.decls, 2)}\n\t}`)
-		.join('\n');
-	const rootDecls = root ? declLines(root.decls, 1) : '';
-	return `.${block} {\n${rootDecls}${rootDecls && inner ? '\n' : ''}${inner}\n}`;
 }
 
 /** Serialize declarations as indented `prop: value;` lines. */

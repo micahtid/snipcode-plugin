@@ -20,7 +20,7 @@
 import type { Captured } from '../types';
 import { snapValue } from './snap';
 import { matchColor } from './tw-palette';
-import { atRulesCss, type HtmlOutput } from './html';
+import { atRulesCss, type HtmlOutput } from './document';
 
 /**
  * Emits the snip as tailwind-classed markup plus the shared @font-face/@keyframes

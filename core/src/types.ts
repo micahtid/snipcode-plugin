@@ -140,7 +140,7 @@ export interface Keyframes {
 }
 
 /** The output formats the convert phase can emit. */
-export type OutputFormat = 'tailwind' | 'bem-css' | 'bem-scss' | 'jsx-tailwind' | 'jsx-css' | 'vue' | 'html';
+export type OutputFormat = 'tailwind' | 'bem-css' | 'jsx-tailwind' | 'vue' | 'html';
 
 /**
  * One file in a split snip result: the index.html document plus the inline svgs,

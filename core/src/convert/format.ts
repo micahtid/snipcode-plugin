@@ -28,10 +28,9 @@
  *   more readable selector at the same specificity.
  *
  * The result is the readable form for html-shaped formats. The jsx and vue formats are
- * already indented by their own emitters and are skipped. See isHtmlShaped. The markup
- * walk mirrors convert/jsx.ts's. The markup is parsed once and every step mutates that one
- * document, so like convert/clean.ts the whole pass returns its input unchanged if the
- * markup will not parse.
+ * already indented by their own emitters and are skipped. See isHtmlShaped. The markup is
+ * parsed once and every step mutates that one document, so like convert/clean.ts the whole
+ * pass returns its input unchanged if the markup will not parse.
  *
  * Deciding what is reflowable needs each element's effective display, and white-space.
  * The html format carries those on the inline style. The class-based formats such as bem-css
@@ -42,7 +41,7 @@
  */
 import type { OutputFormat } from '../types';
 import { isInjected } from '../reconcile/match';
-import { composeDocument, escapeHtmlAttr } from './html';
+import { composeDocument, escapeHtmlAttr } from './document';
 import { splitTopLevel } from '../utils/css-split';
 
 /** Html5 void elements: no closing tag, no children. */
@@ -70,7 +69,7 @@ const WS_SENSITIVE = new Set(['pre', 'textarea', 'code', 'script', 'style', 'svg
 const PRESERVED_WS = new Set(['pre', 'pre-wrap', 'pre-line', 'break-spaces']);
 
 /** The html-shaped output formats the formatter applies to, since jsx and vue self-indent. */
-const HTML_SHAPED = new Set<OutputFormat>(['html', 'tailwind', 'bem-css', 'bem-scss']);
+const HTML_SHAPED = new Set<OutputFormat>(['html', 'tailwind', 'bem-css']);
 
 /** A bare css identifier that needs no escaping, so a class is safe to use as a selector verbatim. */
 const BARE_IDENT = /^-?[A-Za-z_][\w-]*$/;
@@ -288,9 +287,8 @@ function declarationLines(block: string, depth: number): string {
  * with no combinator, no `:pseudo`, and no comma, followed by a block. That deliberately skips
  * @font-face/@keyframes, the polish :hover/:focus-visible rules, and comma/descendant
  * selectors, so a class's resting style is never confused with a state rule. The html
- * format, which has no class rules, yields an empty map and falls back to inline styles. The
- * nested bem-scss output never matches the flat pattern and simply yields no info,
- * which is safe, just less indented. The flat bem-css default does match.
+ * format, which has no class rules, yields an empty map and falls back to inline styles.
+ * The flat bem-css rules do match.
  *
  * @param css - the emitted stylesheet
  * @returns a class-name -> resting display/white-space map

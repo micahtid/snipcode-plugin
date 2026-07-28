@@ -37,7 +37,7 @@ import { resolveFonts, appendGenericFallbacks, correctFontMime, mergeIdenticalFa
 import { resolveAnimations } from './resolve/anim';
 import { resolveTransitionTiming } from './resolve/transition';
 import { inlineResources } from './resolve/inline';
-import { emitHtml, composeDocument, type HtmlOutput } from './convert/html';
+import { composeDocument, type HtmlOutput } from './convert/document';
 import { emitTailwind } from './convert/tailwind';
 import { emitBem } from './convert/bem';
 import { emitJsx } from './convert/jsx';
@@ -169,17 +169,11 @@ export function emitFormat(captured: Captured, format: OutputFormat): HtmlOutput
 			return emitTailwind(captured);
 		case 'html':
 		case 'bem-css':
-			return emitBem(captured, false);
-		case 'bem-scss':
-			return emitBem(captured, true);
+			return emitBem(captured);
 		case 'jsx-tailwind':
-			return emitJsx(captured, 'tailwind');
-		case 'jsx-css':
-			return emitJsx(captured, 'css');
+			return emitJsx(captured);
 		case 'vue':
 			return emitVue(captured);
-		default:
-			return emitHtml(captured);
 	}
 }
 
@@ -226,7 +220,7 @@ export async function extractElement(root: Element, screenshot: string, format: 
 	// The bem emitters (including the html format) put generated classes on a private
 	// copy, so the cleaner matches selectors against the emitted markup; tailwind/jsx/vue
 	// keep matching against the inline-styled clone.
-	const classMarkup = format === 'html' || format === 'bem-css' || format === 'bem-scss' ? emitted.html : undefined;
+	const classMarkup = format === 'html' || format === 'bem-css' ? emitted.html : undefined;
 	let css = cleanCss(emitted.css, captured, classMarkup);
 	let html = emitted.html;
 

@@ -1,26 +1,16 @@
 /**
- * convert/jsx.ts: html -> jsx for react
+ * convert/jsx.ts: html to jsx for react.
  *
- * Pipeline position: convert
- * Reads from Captured: clone, via the tailwind and bem emitters
- * Writes to Captured: nothing
+ * Runs during the convert phase, on the tailwind emitter's output.
  *
- * A format transform of the baked result.
- *
- * Why this exists: the jsx-tailwind and jsx-css formats emit a
- * react component. Jsx is not html: attributes rename, so class becomes className, for becomes
- * htmlFor, and hyphenated svg attrs camelCase, void elements self-close, and inline
- * style strings become style objects. This builds on the tailwind emitter
- * for jsx-tailwind or the bem-css emitter for jsx-css, then rewrites their html into
- * jsx and wraps it in a component. Ported from v1 html-to-jsx.ts, rewritten,
- * with its full attribute transform table. Jsx lets any childless element self-close,
- * so there is no need to enumerate html void elements, which also avoids
- * hardcoding a tag list.
+ * Jsx is not html: class becomes className, for becomes htmlFor, hyphenated svg attributes
+ * camelCase, and inline style strings become style objects. This rewrites the markup and
+ * wraps it in a component. Jsx lets any childless element self-close, so no void-tag list
+ * is needed.
  */
 import type { Captured } from '../types';
 import { emitTailwind } from './tailwind';
-import { emitBem } from './bem';
-import type { HtmlOutput } from './html';
+import type { HtmlOutput } from './document';
 import { parseDeclarations } from '../utils/css-split';
 
 /**
@@ -53,10 +43,9 @@ const REACT_ATTR: Record<string, string> = {
  * Emits the snip as a react component plus its stylesheet.
  *
  * @param captured - read-only
- * @param variant - 'tailwind' for className utilities or 'css' for bem classes + css
  */
-export function emitJsx(captured: Captured, variant: 'tailwind' | 'css'): HtmlOutput {
-	const base = variant === 'tailwind' ? emitTailwind(captured) : emitBem(captured, false);
+export function emitJsx(captured: Captured): HtmlOutput {
+	const base = emitTailwind(captured);
 	const doc = new DOMParser().parseFromString(base.html, 'text/html');
 	const root = doc.body.firstElementChild;
 	const jsx = root ? elementToJsx(root, 3) : 'null';

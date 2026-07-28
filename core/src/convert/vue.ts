@@ -15,7 +15,7 @@
  */
 import type { Captured } from '../types';
 import { emitBem } from './bem';
-import type { HtmlOutput } from './html';
+import type { HtmlOutput } from './document';
 
 /**
  * Emits the snip as a vue sfc string (template + scoped style).
@@ -24,7 +24,7 @@ import type { HtmlOutput } from './html';
  * @returns html = the.vue file contents, and css = the stylesheet, which is also embedded
  */
 export function emitVue(captured: Captured): HtmlOutput {
-	const base = emitBem(captured, false);
+	const base = emitBem(captured);
 	const template = indent(base.html, 1);
 	const style = base.css.trim() ? `\n\n<style scoped>\n${base.css}\n</style>` : '';
 	const sfc = `<template>\n${template}\n</template>${style}`;

@@ -1,18 +1,12 @@
 /**
- * convert/html.ts: plain html + css output
+ * convert/document.ts: what every emitter returns, and how it becomes a file.
  *
- * Pipeline position: convert
- * Reads from Captured: the inline-styled clone, fonts, and keyframes
- * Writes to Captured: nothing. It is a pure emitter that returns the output.
+ * Runs during the convert phase. Holds the output type each emitter produces, the
+ * @font-face and @keyframes block they all share, the attribute escaping they all use, and
+ * the composition step that turns markup plus a stylesheet into a standalone document.
  *
- * Emits the reconciled and resolved result.
- *
- * Why this exists: the "html" output format is the baseline self-
- * contained form: the inline-styled markup plus a <style> block carrying the
- * pieces that cannot live inline, @font-face and @keyframes. The :root custom
- * properties were already inlined onto the snip root by resolve/vars.ts. Every
- * other format, whether tailwind, bem, jsx, or vue, is a transform of this same baked
- * clone. composeDocument() is what the grader renders as output.html.
+ * It is deliberately not one of the emitters. Every emitter imports from here, so putting
+ * any format's logic in this file would make the other formats depend on that one.
  */
 import type { Captured } from '../types';
 
@@ -20,16 +14,6 @@ import type { Captured } from '../types';
 export interface HtmlOutput {
 	html: string;
 	css: string;
-}
-
-/**
- * Emits the inline-styled clone as html plus a css block of @font-face and
- * @keyframes, the rules that cannot be expressed inline.
- *
- * @param captured - reads the resolved clone, fonts, keyframes
- */
-export function emitHtml(captured: Captured): HtmlOutput {
-	return { html: captured.clone.outerHTML, css: atRulesCss(captured) };
 }
 
 /**

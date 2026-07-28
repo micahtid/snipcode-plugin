@@ -11,10 +11,9 @@ import { join, resolve } from 'node:path';
 import type { OutputFormat } from '../../core/src/types';
 
 /**
- * The four agent-facing format names and how they map onto the pipeline's formats. The
- * core pipeline supports seven, since it is shared with the chrome extension, but the cli
- * accepts only the four the guidance documents. An undocumented name is untested surface,
- * so it is not accepted here.
+ * The four agent-facing format names and the pipeline format each one selects. The names
+ * differ because `jsx` reads better than `jsx-tailwind` on a command line, and because
+ * `html` and `bem-css` are the same emitter under two names.
  */
 const FORMAT_ALIASES: Record<string, OutputFormat> = {
 	html: 'html',
