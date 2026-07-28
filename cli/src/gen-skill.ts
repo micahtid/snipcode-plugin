@@ -1,11 +1,14 @@
 /**
- * cli/src/gen-skill.ts: generate the Claude Code skill files from instructions/.
+ * cli/src/gen-skill.ts: generate the plugin's committed files from their one source.
  *
- * The DRY rule: agent guidance lives once in instructions/guidance.ts. This composes
- * that guidance into skill/skills/{snip,schema}/SKILL.md, so the skills can never drift
- * from the CLI --help or the JSON guidance fields, which read the same source. The two
- * flows are separate skills so each trigger description stays sharp and each skill loads
- * only its own flow. Run via `npm run gen:skill` whenever the guidance changes.
+ * Agent guidance lives once in instructions/guidance.ts, and this composes it into
+ * skill/skills/{snip,schema}/SKILL.md, so the skills can never drift from the CLI --help or
+ * the JSON guidance fields, which read the same source. The two flows are separate skills so
+ * each trigger description stays sharp and each loads only its own flow.
+ *
+ * The plugin manifest is generated the same way, from package.json, because the version was
+ * hand written in both and the schema stamp exists precisely so an agent can spot a stale
+ * file. Run via `npm run gen:skill` whenever the guidance or package.json changes.
  *
  * Composing and writing are separate. They used to be one step that ran on import, so the
  * only way to see the text the generator would produce was to let it rewrite the tracked
@@ -13,13 +16,14 @@
  * agent reading the skill, with nothing to catch it. `composeSkills` returns the files
  * without touching disk, which is what lets the suite compare them to what is committed.
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { AUTHORITY, SETUP, SNIP_FLOW, SCHEMA_FLOW, CANDIDATES, EXTRACT, SCHEMA, NAMING, REDESIGN, RULES } from '../../instructions/guidance';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SKILLS_DIR = join(ROOT, 'skill', 'skills');
+const MANIFEST_PATH = join(ROOT, 'skill', '.claude-plugin', 'plugin.json');
 
 /** The shared intro: what snipcode is and the JSON contract, identical in both skills. */
 const INTRO = [
@@ -75,21 +79,66 @@ const SKILLS: { name: string; description: string; sections: [string, string][] 
 	},
 ];
 
-/** One composed skill file: where it belongs on disk and the text that belongs in it. */
-export interface ComposedSkill {
+/** The description the marketplace and the plugin manifest both show. */
+const PLUGIN_DESCRIPTION =
+	'Extract a component from any live web page into clean self-contained code, or read a whole-page design schema. Deterministic, zero LLM calls.';
+
+/** The keywords the plugin manifest carries, which are the marketplace's, not npm's. */
+const PLUGIN_KEYWORDS = [
+	'component extraction', 'design tokens', 'design system', 'design schema',
+	'clone component', 'redesign', 'web to code', 'html', 'react', 'tailwind', 'vue', 'css',
+];
+
+/** The fields the plugin manifest copies straight from package.json. */
+interface PackageFields {
+	version: string;
+	author: { name: string; url: string };
+	homepage: string;
+	repository: { url: string };
+	license: string;
+}
+
+/**
+ * The plugin manifest, built from package.json.
+ *
+ * The version used to be hand written here as well as in package.json and core/src/entry.ts.
+ * On the first bump the manifest would have kept reporting the old number, and the schema
+ * stamp an agent reads to spot a stale file would have been the thing that was stale.
+ */
+function pluginManifest(): string {
+	const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as PackageFields;
+	const manifest = {
+		name: 'snipcode',
+		version: pkg.version,
+		description: PLUGIN_DESCRIPTION,
+		author: pkg.author,
+		homepage: pkg.homepage,
+		// package.json carries the git+ prefixed clone url; the manifest wants the page.
+		repository: pkg.repository.url.replace(/^git\+/, '').replace(/\.git$/, ''),
+		license: pkg.license,
+		keywords: PLUGIN_KEYWORDS,
+	};
+	return `${JSON.stringify(manifest, null, 2)}\n`;
+}
+
+/** One generated file: where it belongs on disk and the text that belongs in it. */
+export interface ComposedFile {
 	path: string;
 	text: string;
 }
 
-/** Composes every skill file from the current guidance, writing nothing. */
-export function composeSkills(): ComposedSkill[] {
-	return SKILLS.map(({ name, description, sections }) => ({
-		path: join(SKILLS_DIR, name, 'SKILL.md'),
-		text: skillFile(name, description, sections),
-	}));
+/** Composes every generated file from its source, writing nothing. */
+export function composeSkills(): ComposedFile[] {
+	return [
+		...SKILLS.map(({ name, description, sections }) => ({
+			path: join(SKILLS_DIR, name, 'SKILL.md'),
+			text: skillFile(name, description, sections),
+		})),
+		{ path: MANIFEST_PATH, text: pluginManifest() },
+	];
 }
 
-/** Writes the composed skills to disk. Runs only when this module is the entry point. */
+/** Writes the composed files to disk. Runs only when this module is the entry point. */
 function writeSkills(): void {
 	for (const { path, text } of composeSkills()) {
 		mkdirSync(dirname(path), { recursive: true });

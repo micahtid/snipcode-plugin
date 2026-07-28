@@ -33,7 +33,9 @@ export default defineConfig({
 		emptyOutDir: true,
 		ssr: true,
 		target: 'node18',
-		sourcemap: true,
+		// No sourcemap: it was 44 percent of the published payload for a cli nobody debugs from
+		// an install. A stack trace against the repo build still maps.
+		sourcemap: false,
 		lib: {
 			entry: fileURLToPath(new URL('./cli/src/index.ts', import.meta.url)),
 			formats: ['es'],

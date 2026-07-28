@@ -10,10 +10,11 @@ The plugin loads the page, harvests its elements, and extracts and converts mark
 ## Install
 
 ```bash
-npm install
+npm install -g snipcode           # or run it as: npx snipcode
 npx playwright install chromium   # one-time browser download
-npm run build
 ```
+
+Chromium is a separate download because Playwright ships the driver, not the browser. A "command not found" or a missing-browser error means one of these two steps, not a broken page.
 
 ## Commands
 
@@ -34,29 +35,40 @@ Whole-page design reference: design tokens (colors, fonts, spacing, radii, shado
 ## Architecture
 
 ```
-core/          in-page pipeline, ported from the SnipCode extension, bundled to one injectable iife
-runner/        Node host: Playwright Chromium, navigation, waits, injection, the CDP/fetch Host impl
-cli/           arg parsing + command dispatch
-instructions/  single source of agent-facing guidance (reused in the skill, --help, and JSON output)
-skill/         Claude Code plugin manifest + skill file
+core/                      in-page pipeline, bundled to one injectable iife
+runner/                    Node host: Playwright Chromium, navigation, waits, injection, the CDP/fetch Host impl
+cli/                       arg parsing, command dispatch, schema.md rendering, the file generator
+instructions/              single source of agent-facing guidance (reused in the skill, --help, and JSON output)
+skill/                     the Claude Code plugin: skill files plus .claude-plugin/plugin.json
+.claude-plugin/            marketplace.json, which points the marketplace at skill/
+test/                      end to end cli tests, unit tests, golden snapshots, and the fidelity bench
 ```
 
-`core/` depends only on a `Host` interface (CDP commands, cross-origin fetch), which the runner implements over a Playwright `CDPSession`. That boundary is what keeps `core/` promotable to a shared `@snipcode/core` package.
+`core/` depends only on a `Host` interface (CDP commands, cross-origin fetch), which the runner implements over a Playwright `CDPSession`. That boundary is what keeps `core/` free of Playwright.
 
-## Claude Code plugin
+Both `skill/skills/*/SKILL.md` and `skill/.claude-plugin/plugin.json` are generated, from `instructions/guidance.ts` and `package.json` respectively, and the test suite fails if either drifts from its source. Nothing in them is edited by hand.
 
-A Claude Code skill wraps the CLI so an agent picks it up automatically. The skill file is generated from `instructions/` (one source of guidance, reused in the skill, `--help`, and JSON output):
+## Two ways to install it
+
+The two channels are both current and carry different things:
+
+* **npm** publishes the `snipcode` CLI. That is what `npm install -g snipcode` above installs, and what an agent shells out to.
+* **The Claude Code marketplace** reads `.claude-plugin/marketplace.json` from the git repo and serves `skill/` from it. npm never publishes that file, and the marketplace never sees `dist/`, so the skill still expects the CLI to be installed.
 
 ```bash
-npm run gen:skill              # regenerate skill/skills/{snip,schema}/SKILL.md
 claude --plugin-dir ./skill    # load the plugin locally for testing
 ```
 
 ## Development
 
 ```bash
+npm install
+npx playwright install chromium
 npm run typecheck       # tsc over core (browser) and runner+cli (node)
 npm run build           # core iife + node cli bundle
-npm test                # builds, then runs the end to end cli tests
-npm run test:fidelity   # renders an extract and pixel-compares it to the live element
+npm run gen:skill       # regenerate the skill files and the plugin manifest
+npm test                # builds, then unit, end to end, golden, and fidelity
+npm run test:golden -- --update   # re-baseline the golden snapshots for this platform
 ```
+
+Golden snapshots live under `test/golden/<platform>/`, because they carry text box geometry and every operating system resolves `system-ui` to a font with different metrics. A platform with no committed baseline is reported and skipped rather than failed.

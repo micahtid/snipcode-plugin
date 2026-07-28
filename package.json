@@ -38,8 +38,8 @@
   "files": [
     "dist",
     "skill",
-    "instructions",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=18"

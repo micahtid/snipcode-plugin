@@ -86,15 +86,22 @@ function checkGuidance(): void {
 	check('no guidance block carries an em dash', dashed.length === 0, dashed.map(([n]) => n).join(', '));
 
 	// Editing guidance and forgetting to regenerate ships stale rules to every agent that reads
-	// the skill. The text is composed in memory from the same source the generator uses, since
-	// shelling out to gen:skill would rewrite tracked files as a side effect of running tests.
+	// the skill; bumping the version and forgetting ships a manifest reporting the old one. The
+	// text is composed in memory from the same source the generator uses, since shelling out to
+	// gen:skill would rewrite tracked files as a side effect of running tests.
 	const stale = composeSkills().filter(({ path, text }) => {
 		if (!existsSync(path)) return true;
 		// Line endings are the checkout's business, not the guidance's.
 		return readFileSync(path, 'utf8').replace(/\r\n/g, '\n') !== text.replace(/\r\n/g, '\n');
 	});
-	check('the committed SKILL.md files match the current guidance', stale.length === 0,
+	check('the committed skills and plugin manifest match their sources', stale.length === 0,
 		`${stale.map((s) => s.path).join(', ')}: run npm run gen:skill`);
+
+	// The version has one source. package.json is it; the manifest and the cli both read it.
+	const pkgVersion = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version as string;
+	const manifest = JSON.parse(readFileSync(join(ROOT, 'skill', '.claude-plugin', 'plugin.json'), 'utf8')) as { version: string };
+	check('the plugin manifest reports the package version', manifest.version === pkgVersion,
+		`${manifest.version} vs ${pkgVersion}`);
 
 	// The comment standard the cleaning pass set, held after the pass that set it.
 	const commented = [...sourceFiles(join(ROOT, 'core', 'src', 'inspect', 'schema')), join(ROOT, 'cli', 'src', 'schema-md.ts')];

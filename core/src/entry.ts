@@ -110,14 +110,12 @@ async function extract(selector: string, format: OutputFormat, expect?: ExtractE
 
 /** The api surface the runner drives. */
 interface SnipCore {
-	version: string;
 	candidates(): CandidateInventory;
 	extract(selector: string, format: OutputFormat, expect?: ExtractExpectation): Promise<ExtractOutcome>;
 	schema(): Promise<SchemaResult>;
 }
 
 const api: SnipCore = {
-	version: '0.1.0',
 	candidates: harvestCandidates,
 	extract,
 	schema: buildSchema,
