@@ -27,10 +27,9 @@
  * the same wrong shape.
  */
 import { classNameOf } from './classify';
-import {
-	contentRoot, hasDirectText, isBarShaped, readAlignment, readItems, readLayout, textLines,
-	type ItemsReading, type LayoutReading,
-} from './geometry';
+import { contentRoot, hasDirectText, textLines } from './boxes';
+import { isBarShaped } from './discovery';
+import { readAlignment, readItems, readLayout, type ItemsReading, type LayoutReading } from './layout';
 import { BUTTON_SELECTOR, effectiveBackground, isButtonLike, normalizeColor, paddingShorthand } from './shared';
 import type { ContentGrouping, SectionBlueprint, SectionType } from './types';
 

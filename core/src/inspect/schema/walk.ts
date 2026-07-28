@@ -21,7 +21,8 @@
  */
 import { computeFingerprint } from './fingerprint';
 import { classifyElement, isElementVisible, SKIP_TAGS } from './classify';
-import { hasDirectText, sectionFinder } from './geometry';
+import { hasDirectText } from './boxes';
+import { sectionFinder } from './discovery';
 import { gradientStops, normalizeColor, type PseudoColor, type WalkedElement } from './shared';
 import { isTransparentColor } from '../../utils/color';
 

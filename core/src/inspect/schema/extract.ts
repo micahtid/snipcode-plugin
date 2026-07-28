@@ -24,16 +24,16 @@
  */
 import { getHost } from '../../host';
 import { walkDOM } from './walk';
-import { discoverSections, findNavBar } from './geometry';
+import { discoverSections, findNavBar } from './discovery';
 import {
 	collectColors, collectFonts, collectRadii, collectShadows, collectSpacing, detectTypographyScale,
 } from './tokens';
 import { extractStates } from './states';
 import { extractContentPatterns, extractSections } from './sections';
-import {
-	extractButtonBlueprints, extractCardBlueprints, extractDecorativeInfo,
-	extractNavBlueprint, extractResponsiveInfo,
-} from './blueprints';
+import { extractButtonBlueprints } from './blueprint-button';
+import { extractCardBlueprints } from './blueprint-card';
+import { extractNavBlueprint } from './blueprint-nav';
+import { extractDecorativeInfo, extractResponsiveInfo } from './page-language';
 import type { PageSchema } from './types';
 
 /** Builds the complete page schema from the live dom. */
