@@ -45,12 +45,14 @@ jobs:
       - name: Install chromium
         run: npx playwright install --with-deps chromium
 
-      - run: npm run typecheck
-
-      - run: npm run build
-
-      - run: npm test
+      # One command, the same one a contributor runs locally: typecheck, build, then the
+      # unit, end to end, golden, and fidelity suites.
+      - run: npm run verify
         if: ${{ !inputs.refresh_goldens }}
+
+      - name: Build for the golden refresh
+        if: ${{ inputs.refresh_goldens }}
+        run: npm run build
 
       # Golden snapshots carry text geometry, so each platform needs its own set and
       # linux ones can only be made on linux. Dispatch this workflow with

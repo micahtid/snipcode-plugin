@@ -82,8 +82,8 @@ function checkGuidance(): void {
 	check('RULES keeps silence separate from an unspecified value', /This is not the same as silence/.test(RULES));
 	check('RULES does not license mixing a shade off the palette', !/one visible step lighter or darker/.test(RULES));
 
-	const dashed = guidanceBlocks().filter(([, text]) => text.includes('—'));
-	check('no guidance block carries an em dash', dashed.length === 0, dashed.map(([n]) => n).join(', '));
+	const dashed = guidanceBlocks().filter(([, text]) => DASHES.test(text));
+	check('no guidance block carries an em or en dash', dashed.length === 0, dashed.map(([n]) => n).join(', '));
 
 	// Editing guidance and forgetting to regenerate ships stale rules to every agent that reads
 	// the skill; bumping the version and forgetting ships a manifest reporting the old one. The
@@ -103,10 +103,107 @@ function checkGuidance(): void {
 	check('the plugin manifest reports the package version', manifest.version === pkgVersion,
 		`${manifest.version} vs ${pkgVersion}`);
 
-	// The comment standard the cleaning pass set, held after the pass that set it.
-	const commented = [...sourceFiles(join(ROOT, 'core', 'src', 'inspect', 'schema')), join(ROOT, 'cli', 'src', 'schema-md.ts')];
-	const withDashes = commented.filter((path) => readFileSync(path, 'utf8').includes('—'));
-	check('no schema module carries an em dash', withDashes.length === 0, withDashes.join(', '));
+}
+
+/**
+ * Em dash and en dash, built from their code points.
+ *
+ * Written this way so the check can cover the file it lives in. Spelling them literally would
+ * make test/run.ts the one source file that always fails its own rule.
+ */
+const DASHES = new RegExp(`[${String.fromCharCode(0x2014)}${String.fromCharCode(0x2013)}]`);
+
+/** Directories the house rules apply to, with the comment ceiling each one has earned. */
+const HOUSE_RULES: Array<{ dir: string; maxCommentShare: number }> = [
+	// core/ is where the subtle work is, and its comments are mostly the reasoning behind a
+	// measured decision rather than restatement. The ceiling is the share the cleaning pass
+	// actually reached, so it cannot drift back up without someone deciding to raise it.
+	{ dir: 'core/src', maxCommentShare: 0.38 },
+	{ dir: 'cli/src', maxCommentShare: 0.25 },
+	{ dir: 'runner/src', maxCommentShare: 0.25 },
+	{ dir: 'instructions', maxCommentShare: 0.25 },
+	{ dir: 'test', maxCommentShare: 0.28 },
+];
+
+/**
+ * Lines past which a shipped module is worth reading again, and past which it fails.
+ *
+ * The warning is the useful one: it catches the next geometry.ts, which reached 668 lines
+ * doing three jobs, while it is still small enough to split cheaply. The hard cap is only a
+ * backstop, set above the longest module that is long because its algorithm is long.
+ *
+ * test/ is exempt. A test script is a linear list of assertions, so its length measures
+ * coverage rather than whether it does too much.
+ */
+const WARN_FILE_LINES = 400;
+const MAX_FILE_LINES = 500;
+
+/** Counts one file's code and comment lines, blank lines excluded from both. */
+function commentCensus(path: string): { code: number; comment: number; lines: number } {
+	const raw = readFileSync(path, 'utf8').split(/\r?\n/);
+	let code = 0;
+	let comment = 0;
+	let inBlock = false;
+	for (const line of raw) {
+		const text = line.trim();
+		if (!text) continue;
+		if (inBlock) {
+			comment++;
+			if (text.includes('*/')) inBlock = false;
+		} else if (text.startsWith('/*')) {
+			comment++;
+			if (!text.includes('*/')) inBlock = true;
+		} else if (text.startsWith('//')) {
+			comment++;
+		} else {
+			code++;
+		}
+	}
+	return { code, comment, lines: raw.length };
+}
+
+/**
+ * The rules the cleaning pass set, checked against every source file rather than a sample.
+ *
+ * Each one is a thing that was true once and would quietly stop being true: a dash creeping
+ * back into agent-facing text, a module header growing into an essay again, or the next
+ * 668-line file arriving one function at a time.
+ */
+function checkHouseRules(): void {
+	process.stdout.write('\nhouse rules:\n');
+	const everySource = HOUSE_RULES.flatMap(({ dir }) => sourceFiles(join(ROOT, dir))).filter((p) => p.endsWith('.ts'));
+
+	const dashed = everySource.filter((path) => DASHES.test(readFileSync(path, 'utf8')));
+	check('no source file carries an em or en dash', dashed.length === 0,
+		dashed.map((p) => relative(ROOT, p)).join(', '));
+
+	for (const { dir, maxCommentShare } of HOUSE_RULES) {
+		let code = 0;
+		let comment = 0;
+		for (const path of sourceFiles(join(ROOT, dir))) {
+			if (!path.endsWith('.ts')) continue;
+			const census = commentCensus(path);
+			code += census.code;
+			comment += census.comment;
+		}
+		const share = comment / Math.max(1, code + comment);
+		check(`${dir} stays under ${Math.round(maxCommentShare * 100)} percent comments`, share <= maxCommentShare,
+			`${(share * 100).toFixed(1)} percent`);
+	}
+
+	const shipped = HOUSE_RULES.filter(({ dir }) => dir !== 'test')
+		.flatMap(({ dir }) => sourceFiles(join(ROOT, dir)))
+		.filter((p) => p.endsWith('.ts'))
+		.map((path) => ({ path: relative(ROOT, path).replace(/\\/g, '/'), lines: commentCensus(path).lines }))
+		.sort((a, b) => b.lines - a.lines);
+
+	const long = shipped.filter((f) => f.lines > WARN_FILE_LINES);
+	for (const f of long.filter((x) => x.lines <= MAX_FILE_LINES)) {
+		process.stdout.write(`  note  ${f.path} is ${f.lines} lines, over the ${WARN_FILE_LINES} line mark\n`);
+	}
+	const oversized = long.filter((f) => f.lines > MAX_FILE_LINES);
+	check(`no shipped module passes ${MAX_FILE_LINES} lines`, oversized.length === 0,
+		oversized.map((f) => `${f.path} (${f.lines})`).join(', '));
 }
 
 /** Where the module graph starts: the two bundles, the generator, and the test scripts. */
@@ -204,6 +301,7 @@ async function main(): Promise<void> {
 	}
 	await rm(OUT_BASE, { recursive: true, force: true });
 	checkReachability();
+	checkHouseRules();
 	checkGuidance();
 	const { server, base } = await startServer();
 	const cdn = await startCrossOriginServer();

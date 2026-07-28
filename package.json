@@ -51,12 +51,13 @@
     "prepublishOnly": "npm run typecheck && npm run build",
     "typecheck": "tsc -p core/tsconfig.json && tsc -p tsconfig.node.json",
     "gen:skill": "tsx cli/src/gen-skill.ts",
+    "verify:comments": "npm run build && tsx test/verify-comments.ts",
     "test": "npm run build && tsx test/unit.ts && tsx test/run.ts && tsx test/golden.ts && tsx test/fidelity.ts",
     "test:unit": "tsx test/unit.ts",
     "test:golden": "npm run build && tsx test/golden.ts",
     "test:fidelity": "npm run build && tsx test/fidelity.ts",
     "test:parity": "npm run build && tsx test/parity.ts",
-    "verify:comments": "npm run build && tsx test/verify-comments.ts"
+    "verify": "npm run typecheck && npm run build && tsx test/unit.ts && tsx test/run.ts && tsx test/golden.ts && tsx test/fidelity.ts"
   },
   "dependencies": {
     "playwright": "^1.60.0"

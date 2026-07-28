@@ -64,11 +64,20 @@ claude --plugin-dir ./skill    # load the plugin locally for testing
 ```bash
 npm install
 npx playwright install chromium
+npm run verify          # the whole gate: typecheck, build, unit, end to end, golden, fidelity
+```
+
+`npm run verify` is what CI runs, so a green local run means a green pull request. The pieces are available on their own:
+
+```bash
 npm run typecheck       # tsc over core (browser) and runner+cli (node)
 npm run build           # core iife + node cli bundle
 npm run gen:skill       # regenerate the skill files and the plugin manifest
 npm test                # builds, then unit, end to end, golden, and fidelity
 npm run test:golden -- --update   # re-baseline the golden snapshots for this platform
+npm run verify:comments -- --record   # before a comment-only pass; then run it again after
 ```
+
+The suite also holds the house rules the cleanup set: no module unreachable from an entry point, no em or en dashes, a comment-share ceiling per directory, and a size warning on any shipped module past 400 lines.
 
 Golden snapshots live under `test/golden/<platform>/`, because they carry text box geometry and every operating system resolves `system-ui` to a font with different metrics. A platform with no committed baseline is reported and skipped rather than failed.
