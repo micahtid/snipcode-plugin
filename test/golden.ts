@@ -2,9 +2,15 @@
  * test/golden.ts: byte-for-byte snapshots of everything the cli writes.
  *
  * Runs each command over the fixture pages, normalizes the parts that are allowed to
- * differ between runs (the timestamp, the ephemeral port, absolute paths, the counter in
- * a generated class name), and compares the result against a committed file under
- * test/golden/. Any other difference fails.
+ * differ between runs (the timestamp, the version, the ephemeral port, absolute paths),
+ * and compares the result against a committed file. Any other difference fails.
+ *
+ * Snapshots are stored per platform, because they are not portable across one. Both the
+ * extract artifacts and the schema measurements carry text box geometry, and system-ui
+ * resolves to a different font with different glyph metrics on every operating system,
+ * which moves those numbers by more than any tolerance worth having. The measurements
+ * themselves are asserted portably in test/run.ts; this file pins the exact bytes. A
+ * platform with no committed baseline is reported and skipped rather than failed.
  *
  * Run with: npm test. Rewrite the snapshots with: npm run test:golden -- --update.
  * Updating a golden produces a reviewable diff, which is the point: a change that claims
@@ -14,7 +20,8 @@ import { mkdirSync, existsSync, readFileSync, writeFileSync, readdirSync, rmSync
 import { join } from 'node:path';
 import { Checks, ROOT, HERE, runCli, startServer, startCrossOriginServer } from './harness';
 
-const GOLDEN = join(HERE, 'golden');
+/** Snapshots hold font-dependent geometry, so each operating system keeps its own set. */
+const GOLDEN = join(HERE, 'golden', process.platform);
 const WORK = join(HERE, '.golden-work');
 
 /** One snapshot: a cli invocation plus which of its outputs to record. */
@@ -155,6 +162,14 @@ export async function main(): Promise<void> {
 		process.exitCode = 1;
 		return;
 	}
+	if (!update && !existsSync(GOLDEN)) {
+		process.stdout.write(
+			`\ngolden snapshots: skipped, no baseline committed for ${process.platform}\n` +
+				`  Snapshots carry text geometry, which the platform's fonts decide. Create this\n` +
+				`  platform's set with: npm run test:golden -- --update\n`,
+		);
+		return;
+	}
 	mkdirSync(GOLDEN, { recursive: true });
 	rmSync(WORK, { recursive: true, force: true });
 	const checks = new Checks();
@@ -162,7 +177,7 @@ export async function main(): Promise<void> {
 	const cdn = await startCrossOriginServer();
 	const written = new Set<string>();
 
-	process.stdout.write(`\ngolden snapshots${update ? ' (updating)' : ''}:\n`);
+	process.stdout.write(`\ngolden snapshots for ${process.platform}${update ? ' (updating)' : ''}:\n`);
 	try {
 		for (const c of CASES) {
 			const out = join(WORK, c.name);

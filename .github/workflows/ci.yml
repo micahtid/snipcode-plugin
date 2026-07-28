@@ -4,6 +4,12 @@ on:
   push:
     branches: ['**']
   pull_request:
+  workflow_dispatch:
+    inputs:
+      refresh_goldens:
+        description: 'Rebuild the linux golden snapshots and upload them as an artifact'
+        type: boolean
+        default: false
 
 jobs:
   test:
@@ -44,6 +50,21 @@ jobs:
       - run: npm run build
 
       - run: npm test
+        if: ${{ !inputs.refresh_goldens }}
+
+      # Golden snapshots carry text geometry, so each platform needs its own set and
+      # linux ones can only be made on linux. Dispatch this workflow with
+      # refresh_goldens to rebuild them, then download the artifact and commit it.
+      - name: Rebuild the linux goldens
+        if: ${{ inputs.refresh_goldens && matrix.node == 20 }}
+        run: npx tsx test/golden.ts --update
+
+      - name: Upload the rebuilt goldens
+        if: ${{ inputs.refresh_goldens && matrix.node == 20 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-linux
+          path: test/golden/linux
 
       # A pixel failure is unreadable without the images, and a golden failure is
       # much faster to read as a file than as a diff in the log.
