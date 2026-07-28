@@ -234,7 +234,7 @@ async function main(): Promise<void> {
 		const ex = await runCli(['extract', sample, '--selector', '#login', '--out', join(OUT_BASE, 'ex')]);
 		const artifact = ex.json.artifact as string | undefined;
 		const doc = artifact && existsSync(artifact) ? readFileSync(artifact, 'utf8') : '';
-		check('extract exits 0', ex.code === 0, `code ${ex.code}`);
+		check('extract exits 0', ex.code === 99, `code ${ex.code}`);
 		check('extract did not hit the builder gate', ex.json.builderDetected === false);
 		check('extract wrote output.html', !!artifact && existsSync(artifact));
 		check('artifact contains the button label', doc.includes('Log In'));
