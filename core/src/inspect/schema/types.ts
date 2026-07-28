@@ -32,24 +32,6 @@ export interface FontEntry {
 	usage: string;
 }
 
-/** One node in the compressed structure tree: style ref plus optional repeat/text. */
-export interface SchemaNode {
-	tag: string;
-	role: string;
-	s?: string; // Style map reference, e.g. "s1".
-	children?: SchemaNode[];
-	repeat?: number; // Collapsed sibling count.
-	text?: string; // Placeholder like "{h1}", "{p}", "{btn}".
-}
-
-/** A repeated element pattern: 3+ identical role+style elements. */
-export interface ComponentPattern {
-	name: string;
-	role: string;
-	count: number;
-	structure: SchemaNode;
-}
-
 /** One interactive-state rule lifted from the stylesheets. */
 export interface StateRule {
 	selector: string;
@@ -199,13 +181,8 @@ export interface PageSchema {
 		spacing: string[];
 		radii: string[];
 		shadows: string[];
-		spacingAnalysis?: { baseUnit: number; gridCompliance: number; offGrid: string[] };
 		scaleAnalysis?: { ratio: number; name: string; base: number; deviation: number };
-		consistency?: { colors: number; spacing: number; radii: number; shadows: number; issues: string[] };
 	};
-	styles: Record<string, Record<string, string>>;
-	structure: SchemaNode[];
-	components: ComponentPattern[];
 	states: StateRule[];
 	sections: SectionBlueprint[];
 	contentPatterns: ContentGrouping[];

@@ -51,13 +51,6 @@ const MODULAR_SCALES: Array<{ name: string; ratio: number }> = [
 	{ name: 'Golden Ratio', ratio: 1.618 },
 ];
 
-/** The spacing grid a page's values sit on, and the values that do not. */
-interface SpacingAnalysis {
-	baseUnit: number;
-	gridCompliance: number;
-	offGrid: string[];
-}
-
 /** One collected color before clustering: its uses, split by the part of the element it paints. */
 interface RawColor {
 	value: string;
@@ -279,30 +272,6 @@ export function collectShadows(walked: WalkedElement[]): string[] {
 	return Array.from(shadows).slice(0, MAX_SHADOWS);
 }
 
-/** Detects the spacing base unit (4/5/6/8/10) and how much spacing sits on that grid. */
-export function analyzeSpacingBaseUnit(spacing: string[]): SpacingAnalysis | null {
-	const pxValues = spacing.map((v) => parseFloat(v)).filter((v) => !isNaN(v) && v > 0);
-	if (pxValues.length < 3) return null;
-
-	let bestBase = 4;
-	let bestScore = 0;
-	for (const base of [4, 5, 6, 8, 10]) {
-		const onGrid = pxValues.filter((v) => Math.abs(v % base) < 0.5).length;
-		const score = onGrid / pxValues.length;
-		if (score > bestScore) {
-			bestScore = score;
-			bestBase = base;
-		}
-	}
-
-	const offGrid = spacing.filter((v) => {
-		const px = parseFloat(v);
-		return !isNaN(px) && px > 0 && Math.abs(px % bestBase) >= 0.5;
-	});
-
-	return { baseUnit: bestBase, gridCompliance: Math.round(bestScore * 100) / 100, offGrid: offGrid.slice(0, 10) };
-}
-
 /** Fits the page's font sizes to the closest modular type scale, or null if no good fit. */
 export function detectTypographyScale(fonts: FontEntry[]): { ratio: number; name: string; base: number; deviation: number } | null {
 	const allSizes = new Set<number>();
@@ -344,29 +313,4 @@ export function detectTypographyScale(fonts: FontEntry[]): { ratio: number; name
 
 	if (bestDeviation > 0.3) return null;
 	return { ratio: bestRatio, name: bestName, base, deviation: Math.round(bestDeviation * 1000) / 1000 };
-}
-
-/** Scores design consistency across the token sets and flags fragmentation issues. */
-export function analyzeConsistency(
-	colors: ColorEntry[],
-	radii: string[],
-	shadows: string[],
-	spacingAnalysis: SpacingAnalysis | null,
-): { colors: number; spacing: number; radii: number; shadows: number; issues: string[] } {
-	const issues: string[] = [];
-
-	const colorScore = colors.length;
-	if (colorScore > 15) issues.push(`High color count (${colorScore}) suggests inconsistent palette`);
-
-	const spacingScore = spacingAnalysis ? spacingAnalysis.gridCompliance : 0;
-	if (spacingScore < 0.6) issues.push(`Low grid compliance (${Math.round(spacingScore * 100)}%) - spacing is ad-hoc`);
-
-	const radiiScore = radii.length;
-	if (radiiScore > 5) issues.push(`Fragmented border-radii (${radiiScore} unique values)`);
-	if (radiiScore >= 10) issues.push('CRITICAL: border-radius is highly inconsistent');
-
-	const shadowScore = shadows.length;
-	if (shadowScore > 5) issues.push(`Many shadow variants (${shadowScore}) - consider a shadow scale`);
-
-	return { colors: colorScore, spacing: Math.round(spacingScore * 100), radii: radiiScore, shadows: shadowScore, issues };
 }

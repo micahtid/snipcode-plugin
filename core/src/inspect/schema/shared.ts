@@ -38,7 +38,6 @@ export interface WalkedElement {
 	parent: Element | null;
 	depth: number;
 	pseudoColors?: PseudoColor[];
-	repeat?: number; // Collapsed identical-sibling count, filled during dedup.
 }
 
 /** A button element or a link styled as a button. This is shared across the button-detection passes. */

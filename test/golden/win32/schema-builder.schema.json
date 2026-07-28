@@ -75,63 +75,8 @@
     "radii": [
       "8px"
     ],
-    "shadows": [],
-    "spacingAnalysis": {
-      "baseUnit": 4,
-      "gridCompliance": 1,
-      "offGrid": []
-    },
-    "consistency": {
-      "colors": 3,
-      "spacing": 100,
-      "radii": 1,
-      "shadows": 0,
-      "issues": []
-    }
+    "shadows": []
   },
-  "styles": {
-    "s1": {
-      "c": "rgb(0, 0, 0)",
-      "fs": "16px",
-      "ff": "system-ui, sans-serif",
-      "pt": "40px",
-      "pr": "40px",
-      "pb": "40px",
-      "pl": "40px",
-      "bc": "rgb(0, 0, 0)"
-    },
-    "s2": {
-      "d": "inline-block",
-      "c": "rgb(255, 255, 255)",
-      "bg": "rgb(107, 70, 193)",
-      "fs": "13.3333px",
-      "ff": "Arial",
-      "pt": "12px",
-      "pr": "24px",
-      "pb": "12px",
-      "pl": "24px",
-      "br": "8px",
-      "ta": "center",
-      "bc": "rgb(255, 255, 255)",
-      "cur": "default"
-    }
-  },
-  "structure": [
-    {
-      "tag": "div",
-      "role": "generic",
-      "s": "s1",
-      "children": [
-        {
-          "tag": "button",
-          "role": "button",
-          "s": "s2",
-          "text": "{btn}"
-        }
-      ]
-    }
-  ],
-  "components": [],
   "states": [],
   "sections": [
     {

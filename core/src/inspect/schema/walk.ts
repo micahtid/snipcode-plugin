@@ -1,5 +1,5 @@
 /**
- * inspect/schema/walk.ts: the stratified dom walk and its pattern dedup
+ * inspect/schema/walk.ts: the stratified dom walk
  *
  * Pipeline position: inspect, page-scoped. See inspect/schema/extract.ts for the whole pass.
  * Reads from DOM: document/window. This runs live, so the whole page must be loaded.
@@ -8,8 +8,7 @@
  * Why this exists: every later schema pass reads the same sample of the page, so the sample
  * is taken once, here. Sampling is the interesting part: a naive walk of a long page spends
  * its whole budget in the first section, so the budget is split across the page's sections in
- * proportion to their size. The dedup pass at the bottom then collapses runs of identical
- * siblings, which is what keeps a fifty-row list from filling the structure tree.
+ * proportion to their size.
  *
  * The sections come from discovery, not from body's children. On an app-root page body has one
  * child, so splitting across its children gave the whole page a single bucket and the
@@ -23,8 +22,7 @@
 import { computeFingerprint } from './fingerprint';
 import { classifyElement, isElementVisible, SKIP_TAGS } from './classify';
 import { hasDirectText, sectionFinder } from './geometry';
-import { groupBy, gradientStops, isTransparentColor, normalizeColor, type PseudoColor, type WalkedElement } from './shared';
-import type { ComponentPattern } from './types';
+import { gradientStops, isTransparentColor, normalizeColor, type PseudoColor, type WalkedElement } from './shared';
 
 /** Selectors for third-party widgets, such as chat, cookie, and analytics, to skip during the walk. */
 const THIRD_PARTY_BLOCKLIST = [
@@ -161,44 +159,4 @@ function extractPseudoColors(el: Element): PseudoColor[] {
 		}
 	}
 	return colors;
-}
-
-/**
- * Groups elements by role+fingerprint to find repeated component patterns, meaning
- * 3+ of a non-generic role, and produces a run-length-collapsed list where consecutive
- * identical elements carry a `repeat` count instead of repeating.
- */
-export function detectPatterns(walked: WalkedElement[]): { deduplicated: WalkedElement[]; components: ComponentPattern[] } {
-	const groups = groupBy(walked, (el) => `${el.role}:${el.fingerprint}`);
-
-	const components: ComponentPattern[] = [];
-	for (const group of groups.values()) {
-		const rep = group[0]!;
-		if (group.length >= 3 && rep.role !== 'generic' && rep.role !== 'text') {
-			components.push({
-				name: `${rep.role}-pattern`,
-				role: rep.role,
-				count: group.length,
-				structure: { tag: rep.tag, role: rep.role },
-			});
-		}
-	}
-
-	const deduplicated: WalkedElement[] = [];
-	let prevKey = '';
-	let repeatCount = 0;
-	for (const el of walked) {
-		const key = `${el.role}:${el.fingerprint}`;
-		if (key === prevKey && deduplicated.length > 0) {
-			repeatCount++;
-		} else {
-			if (repeatCount > 0 && deduplicated.length > 0) deduplicated[deduplicated.length - 1]!.repeat = repeatCount + 1;
-			deduplicated.push(el);
-			repeatCount = 0;
-		}
-		prevKey = key;
-	}
-	if (repeatCount > 0 && deduplicated.length > 0) deduplicated[deduplicated.length - 1]!.repeat = repeatCount + 1;
-
-	return { deduplicated, components };
 }

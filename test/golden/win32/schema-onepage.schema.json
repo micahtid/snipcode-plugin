@@ -73,138 +73,13 @@
       "8px"
     ],
     "shadows": [],
-    "spacingAnalysis": {
-      "baseUnit": 4,
-      "gridCompliance": 1,
-      "offGrid": []
-    },
     "scaleAnalysis": {
       "ratio": 1.414,
       "name": "Augmented Fourth",
       "base": 16,
       "deviation": 0.08
-    },
-    "consistency": {
-      "colors": 3,
-      "spacing": 100,
-      "radii": 1,
-      "shadows": 0,
-      "issues": []
     }
   },
-  "styles": {
-    "s1": {
-      "c": "rgb(26, 26, 26)",
-      "fs": "16px",
-      "ff": "system-ui, sans-serif",
-      "pt": "80px",
-      "pr": "48px",
-      "pb": "80px",
-      "pl": "48px",
-      "bc": "rgb(26, 26, 26)"
-    },
-    "s2": {
-      "c": "rgb(26, 26, 26)",
-      "fs": "44px",
-      "fw": "700",
-      "ff": "system-ui, sans-serif",
-      "mb": "16px",
-      "bc": "rgb(26, 26, 26)"
-    },
-    "s3": {
-      "c": "rgb(90, 90, 90)",
-      "fs": "17px",
-      "ff": "system-ui, sans-serif",
-      "mb": "24px",
-      "bc": "rgb(90, 90, 90)",
-      "mw": "640px"
-    },
-    "s4": {
-      "d": "inline-block",
-      "c": "rgb(255, 255, 255)",
-      "bg": "rgb(26, 26, 26)",
-      "fs": "16px",
-      "ff": "system-ui, sans-serif",
-      "pt": "12px",
-      "pr": "24px",
-      "pb": "12px",
-      "pl": "24px",
-      "br": "8px",
-      "td": "underline",
-      "bc": "rgb(255, 255, 255)",
-      "cur": "pointer"
-    },
-    "s5": {
-      "c": "rgb(26, 26, 26)",
-      "fs": "16px",
-      "ff": "system-ui, sans-serif",
-      "lh": "25.6px",
-      "mt": "48px",
-      "bc": "rgb(26, 26, 26)",
-      "mw": "640px"
-    },
-    "s6": {
-      "c": "rgb(90, 90, 90)",
-      "fs": "17px",
-      "ff": "system-ui, sans-serif",
-      "lh": "27.2px",
-      "mb": "24px",
-      "bc": "rgb(90, 90, 90)",
-      "mw": "640px"
-    }
-  },
-  "structure": [
-    {
-      "tag": "section",
-      "role": "section",
-      "s": "s1",
-      "children": [
-        {
-          "tag": "h1",
-          "role": "heading",
-          "s": "s2",
-          "text": "{h1}"
-        },
-        {
-          "tag": "p",
-          "role": "paragraph",
-          "s": "s3",
-          "text": "{p}"
-        },
-        {
-          "tag": "a",
-          "role": "link",
-          "s": "s4",
-          "text": "{link}"
-        },
-        {
-          "tag": "div",
-          "role": "generic",
-          "s": "s5",
-          "children": [
-            {
-              "tag": "p",
-              "role": "paragraph",
-              "s": "s6",
-              "text": "{p}",
-              "repeat": 3
-            }
-          ]
-        }
-      ]
-    }
-  ],
-  "components": [
-    {
-      "name": "paragraph-pattern",
-      "role": "paragraph",
-      "count": 3,
-      "structure": {
-        "tag": "p",
-        "role": "paragraph"
-      }
-    }
-  ],
   "states": [],
   "sections": [
     {

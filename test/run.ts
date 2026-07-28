@@ -435,6 +435,15 @@ async function main(): Promise<void> {
 			unplaced.length === 1 && unplaced[0].effect === 'blur-blobs', JSON.stringify(fwEffects));
 		check('an unlocated effect never reaches schema.md', !fwDecorLine.includes('blur-blobs'), fwDecorLine);
 		check('schema.md prints no bare blobs assertion', !/\bblobs\b/.test(fwMd) && fwSchema.decorative?.hasBlobs === true, fwDecorLine);
+		// The same rule one level up: every top-level block reaches schema.md or the payload.
+		// A field added here and rendered nowhere is measured work no reader ever sees.
+		check('the schema carries no undelivered top-level block',
+			Object.keys(fwSchema).join(',') === 'generated,meta,tokens,states,sections,contentPatterns,buttons,cards,nav,decorative,responsive',
+			JSON.stringify(Object.keys(fwSchema)));
+		check('the token block carries no undelivered field',
+			Object.keys(fwSchema.tokens ?? {}).every((k) => ['colors', 'fonts', 'spacing', 'radii', 'shadows', 'scaleAnalysis'].includes(k)),
+			JSON.stringify(Object.keys(fwSchema.tokens ?? {})));
+
 		// Fields measured and never delivered are gone rather than left in the payload unread.
 		check('the decorative payload carries no undelivered field',
 			Object.keys(fwSchema.decorative ?? {}).join(',') === 'hasBlobs,illustrationStyle,backgroundEffects,accentTreatments',

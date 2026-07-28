@@ -7,16 +7,15 @@
  *
  * Why this exists: the schema inspector turns a whole page into a compressed design-system
  * schema. It walks the visible dom, stratified by section so a long page samples evenly,
- * collects the color, font, spacing, radius, and shadow tokens, dedupes elements into a style
- * map and a structure tree, lifts interactive-state rules from the readable stylesheets, and
- * detects section blueprints and the button, card, and nav component blueprints plus the page's
- * decorative and responsive language. The result is size-reduced in optimize.ts and rendered
- * for the reader in cli/src/schema-md.ts.
+ * collects the color, font, spacing, radius, and shadow tokens, lifts interactive-state rules
+ * from the readable stylesheets, and detects section blueprints and the button, card, and nav
+ * component blueprints plus the page's decorative and responsive language. The result is
+ * size-reduced in optimize.ts and rendered for the reader in cli/src/schema-md.ts.
  *
- * This file is the order of operations and nothing else. Each pass lives in its own
- * module: the sample in walk.ts, the design tokens in tokens.ts, the style map and
- * structure tree in structure.ts, the section reading in sections.ts, and the component
- * and page-language specs in blueprints.ts. Anything two passes both need is in shared.ts.
+ * This file is the order of operations and nothing else. Each pass lives in its own module:
+ * the sample in walk.ts, the design tokens in tokens.ts, the state rules in states.ts, the
+ * section reading in sections.ts, and the component and page-language specs in blueprints.ts.
+ * Anything two passes both need is in shared.ts.
  *
  * The pass is async for one reason: a site that serves its css cross-origin hands the page
  * context stylesheets it may not read, and the hover rules and breakpoints live in exactly
@@ -24,13 +23,12 @@
  * already uses for the same problem, and Host calls are round trips.
  */
 import { getHost } from '../../host';
-import { detectPatterns, walkDOM } from './walk';
+import { walkDOM } from './walk';
 import { discoverSections, findNavBar } from './geometry';
 import {
-	analyzeConsistency, analyzeSpacingBaseUnit, collectColors, collectFonts, collectRadii,
-	collectShadows, collectSpacing, detectTypographyScale,
+	collectColors, collectFonts, collectRadii, collectShadows, collectSpacing, detectTypographyScale,
 } from './tokens';
-import { assemble, extractStates } from './structure';
+import { extractStates } from './states';
 import { extractContentPatterns, extractSections } from './sections';
 import {
 	extractButtonBlueprints, extractCardBlueprints, extractDecorativeInfo,
@@ -55,12 +53,8 @@ export async function extractPageSchema(): Promise<PageSchema> {
 	const radii = collectRadii(walked);
 	const shadows = collectShadows(walked);
 
-	const spacingAnalysis = analyzeSpacingBaseUnit(spacing);
 	const scaleAnalysis = detectTypographyScale(fonts);
-
-	const { deduplicated, components } = detectPatterns(walked);
 	const states = extractStates(rules, walked);
-	const { styles, structure } = assemble(deduplicated);
 
 	const sections = extractSections(sectionRoots, navBar);
 	const contentPatterns = extractContentPatterns(sections);
@@ -71,8 +65,6 @@ export async function extractPageSchema(): Promise<PageSchema> {
 	const decorative = extractDecorativeInfo(sectionRoots);
 	const responsive = extractResponsiveInfo(rules, navBar);
 
-	const consistency = analyzeConsistency(colors, radii, shadows, spacingAnalysis);
-
 	return {
 		meta: {
 			url: window.location.href,
@@ -81,13 +73,8 @@ export async function extractPageSchema(): Promise<PageSchema> {
 		},
 		tokens: {
 			colors, fonts, spacing, radii, shadows,
-			...(spacingAnalysis ? { spacingAnalysis } : {}),
 			...(scaleAnalysis ? { scaleAnalysis } : {}),
-			...(consistency ? { consistency } : {}),
 		},
-		styles,
-		structure,
-		components,
 		states,
 		sections,
 		contentPatterns,
