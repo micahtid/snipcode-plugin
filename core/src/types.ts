@@ -1,27 +1,13 @@
 /**
- * content/types.ts: the shared contracts that bind every pipeline phase
+ * core/src/types.ts: the contracts every pipeline phase shares.
  *
- * Pipeline position: spans every phase, the type every phase reads/writes
- * Reads from Captured: n/a, it defines it
- * Writes to Captured: n/a, it defines it
+ * The pipeline threads one mutable object, `Captured`, through capture, resolve,
+ * reconcile, minimize, and convert. Defining it here is what lets each phase know the
+ * shape without knowing the other phases.
  *
- * Principles applied: none, type definitions only.
- *
- * It exists because the entire extension is a pipeline that threads one mutable
- * object (`Captured`) through five phases. Defining that object, plus the
- * message envelope and the storage schemas, in one place is what lets the phases
- * stay decoupled. Each phase only needs to know the shape, not the other phases.
- * These definitions are the canonical contract and must not drift, because
- * deviations break inter-module assumptions.
- *
- * Feature handlers (src/content/reconcile/features/*) may extend `Captured` via
- * typescript module augmentation in a paired `<module>.d.ts`, but only with a
- * header comment declaring which phase reads the new field.
+ * A feature handler under reconcile/features/ may add a field to `Captured` through
+ * module augmentation in a paired `<module>.d.ts`, naming the phase that reads it.
  */
-
-// ---------------------------------------------------------------------------
-// The Captured object
-// ---------------------------------------------------------------------------
 
 /** The shared object that flows through the whole pipeline. */
 export interface Captured {
@@ -153,125 +139,18 @@ export interface Keyframes {
 	rules: string; // Serialized @keyframes body
 }
 
-// ---------------------------------------------------------------------------
-// Message protocol
-// ---------------------------------------------------------------------------
-
-/**
- * The type discriminator for every request/response broker message, the `type`
- * field of `Envelope`, each handled by the background service worker.
- */
-export type MessageType =
-	| 'CAPTURE_SCREENSHOT'
-	| 'FETCH_STYLESHEET'
-	| 'FETCH_BINARY'
-	| 'LLM_REQUEST'
-	| 'CDP_INHERITED'
-	| 'CDP_STYLESHEETS'
-	| 'CDP_FORCE_BEGIN'
-	| 'CDP_FORCE_STATE'
-	| 'CDP_FORCE_END';
-
-/**
- * One-way, fire-and-forget signals between the side panel and the content script.
- * These are NOT members of `MessageType`. That union is only for the request/response
- * broker `Envelope`. They carry no requestId and expect no Response. They live here,
- * exported once, so sender and receiver share the exact string and a single typo can
- * never silently drop the message.
- */
-export const START_SCAN = 'SNIPCODE_START_SCAN';
-/** Carries one InspectResult, plus optional token usage, from the scan back to the panel. */
-export const INSPECT_RESULT = 'INSPECT_RESULT';
-/** The panel asks the content script to start the element picker overlay. */
-export const START_PICKER = 'SNIPCODE_START_PICKER';
-/** The panel asks the content script to tear the picker overlay down on panel-side esc. */
-export const CANCEL_PICKER = 'SNIPCODE_CANCEL_PICKER';
-/** The content script tells the panel an element was picked, so the pipeline is now running. */
-export const PICKER_SELECTED = 'SNIPCODE_PICKER_SELECTED';
-/** Carries a finished snip result from the content script back to the panel. */
-export const SNIP_RESULT = 'SNIP_RESULT';
-
-/** The request envelope shared by all messages. requestId correlates responses. */
-export interface Envelope<TPayload, TResult = unknown> {
-	type: MessageType;
-	requestId: string; // Uuid v4, used for response correlation
-	payload: TPayload;
-	// TResult is part of the documented contract so callers can
-	// annotate the response type they expect. It is intentionally phantom here.
-	__result?: TResult;
-}
-
-/** The response envelope. `ok` gates whether `result` or `error` is populated. */
-export interface Response<TResult> {
-	requestId: string;
-	ok: boolean;
-	result?: TResult;
-	error?: { code: ErrorCode; message: string };
-}
-
-/** Stable error codes returned across contexts. */
-export type ErrorCode =
-	| 'INVALID_SELECTOR'
-	| 'CORS_BLOCKED'
-	| 'NO_KEY_CONFIGURED'
-	| `PROVIDER_ERROR_${number}`
-	| 'STORAGE_QUOTA'
-	| 'MALFORMED_REQUEST';
-
-/** The byok providers supported one-at-a-time. */
-export type Provider = 'openrouter' | 'anthropic' | 'openai' | 'google';
-
-// ---------------------------------------------------------------------------
-// Storage schemas
-// ---------------------------------------------------------------------------
-
-/** The 7 output formats. */
+/** The output formats the convert phase can emit. */
 export type OutputFormat = 'tailwind' | 'bem-css' | 'bem-scss' | 'jsx-tailwind' | 'jsx-css' | 'vue' | 'html';
 
 /**
  * One file in a split snip result: the index.html document plus the inline svgs,
- * data-uri images, and @font-face fonts lifted out into their own referenced files
- * (convert/assets.ts). Text files (html/svg/json) carry `text`. Binary files (images and
- * fonts) carry the original `dataUrl` so the panel can render or download them.
+ * data-uri images, and @font-face fonts lifted out into their own referenced files by
+ * convert/assets.ts. Text files (html/svg/json) carry `text`. Binary files (images and
+ * fonts) carry the original `dataUrl`.
  */
 export interface AssetFile {
 	name: string; // 'index.html', 'icon-1.svg', 'image-1.png', 'font-1.woff2'
 	language: 'html' | 'svg' | 'image' | 'json' | 'font';
 	text?: string; // Source for text files
 	dataUrl?: string; // Original data: url for binary files (images, fonts)
-}
-
-/**
- * Token usage reported by a provider for one polish call, the only billed ai
- * step. Counts are exact, read straight from the response. Dollars are not
- * tracked because providers return tokens, not cost, and per-model rates vary.
- */
-export interface TokenUsage {
-	input: number;
-	output: number;
-}
-
-/**
- * One stored snippet. Only the last 50 unsaved ones are kept, fifo. A record the
- * user saved is exempt from that cap and survives Clear History.
- */
-export interface SnippetRecord {
-	id: string; // Uuid v4
-	capturedAt: string;
-	page: Captured['page'];
-	element: Captured['element'];
-	output: { format: OutputFormat; html: string; css?: string; jsx?: string };
-	screenshot: string; // Data url thumbnail (<=200x200)
-	/** True once the user saved it. Absent means unsaved, so older records need no migration. */
-	saved?: boolean;
-}
-
-/** User preferences. Byok keys live separately under `byok.<provider>`, never here. */
-export interface UserPreferences {
-	activeProvider: Provider;
-	modelOverrides: Record<Provider, string | null>;
-	defaultMode: 'snip' | 'assistive';
-	defaultOutput: OutputFormat;
-	assistiveDelivery: Array<'clipboard' | 'file' | 'webhook'>;
-	webhookUrl: string | null;
 }
