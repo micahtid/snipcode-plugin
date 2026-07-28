@@ -1,0 +1,60 @@
+name: ci
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 20]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+
+      # The browser download is the slowest step by far, so it is keyed on the
+      # playwright version in the lockfile and reused until that version moves.
+      - name: Resolve the playwright version
+        id: pw
+        run: echo "version=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the chromium download
+        id: browser-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - name: Install chromium
+        run: npx playwright install --with-deps chromium
+
+      - run: npm run typecheck
+
+      - run: npm run build
+
+      - run: npm test
+
+      # A pixel failure is unreadable without the images, and a golden failure is
+      # much faster to read as a file than as a diff in the log.
+      - name: Upload the run outputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-output-node${{ matrix.node }}
+          path: |
+            test/.out
+            test/.fidelity
+            test/.golden-work
+          if-no-files-found: ignore
+          retention-days: 7
