@@ -117,21 +117,12 @@ const ENTRY_POINTS = [
 const SHIPPED_DIRS = ['core/src', 'cli/src', 'runner/src', 'instructions'];
 
 /**
- * Modules that are known to be unreachable and are tolerated for now.
+ * Modules that are known to be unreachable and are tolerated anyway.
  *
- * Empty is the goal. An entry here is a file that ships in the repo and that nothing can
- * load, which is the state this list exists to drain.
+ * Empty, and meant to stay that way. An entry here is a file that ships in the repo and
+ * that nothing can load.
  */
-const UNREACHABLE_ALLOWED: string[] = [
-	'core/src/convert/vault.ts',
-	'core/src/inspect/assets.ts',
-	'core/src/inspect/colors.ts',
-	'core/src/inspect/fonts.ts',
-	'core/src/inspect/types.ts',
-	'core/src/reconcile/probe-fonts.ts',
-	'core/src/reconcile/probe.ts',
-	'core/src/utils/url.ts',
-];
+const UNREACHABLE_ALLOWED: string[] = [];
 
 /** Every relative module specifier in a source file, static and dynamic. */
 function importsOf(text: string): string[] {
