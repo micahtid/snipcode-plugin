@@ -113,7 +113,7 @@ export function containsDynamicPseudo(selector: string): boolean {
  * @throws SyntaxError on unbalanced parens, brackets, or quotes
  */
 export function parseSelectorList(selector: string): Complex[] {
-	return splitTopLevel(selector, ',').map(parseComplex);
+	return splitSelectorTopLevel(selector, ',').map(parseComplex);
 }
 
 /** One element to force a state on: its structural selector plus the pseudos to force there. */
@@ -263,14 +263,20 @@ function splitCompounds(s: string): { compoundTexts: string[]; combinators: Comb
 }
 
 /**
- * Splits a string on a single top-level delimiter character, ignoring occurrences
- * inside parens, brackets, or strings.
+ * Splits a selector on a single top-level delimiter, ignoring occurrences inside parens,
+ * brackets, or strings.
+ *
+ * Not the same operation as splitTopLevel in utils/css-split.ts, which splits css values.
+ * This one honors backslash escapes, so `.hover\:bg-x` stays one selector; it trims each
+ * branch and drops empty ones; and it throws on unbalanced input, because a selector that
+ * does not parse must not be silently re-anchored onto the wrong element. The value
+ * splitter does none of those. See test/unit.ts, which pins both.
  *
  * @param s - the string to split
  * @param delim - the single-character delimiter, here ','
  * @throws SyntaxError on unbalanced delimiters
  */
-function splitTopLevel(s: string, delim: string): string[] {
+export function splitSelectorTopLevel(s: string, delim: string): string[] {
 	const out: string[] = [];
 	let cur = '';
 	let depth = 0;
@@ -414,5 +420,5 @@ function skipBalanced(s: string, i: number, open: string, close: string): number
 			if (depth === 0) return i + 1;
 		}
 	}
-	return i; // Unbalanced: splitCompounds/splitTopLevel already guard the whole string.
+	return i; // Unbalanced: splitCompounds/splitSelectorTopLevel already guard the whole string.
 }

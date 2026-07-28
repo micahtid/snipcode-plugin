@@ -24,8 +24,7 @@
  */
 import type { Captured } from '../../types';
 import { pairedSubtrees } from '../match';
-
-const URL_IN_VALUE = /url\(\s*(['"]?)([^'")]+)\1\s*\)/g;
+import { absolutizeUrls } from './urls';
 
 /**
  * The visual-effect properties this handler preserves. This is the bounded css-spec
@@ -73,14 +72,3 @@ export function apply(captured: Captured): Captured {
 	return captured;
 }
 
-/** Rewrite relative url()s to absolute, keeping fragment refs like clip-path: url(#x) and data or blob. */
-function absolutizeUrls(value: string, base: string): string {
-	return value.replace(URL_IN_VALUE, (match, quote: string, url: string) => {
-		if (/^(data:|blob:|https?:|#)/i.test(url)) return match;
-		try {
-			return `url(${quote}${new URL(url, base).href}${quote})`;
-		} catch {
-			return match;
-		}
-	});
-}

@@ -51,7 +51,8 @@
     "prepublishOnly": "npm run typecheck && npm run build",
     "typecheck": "tsc -p core/tsconfig.json && tsc -p tsconfig.node.json",
     "gen:skill": "tsx cli/src/gen-skill.ts",
-    "test": "npm run build && tsx test/run.ts && tsx test/golden.ts && tsx test/fidelity.ts",
+    "test": "npm run build && tsx test/unit.ts && tsx test/run.ts && tsx test/golden.ts && tsx test/fidelity.ts",
+    "test:unit": "tsx test/unit.ts",
     "test:golden": "npm run build && tsx test/golden.ts",
     "test:fidelity": "npm run build && tsx test/fidelity.ts",
     "test:parity": "npm run build && tsx test/parity.ts"

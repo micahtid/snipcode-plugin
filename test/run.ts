@@ -108,6 +108,7 @@ const ENTRY_POINTS = [
 	'cli/src/index.ts',
 	'cli/src/gen-skill.ts',
 	'test/run.ts',
+	'test/unit.ts',
 	'test/golden.ts',
 	'test/fidelity.ts',
 	'test/parity.ts',

@@ -32,6 +32,7 @@
  * after it. This purge is idempotent and cheap, so it runs again after that step.
  */
 import { serializeRules } from './declarations';
+import { holdsChildRules } from '../utils/css-rules';
 
 /** A grouping rule (@media/@layer/@supports) whose child rules can be walked and deleted. */
 type RuleContainer = CSSStyleSheet | CSSGroupingRule;
@@ -84,15 +85,10 @@ function collectPropertyRules(container: RuleContainer, out: PropertyRuleRef[]):
 		const r = rule as unknown as { name?: unknown; syntax?: unknown };
 		if (typeof r.name === 'string' && typeof r.syntax === 'string' && r.name.startsWith('--')) {
 			out.push({ container, index: i, name: r.name });
-		} else if (isGroupingRule(rule)) {
+		} else if (holdsChildRules(rule)) {
 			collectPropertyRules(rule, out);
 		}
 	}
-}
-
-/** True when a rule can contain and delete child rules, an @media/@layer/@supports block. */
-function isGroupingRule(rule: CSSRule): rule is CSSGroupingRule {
-	return 'cssRules' in rule && typeof (rule as CSSGroupingRule).deleteRule === 'function';
 }
 
 /**

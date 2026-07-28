@@ -18,6 +18,7 @@
  * Shadow + adoptedStyleSheets discovery lands with the shadow handler.
  */
 import type { CssRule, CssVariable, FontFace, Keyframes, Stylesheet } from '../types';
+import { holdsChildRules } from '../utils/css-rules';
 
 /** Everything sheets discovery contributes to Captured, returned for the orchestrator to assign. */
 export interface SheetDiscovery {
@@ -176,7 +177,7 @@ function walkRules(rules: CSSRuleList, ctx: RuleContext, out: SheetDiscovery, so
 					.map((r) => r.cssText)
 					.join('\n'),
 			});
-		} else if (isGroupingRule(rule)) {
+		} else if (holdsChildRules(rule)) {
 			// @layer {... } and @container... {... }. These are recent rule
 			// types not always present in the dom lib, so detect structurally and read
 			// their identifying field defensively. The layers/units handlers refine
@@ -253,11 +254,6 @@ function isFoundationSelector(selector: string): boolean {
 /** :root / html selectors define document-level custom properties. */
 function isRootScope(selector: string): boolean {
 	return /(^|,)\s*(:root|html)\s*(,|$)/.test(selector);
-}
-
-/** Structural check for grouping rules (@layer/@container) without relying on their lib types. */
-function isGroupingRule(rule: CSSRule): rule is CSSRule & { cssRules: CSSRuleList } {
-	return 'cssRules' in rule && (rule as { cssRules?: unknown }).cssRules instanceof CSSRuleList;
 }
 
 /** Read an optional string field off a rule object, '' if absent. */

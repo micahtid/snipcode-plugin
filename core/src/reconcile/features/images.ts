@@ -27,8 +27,7 @@
  * instead.
  */
 import type { Captured } from '../../types';
-
-const URL_IN_VALUE = /url\(\s*(['"]?)([^'")]+)\1\s*\)/g;
+import { absolutizeUrls } from './urls';
 
 /**
  * Pins responsive images and absolutizes background-image urls.
@@ -71,7 +70,7 @@ export function apply(captured: Captured): Captured {
 		for (const prop of ['background-image', 'background']) {
 			const value = baked.get(prop);
 			if (!value || !value.includes('url(')) continue;
-			const rewritten = absolutizeUrls(value, base, captured);
+			const rewritten = absolutizeUrls(value, base, captured.warnings, 'images');
 			if (rewritten !== value) {
 				baked.set(prop, rewritten);
 				try {
@@ -86,18 +85,6 @@ export function apply(captured: Captured): Captured {
 	return captured;
 }
 
-/** Rewrite every relative url() in a value to absolute, and warn on truly opaque refs. */
-function absolutizeUrls(value: string, base: string, captured: Captured): string {
-	return value.replace(URL_IN_VALUE, (match, quote: string, url: string) => {
-		if (/^(data:|blob:|https?:|#)/i.test(url)) return match; // Already absolute/inline/ref
-		const abs = toAbsolute(url, base);
-		if (!abs) {
-			captured.warnings.push(`images: could not resolve background url ${url}`);
-			return match;
-		}
-		return `url(${quote}${abs}${quote})`;
-	});
-}
 
 /** The empty/spacer srcs a lazy-loader shows before swapping in the real image. */
 function isPlaceholder(src: string): boolean {
