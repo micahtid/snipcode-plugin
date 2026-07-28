@@ -1,5 +1,5 @@
 /**
- * test/parity.ts: extension-vs-cli parity bench (plan build phase 1 parity check).
+ * test/parity.ts: extension-vs-cli parity bench.
  *
  * Confirms the port did not change behavior: it snips the same element two ways, the
  * built SnipCode extension (chrome.debugger + background fetch) and this plugin's cli
@@ -12,51 +12,19 @@
  * it is not part of `npm test`. If the extension is not built, it skips cleanly.
  * Run with: npm run test:parity (build the plugin and the extension first).
  */
-import { createServer, type Server } from 'node:http';
-import { readFile, rm, mkdir, writeFile } from 'node:fs/promises';
+import { rm, mkdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { execFile } from 'node:child_process';
 import { chromium, type Browser } from 'playwright';
 import { mismatchRatio } from './pixels';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import { join, dirname, extname } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { join } from 'node:path';
+import { CLI, HERE, ROOT, runCli, startServer } from './harness';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = dirname(HERE);
-const CLI = join(ROOT, 'dist', 'cli', 'index.js');
-const FIXTURES = join(HERE, 'fixtures');
 const OUT = join(HERE, '.parity');
 const EXT_HARNESS = join(ROOT, '..', 'chrome-extension', 'tests', 'run-pipeline.mjs');
 const EXT_DIST = join(ROOT, '..', 'chrome-extension', 'dist', 'manifest.json');
 /** Max share of mismatched pixels tolerated between the two artifacts. */
 const THRESHOLD = 0.03;
-
-const MIME: Record<string, string> = { '.html': 'text/html', '.css': 'text/css', '.png': 'image/png' };
-
-function startServer(): Promise<{ server: Server; base: string }> {
-	return new Promise((resolve) => {
-		const server = createServer(async (req, res) => {
-			try {
-				const body = await readFile(join(FIXTURES, decodeURIComponent((req.url ?? '/').split('?')[0]!)));
-				res.writeHead(200, { 'content-type': MIME[extname(req.url ?? '')] ?? 'application/octet-stream' });
-				res.end(body);
-			} catch {
-				res.writeHead(404);
-				res.end();
-			}
-		});
-		server.listen(0, '127.0.0.1', () => {
-			const addr = server.address();
-			resolve({ server, base: `http://127.0.0.1:${typeof addr === 'object' && addr ? addr.port : 0}` });
-		});
-	});
-}
-
-function runCli(args: string[]): Promise<string> {
-	return new Promise((resolve) => {
-		execFile(process.execPath, [CLI, ...args], { maxBuffer: 64 * 1024 * 1024 }, (_e, stdout) => resolve(stdout));
-	});
-}
 
 /** Screenshot the first button of an html file rendered standalone. */
 async function shotButton(browser: Browser, htmlPath: string): Promise<Buffer> {
@@ -120,7 +88,7 @@ async function main(): Promise<void> {
 			const pass = ratio <= THRESHOLD;
 			failed = !pass;
 			process.stdout.write(
-				`extension-vs-cli parity: ${(ratio * 100).toFixed(2)}% mismatch (threshold ${(THRESHOLD * 100).toFixed(0)}%) — ${pass ? 'PASS' : 'FAIL'}\n`,
+				`extension-vs-cli parity: ${(ratio * 100).toFixed(2)}% mismatch (threshold ${(THRESHOLD * 100).toFixed(0)}%): ${pass ? 'PASS' : 'FAIL'}\n`,
 			);
 		} finally {
 			await browser.close();

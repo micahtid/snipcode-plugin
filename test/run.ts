@@ -8,106 +8,17 @@
  *
  * Run with: npm test (builds first). Requires `npx playwright install chromium`.
  */
-import { createServer, type Server } from 'node:http';
-import { readFile, rm } from 'node:fs/promises';
+import { rm } from 'node:fs/promises';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { execFile } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-import { join, dirname, extname } from 'node:path';
+import { join, dirname, relative } from 'node:path';
 import * as GUIDANCE from '../instructions/guidance';
 import { composeSkills } from '../cli/src/gen-skill';
+import { Checks, CLI, HERE, ROOT, runCli, startServer, startCrossOriginServer, type CliResult } from './harness';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = dirname(HERE);
-const CLI = join(ROOT, 'dist', 'cli', 'index.js');
-const FIXTURES = join(HERE, 'fixtures');
 const OUT_BASE = join(HERE, '.out');
 
-const MIME: Record<string, string> = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png' };
-
-/** One CLI invocation's result: exit code plus the parsed JSON it printed. */
-interface CliResult {
-	code: number;
-	// Parsed CLI output is arbitrary JSON; `any` keeps the assertions readable.
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	json: any;
-	raw: string;
-}
-
-/** Run the built cli with args, returning its exit code and parsed stdout JSON. */
-function runCli(args: string[]): Promise<CliResult> {
-	return new Promise((resolve) => {
-		execFile(process.execPath, [CLI, ...args], { maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
-			const code = err && typeof (err as { code?: unknown }).code === 'number' ? (err as { code: number }).code : 0;
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			let json: any = {};
-			try {
-				json = JSON.parse(stdout);
-			} catch {
-				// Left empty; assertions on json will fail and surface the raw output.
-			}
-			resolve({ code, json, raw: stdout });
-		});
-	});
-}
-
-// --- tiny assertion harness ---
-let passed = 0;
-const failures: string[] = [];
-function check(name: string, cond: boolean, detail = ''): void {
-	if (cond) {
-		passed++;
-		process.stdout.write(`  ok  ${name}\n`);
-	} else {
-		failures.push(`${name}${detail ? ` — ${detail}` : ''}`);
-		process.stdout.write(`FAIL  ${name}${detail ? ` — ${detail}` : ''}\n`);
-	}
-}
-
-/** Start a static file server for the fixtures dir on an ephemeral port. */
-function startServer(): Promise<{ server: Server; base: string }> {
-	return new Promise((resolve) => {
-		const server = createServer(async (req, res) => {
-			const path = join(FIXTURES, decodeURIComponent((req.url ?? '/').split('?')[0]!));
-			try {
-				const body = await readFile(path);
-				res.writeHead(200, { 'content-type': MIME[extname(path)] ?? 'application/octet-stream' });
-				res.end(body);
-			} catch {
-				res.writeHead(404);
-				res.end('not found');
-			}
-		});
-		server.listen(0, '127.0.0.1', () => {
-			const addr = server.address();
-			const port = typeof addr === 'object' && addr ? addr.port : 0;
-			resolve({ server, base: `http://127.0.0.1:${port}` });
-		});
-	});
-}
-
-/**
- * A stylesheet served from a second origin, without cors headers, so the page context cannot
- * read its rules. This is the shape of a cdn-hosted sheet: the breakpoint it declares reaches
- * the schema only if the extractor recovers the text through the Host.
- */
-const CROSS_ORIGIN_CSS = `@media (min-width: 1280px) { ._m6p7 { padding: 120px 32px; } }`;
-
-/** Start the second-origin server, on its own port, serving only that stylesheet. */
-function startCrossOriginServer(): Promise<{ server: Server; url: string }> {
-	return new Promise((resolve) => {
-		const server = createServer((_req, res) => {
-			res.writeHead(200, { 'content-type': 'text/css' });
-			res.end(CROSS_ORIGIN_CSS);
-		});
-		// A different port is a different origin, so the page cannot read this sheet's rules.
-		server.listen(0, '127.0.0.1', () => {
-			const addr = server.address();
-			const port = typeof addr === 'object' && addr ? addr.port : 0;
-			resolve({ server, url: `http://127.0.0.1:${port}/cdn.css` });
-		});
-	});
-}
+const checks = new Checks();
+const check = checks.check.bind(checks);
 
 /** Every exported guidance block, flattened, so a rule can be asserted wherever it lives. */
 function guidanceBlocks(): [name: string, text: string][] {
@@ -191,6 +102,101 @@ function checkGuidance(): void {
 	check('no schema module carries an em dash', withDashes.length === 0, withDashes.join(', '));
 }
 
+/** Where the module graph starts: the two bundles, the generator, and the test scripts. */
+const ENTRY_POINTS = [
+	'core/src/entry.ts',
+	'cli/src/index.ts',
+	'cli/src/gen-skill.ts',
+	'test/run.ts',
+	'test/golden.ts',
+	'test/fidelity.ts',
+	'test/parity.ts',
+];
+
+/** Directories whose every module has to be reachable from an entry point. */
+const SHIPPED_DIRS = ['core/src', 'cli/src', 'runner/src', 'instructions'];
+
+/**
+ * Modules that are known to be unreachable and are tolerated for now.
+ *
+ * Empty is the goal. An entry here is a file that ships in the repo and that nothing can
+ * load, which is the state this list exists to drain.
+ */
+const UNREACHABLE_ALLOWED: string[] = [
+	'core/src/convert/vault.ts',
+	'core/src/inspect/assets.ts',
+	'core/src/inspect/colors.ts',
+	'core/src/inspect/fonts.ts',
+	'core/src/inspect/types.ts',
+	'core/src/reconcile/probe-fonts.ts',
+	'core/src/reconcile/probe.ts',
+	'core/src/utils/url.ts',
+];
+
+/** Every relative module specifier in a source file, static and dynamic. */
+function importsOf(text: string): string[] {
+	const out: string[] = [];
+	const patterns = [
+		/\bfrom\s*['"]([^'"]+)['"]/g,
+		/\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
+		/\bimport\s+['"]([^'"]+)['"]/g,
+		/\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
+	];
+	for (const re of patterns) {
+		for (const m of text.matchAll(re)) if (m[1]!.startsWith('.')) out.push(m[1]!);
+	}
+	return out;
+}
+
+/** Resolve a relative specifier to a file on disk the way the bundler and tsx both would. */
+function resolveImport(fromFile: string, spec: string): string | null {
+	const base = join(dirname(fromFile), spec);
+	const candidates = [base, `${base}.ts`, `${base}.tsx`, join(base, 'index.ts'), base.replace(/\.js$/, '.ts')];
+	for (const path of candidates) {
+		if (existsSync(path) && statSync(path).isFile()) return path;
+	}
+	return null;
+}
+
+/**
+ * Walk the module graph from every entry point and report shipped modules it never reaches.
+ *
+ * A file no entry point can load is dead weight that still has to be read, typechecked, and
+ * kept in step with the rest. Declaration files are skipped: they are ambient by design.
+ */
+function checkReachability(): void {
+	process.stdout.write('\nreachability:\n');
+	const seen = new Set<string>();
+	const queue = ENTRY_POINTS.map((p) => join(ROOT, p));
+	for (const entry of queue) {
+		if (!existsSync(entry)) {
+			check(`entry point ${relative(ROOT, entry)} exists`, false);
+			return;
+		}
+	}
+	while (queue.length) {
+		const file = queue.pop()!;
+		if (seen.has(file)) continue;
+		seen.add(file);
+		for (const spec of importsOf(readFileSync(file, 'utf8'))) {
+			const resolved = resolveImport(file, spec);
+			if (resolved && !seen.has(resolved)) queue.push(resolved);
+		}
+	}
+
+	const shipped: string[] = [];
+	for (const dir of SHIPPED_DIRS) shipped.push(...sourceFiles(join(ROOT, dir)));
+	const unreachable = shipped
+		.filter((p) => p.endsWith('.ts') && !p.endsWith('.d.ts') && !seen.has(p))
+		.map((p) => relative(ROOT, p).replace(/\\/g, '/'))
+		.sort();
+
+	const unexpected = unreachable.filter((p) => !UNREACHABLE_ALLOWED.includes(p));
+	check('every shipped module is reachable from an entry point', unexpected.length === 0, unexpected.join(', '));
+	const stale = UNREACHABLE_ALLOWED.filter((p) => !unreachable.includes(p));
+	check('the unreachable allowance lists nothing already deleted', stale.length === 0, stale.join(', '));
+}
+
 async function main(): Promise<void> {
 	if (!existsSync(CLI)) {
 		process.stdout.write(`cli not built at ${CLI}; run \`npm run build\` first\n`);
@@ -198,6 +204,7 @@ async function main(): Promise<void> {
 		return;
 	}
 	await rm(OUT_BASE, { recursive: true, force: true });
+	checkReachability();
 	checkGuidance();
 	const { server, base } = await startServer();
 	const cdn = await startCrossOriginServer();
@@ -249,11 +256,42 @@ async function main(): Promise<void> {
 		check('unknown format fails BAD_FORMAT', badFmt.code === 1 && (badFmt.json.error?.code) === 'BAD_FORMAT');
 
 		// --- extract other formats ---
+		// Each format is asserted on its content, not just its exit code. The three shapes
+		// differ: tailwind moves the styling into the class attribute, jsx wraps the markup in
+		// a component, vue emits a single-file component. An empty artifact exits zero too.
 		process.stdout.write('\nextract (formats):\n');
+		const formats: Record<string, CliResult> = {};
 		for (const fmt of ['tailwind', 'jsx', 'vue']) {
 			const r = await runCli(['extract', sample, '--selector', '#login', '--format', fmt, '--out', join(OUT_BASE, `fmt-${fmt}`)]);
+			formats[fmt] = r;
 			check(`extract --format ${fmt} succeeds`, r.code === 0 && r.json.builderDetected === false, r.raw.slice(0, 120));
 		}
+
+		const tw = String(formats['tailwind']?.json.html ?? '');
+		const twCss = String(formats['tailwind']?.json.css ?? '');
+		check('tailwind carries the button label', tw.includes('Log In'), tw.slice(0, 80));
+		check('tailwind moves the styling into utility classes',
+			/class="[^"]*bg-\[#2b6cb0\]/.test(tw) && /\bpt-\[[\d.]+rem\]/.test(tw) && tw.includes('font-semibold'), tw.slice(0, 200));
+		check('tailwind writes no style block into the markup', !/<style/.test(tw), tw.slice(0, 200));
+		// Whatever css survives a tailwind snip is a synthesized override for a state the class
+		// attribute cannot express, so every declaration in it carries !important. A plain
+		// declaration here means base styling leaked back out of the utility classes.
+		const twDecls = twCss.split('\n').filter((l) => /^\s*[a-z-]+\s*:/.test(l));
+		check('tailwind leaves only synthesized state rules in css',
+			twDecls.length > 0 && twDecls.every((l) => l.includes('!important')), twCss.slice(0, 200));
+
+		const jsx = String(formats['jsx']?.json.html ?? '');
+		check('jsx is a component that returns its markup',
+			/export default function \w+\(\)/.test(jsx) && jsx.includes('return ('), jsx.slice(0, 120));
+		check('jsx uses className and never class', jsx.includes('className=') && !/\sclass=/.test(jsx), jsx.slice(0, 200));
+		check('jsx carries the button label', jsx.includes('Log In'));
+		check('jsx closes every tag it opens', (jsx.match(/<button/g) ?? []).length === (jsx.match(/<\/button>/g) ?? []).length);
+
+		const vue = String(formats['vue']?.json.html ?? '');
+		check('vue emits a single-file component',
+			vue.includes('<template>') && vue.includes('</template>') && vue.includes('<style scoped>'), vue.slice(0, 120));
+		check('vue scopes the styling it wrote', /<style scoped>[\s\S]*background-color/.test(vue), vue.slice(0, 200));
+		check('vue carries the button label', vue.includes('Log In'));
 
 		// --- builder gate ---
 		process.stdout.write('\nbuilder gate:\n');
@@ -511,11 +549,7 @@ async function main(): Promise<void> {
 		cdn.server.close();
 	}
 
-	process.stdout.write(`\n${passed} passed, ${failures.length} failed\n`);
-	if (failures.length) {
-		process.stdout.write(`\nfailures:\n${failures.map((f) => `  - ${f}`).join('\n')}\n`);
-		process.exitCode = 1;
-	}
+	if (!checks.report()) process.exitCode = 1;
 }
 
 main().catch((err) => {

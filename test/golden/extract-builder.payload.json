@@ -1,0 +1,10 @@
+{
+  "url": "http://127.0.0.1:PORT/builder.html",
+  "selector": "#hero",
+  "builderDetected": true,
+  "builder": "framer",
+  "warnings": [
+    "This page was built with Framer. Its styling only works on the original site, so it cannot be snipped into clean code."
+  ],
+  "guidance": "Output is deterministic and pixel-correct; your job is semantic naming and tags. See NAMING. If builderDetected, rebuild from element.png. See EXTRACT."
+}
