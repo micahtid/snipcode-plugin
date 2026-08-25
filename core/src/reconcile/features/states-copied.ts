@@ -2,13 +2,13 @@
  * features/states-copied.ts: reproducing states from the page's authored rules.
  *
  * The fallback half of features/states.ts, used only when live measurement did not run. With
- * no measured values to trust, the effect is inferred from the selectors: each rule is parsed,
+ * no measured values to trust, the effect is inferred from the selectors. Each rule is parsed,
  * each branch bound to concrete subtree elements, the cascade resolved by hand, and the result
  * re-anchored to markers.
  *
  * That covers an element's own :hover and the plain descendant and sibling relations. It
- * cannot follow a relationship a framework buries in :is() or group-hover grammar, and it
- * cannot reach a trigger outside the subtree. Both are dropped with a warning, never guessed.
+ * cannot follow a relationship buried in :is() or group-hover grammar, and it cannot reach a
+ * trigger outside the subtree. Both are dropped with a warning rather than guessed.
  */
 import type { Captured, CssRule } from '../../types';
 import { pairedSubtrees, mediaApplies } from '../match';
@@ -54,9 +54,8 @@ interface RankedStateDecl {
 }
 
 /**
- * Reproduces the page's interactive-state rules on the clone by copying their authored
- * declarations. This is the fallback used only when live measurement did not run. It cannot
- * follow a relationship a framework buries in `:is()` or group-hover grammar.
+ * Reproduces the page's state rules by copying their authored declarations, the fallback when
+ * live measurement did not run.
  *
  * @param captured - clone is mutated in place: markers and an appended <style>
  */
@@ -67,17 +66,17 @@ export function applyCopied(captured: Captured): Captured {
 	const candidates = collectCandidates(captured, pairs, originalToClone);
 	if (candidates.length === 0) return captured;
 
-	// Number every marked element by document order, so the markers and the rules they
-	// key are deterministic regardless of the order rules were discovered in.
+	// Number marked elements by document order, so markers stay deterministic whatever order
+	// the rules were discovered in.
 	const markerIds = assignMarkers(pairs, candidates);
 	for (const [el, id] of markerIds) {
 		const clone = originalToClone.get(el);
 		if (clone) clone.setAttribute(MARKER, String(id));
 	}
 
-	// Group candidates by the selector they re-anchor to. Candidates that target the same
-	// elements in the same state share an output rule, and their declarations merge by the
-	// cascade. Building the selector also catches an inexpressible marker relationship.
+	// Group candidates by the selector they re-anchor to: same elements in the same state
+	// share an output rule and merge by the cascade. Building the selector also catches an
+	// inexpressible marker relationship.
 	const groups = new Map<string, { subjectClone: Element; winners: Map<string, RankedStateDecl> }>();
 	for (const cand of candidates) {
 		const selector = buildSelector(cand, markerIds);
@@ -105,11 +104,11 @@ export function applyCopied(captured: Captured): Captured {
 }
 
 /**
- * Discovers the interactive-state rules and binds each to concrete subtree elements.
- * A rule is considered when its selector mentions a dynamic interactive pseudo-class and
- * its @media gate currently applies, the same frozen viewport the resting cascade uses.
+ * Finds the state rules and binds each to concrete subtree elements. A rule counts when its
+ * selector mentions a dynamic pseudo and its @media gate applies, on the same frozen viewport
+ * the resting cascade used.
  *
- * @returns one candidate per rule-branch and subject-element pair that bound entirely in-subtree
+ * @returns one candidate per branch and subject that bound entirely in-subtree
  */
 function collectCandidates(
 	captured: Captured,
@@ -142,8 +141,8 @@ function collectCandidates(
 				if (!safeMatches(subjectEl, structural)) continue;
 				const marked = bindMarkedCompounds(branch, subjectEl, inSubtree);
 				if (!marked) {
-					// The trigger binds outside the subtree, or the selector relationship cannot
-					// be re-anchored to markers standalone. Either way the effect is dropped.
+					// Either the trigger binds outside the subtree or the relationship cannot
+					// be re-anchored to markers, so the effect is dropped.
 					if (!unreproducible.has(rule.selector)) {
 						unreproducible.add(rule.selector);
 						captured.warnings.push(`states: could not reproduce "${rule.selector}" standalone (trigger outside the snip or unsupported relationship); effect dropped`);
@@ -158,13 +157,12 @@ function collectCandidates(
 }
 
 /**
- * Binds every marked compound of a branch, the subject plus each compound carrying a
- * dynamic pseudo, to a concrete element, walking the combinator chain leftward from the
- * subject. Structural-only intermediate compounds are gates. They are bound only as stepping
- * stones, never marked.
+ * Binds every marked compound of a branch, the subject plus each carrying a dynamic pseudo, by
+ * walking the combinator chain leftward. A structural-only intermediate compound is a gate,
+ * bound as a stepping stone and never marked.
  *
- * @returns the marked compounds and their combinators, or null if a state-bearing compound
- *   bound outside the subtree (the irreducible boundary) or could not be bound at all
+ * @returns the marked compounds and their combinators, or null when a state-bearing compound
+ *   bound outside the subtree or could not be bound at all
  */
 function bindMarkedCompounds(
 	branch: Complex,
@@ -191,8 +189,8 @@ function bindMarkedCompounds(
 		const isStateBearing = compound.dynamicPseudos.length > 0;
 		if (!isSubject && !isStateBearing) continue; // A purely-structural gate, so it is dropped.
 		const el = bound[k] ?? null;
-		// A state-bearing compound must bind inside the subtree. Otherwise its trigger is
-		// not present in the artifact and the effect cannot be reproduced.
+		// A state-bearing compound must bind inside the subtree, or its trigger is absent
+		// from the artifact and the effect cannot be reproduced.
 		if (!inSubtree(el)) return null;
 		if (marked.length > 0) {
 			const combinator = generalize(marked[marked.length - 1]!.element, el);
@@ -205,9 +203,8 @@ function bindMarkedCompounds(
 }
 
 /**
- * Resolves the element a compound binds to, given the element bound to the compound on
- * its right and the combinator between them. Takes the nearest match for the loose
- * relations, descendant and subsequent-sibling, which the unique marker then pins exactly.
+ * The element a compound binds to, given its right neighbour and the combinator between them.
+ * The loose relations take the nearest match, which the unique marker then pins exactly.
  *
  * @returns the bound element, or null if none satisfies the relation
  */
@@ -231,9 +228,8 @@ function findRelated(right: Element, combinator: Combinator, compound: Compound)
 }
 
 /**
- * Builds the output selector for a candidate from its marked compounds. Each becomes a
- * `[data-snip-state="n"]` marker carrying its dynamic pseudos and pseudo-element, joined
- * by the generalized combinators.
+ * The output selector for a candidate: each marked compound becomes a marker carrying its
+ * dynamic pseudos and pseudo-element, joined by the generalized combinators.
  *
  * @returns the selector string, or null if any marked element lacks an id
  */
@@ -242,8 +238,7 @@ function buildSelector(cand: Candidate, markerIds: Map<Element, number>): string
 	for (const m of cand.marked) {
 		const id = markerIds.get(m.element);
 		if (id === undefined) return null;
-		// The marker precedes the pseudo, `[data-...]:hover` never `:hover[data-...]`, the
-		// spelling scoped-css emitters like Vue and Angular rely on.
+		// Marker before pseudo, the spelling scoped-css emitters like Vue rely on.
 		parts.push(`[${MARKER}="${id}"]${m.dynamicPseudos.join('')}${m.pseudoElement}`);
 	}
 	let selector = parts[0] ?? '';
@@ -254,12 +249,7 @@ function buildSelector(cand: Candidate, markerIds: Map<Element, number>): string
 	return selector || null;
 }
 
-/**
- * Assigns a marker id to every element any candidate marks, numbered by document order
- * for determinism.
- *
- * @returns the element -> marker id map
- */
+/** A marker id for every element a candidate marks, numbered by document order. */
 function assignMarkers(pairs: Array<[Element, Element]>, candidates: Candidate[]): Map<Element, number> {
 	const needed = new Set<Element>();
 	for (const cand of candidates) for (const m of cand.marked) needed.add(m.element);
@@ -272,8 +262,8 @@ function assignMarkers(pairs: Array<[Element, Element]>, candidates: Candidate[]
 }
 
 /**
- * Merges one rule's declarations into the per-property cascade winners for a group,
- * keeping the winner by !important, then specificity, then capture order.
+ * Merges one rule's declarations into a group's per-property winners, by !important, then
+ * specificity, then capture order.
  *
  * @param winners - the per-property winning declaration map, mutated in place
  */
@@ -296,12 +286,9 @@ function stateWins(a: RankedStateDecl, b: RankedStateDecl): boolean {
 }
 
 /**
- * Drops every state declaration that merely restates the element's resting value, so the
- * emitted rule stays proportional to the real state change. A `:hover` that restates the
- * resting color contributes nothing. The remainder is emitted !important so it outranks
- * the inline resting value while the state is active.
- *
- * @returns the formatted, non-redundant declaration lines
+ * Drops every state declaration that restates the resting value, so the emitted rule stays
+ * proportional to the real change. What is left is !important, to outrank the inline resting
+ * value while the state is active.
  */
 function denoise(winners: Map<string, RankedStateDecl>, resting: Map<string, string> | undefined): string[] {
 	const lines: string[] = [];

@@ -4,9 +4,8 @@
  * Runs during the convert phase, on the tailwind emitter's output.
  *
  * Jsx is not html: class becomes className, for becomes htmlFor, hyphenated svg attributes
- * camelCase, and inline style strings become style objects. This rewrites the markup and
- * wraps it in a component. Jsx lets any childless element self-close, so no void-tag list
- * is needed.
+ * camelCase, and an inline style string becomes an object. This rewrites the markup and wraps
+ * it in a component. Any childless element self-closes in jsx, so no void-tag list is needed.
  */
 import type { Captured } from '../types';
 import { emitTailwind } from './tailwind';
@@ -14,9 +13,8 @@ import type { HtmlOutput } from './document';
 import { parseDeclarations } from '../utils/css-split';
 
 /**
- * The html attributes that rename to a non-camelCase react prop. This is the
- * react dom attribute vocabulary, a finite output-format table, not a hardcoded
- * list of styling properties. Hyphenated svg attrs are handled algorithmically by camelCasing.
+ * The html attributes that rename to a non-camelCase react prop: the react dom vocabulary, a
+ * finite output-format table. A hyphenated svg attribute is handled by camelCasing instead.
  */
 const REACT_ATTR: Record<string, string> = {
 	class: 'className',
@@ -39,11 +37,7 @@ const REACT_ATTR: Record<string, string> = {
 	usemap: 'useMap',
 };
 
-/**
- * Emits the snip as a react component plus its stylesheet.
- *
- * @param captured - read-only
- */
+/** Emits the snip as a react component plus its stylesheet. Read-only. */
 export function emitJsx(captured: Captured): HtmlOutput {
 	const base = emitTailwind(captured);
 	const doc = new DOMParser().parseFromString(base.html, 'text/html');
@@ -104,9 +98,8 @@ function jsxAttrName(name: string): string {
 }
 
 /**
- * Convert an inline style string to react style-object entries. The shared top-level split
- * keeps a `;` or `:` inside a url(data:...;base64,) or any other function with its value, so a
- * data-uri background becomes one entry rather than several broken ones.
+ * Converts an inline style string to react style-object entries. The shared top-level split
+ * keeps a `;` inside a data uri with its value, so a background becomes one entry.
  */
 function styleToObject(style: string): string {
 	const entries: string[] = [];

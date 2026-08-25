@@ -6,9 +6,8 @@
  * precedence already applied.
  *
  * @property is the part that does not survive. A registration carries the syntax, inherits
- * flag, and initial-value that govern how a custom property falls back and interpolates, such
- * as an animated --angle gradient. Only the registration is re-emitted, never a synthetic
- * layer order.
+ * flag, and initial-value governing how a custom property falls back and interpolates, an
+ * animated --angle gradient say. Only the registration is re-emitted, never a layer order.
  */
 import type { Captured } from '../../types';
 import { registeredProperties } from '../properties';
@@ -16,11 +15,7 @@ import { forEachSynthesizedDeclaration } from '../synthesized';
 
 const VAR_REF = /var\(\s*(--[A-Za-z0-9_-]+)/g;
 
-/**
- * Re-emits @property registrations for custom properties the snip uses.
- *
- * @param captured - clone is mutated in place
- */
+/** Re-emits @property registrations for custom properties the snip uses. Clone is mutated in place. */
 export function apply(captured: Captured): Captured {
 	const used = usedCustomProps(captured);
 	if (used.size === 0) return captured;
@@ -38,10 +33,9 @@ export function apply(captured: Captured): Captured {
 }
 
 /**
- * Every custom-property name the snip references or defines, across the baked styles and
- * the synthesized state/pseudo rules. The synthesized rules are included so a registered
- * property a state rule depends on, such as the tailwind ring/shadow chain, keeps its @property
- * registration in the artifact, which is what lets resolve/vars.ts treat it as resolvable.
+ * Every custom-property name the snip references or defines, across the baked styles and the
+ * synthesized rules. Including the synthesized ones keeps the registration a state rule
+ * depends on, the tailwind ring chain say, which is what lets resolve/vars.ts resolve it.
  */
 function usedCustomProps(captured: Captured): Set<string> {
 	const names = new Set<string>();

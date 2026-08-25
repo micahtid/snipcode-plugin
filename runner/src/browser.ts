@@ -1,11 +1,11 @@
 /**
  * runner/src/browser.ts: launch, navigate, wait, inject, and drive.
  *
- * Loads the url with the deterministic defaults every run shares, a 1440x900 desktop
- * viewport, load plus network idle plus fonts ready, and one lazy-content scroll pass;
- * installs the Host binding; injects the core iife; then drives the three commands over
- * page.evaluate. Nothing here knows the pipeline internals. It only knows how to load a page
- * and hand core its privileged services.
+ * Loads the url with the deterministic defaults every run shares: a 1440x900 desktop viewport,
+ * load plus network idle plus fonts ready, and one lazy-content scroll pass. It then installs
+ * the Host binding, injects the core iife, and drives the three commands over page.evaluate.
+ * Nothing here knows the pipeline internals, only how to load a page and hand core its
+ * privileged services.
  */
 import { chromium, type Browser, type Page } from 'playwright';
 import { readFileSync } from 'node:fs';
@@ -17,8 +17,6 @@ import { fullPage, elementCrop } from './screenshot';
 
 /** Page-loading defaults, fixed so two runs of one page are comparable. */
 const VIEWPORT = { width: 1440, height: 900 };
-const USER_AGENT =
-	'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 const NAV_TIMEOUT_MS = 45_000;
 const NETWORK_IDLE_MS = 15_000;
 const SETTLE_MS = 500;
@@ -32,6 +30,18 @@ const BLOCK_SIGNALS = [
 	/access denied/i,
 	/attention required/i,
 ];
+
+/**
+ * A desktop Chrome user agent carrying the bundled Chromium's own major version.
+ *
+ * The override exists because headless Chromium announces itself as `HeadlessChrome`, which
+ * plenty of sites answer with a bot wall. Deriving the version from the running browser rather
+ * than pinning a number keeps the claim true as playwright's chromium moves.
+ */
+function userAgentFor(browser: Browser): string {
+	const major = browser.version().split('.')[0] || '124';
+	return `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Safari/537.36`;
+}
 
 /** Raised when the page is a bot wall / consent gate; carries a screenshot for the agent. */
 export class PageBlockedError extends Error {
@@ -94,6 +104,9 @@ export interface ExtractOutcome {
  * Loads a url, injects core, runs fn against the driver, and always tears the browser
  * down. Throws PageBlockedError when the loaded page looks like a bot wall or consent
  * gate, so the cli can report it honestly with a screenshot rather than snip garbage.
+ *
+ * The url arrives already gated to http or https by normalizeUrl in cli/src/output.ts.
+ * Nothing here re-checks it, so a new caller has to run it through that gate first.
  */
 export async function withPage<T>(url: string, opts: LoadOptions, fn: (driver: Driver) => Promise<T>): Promise<T> {
 	const browser: Browser = await chromium.launch({ headless: opts.headless !== false });
@@ -101,7 +114,7 @@ export async function withPage<T>(url: string, opts: LoadOptions, fn: (driver: D
 		const context = await browser.newContext({
 			viewport: opts.viewport ?? VIEWPORT,
 			deviceScaleFactor: 1,
-			userAgent: USER_AGENT,
+			userAgent: userAgentFor(browser),
 		});
 		const page = await context.newPage();
 		page.setDefaultTimeout(NAV_TIMEOUT_MS);

@@ -14,14 +14,10 @@ import { getHost } from '../host';
 const TAG_ATTR = 'data-snipcode-target';
 
 /**
- * Augments Captured with the authored inherited cascade via cdp.
- *
- * Tags the live root with a unique attribute, asks the background to attach the
- * debugger and read CSS.getMatchedStylesForNode().inherited for that node, then
- * folds the ancestor rules into foundationRules. It soft-fails: if the debugger is
- * busy (for example when devtools is open) or attach is refused, the snip
- * continues on cssom data alone with a warning. cdp is an enhancement, never a
- * hard dependency.
+ * Adds the authored inherited cascade to Captured. It tags the live root, asks the host to read
+ * CSS.getMatchedStylesForNode().inherited for that node, and folds the ancestor rules into
+ * foundationRules. Soft-fails: a busy or refused debugger leaves the snip on cssom data alone
+ * with a warning, because cdp is an enhancement rather than a dependency.
  *
  * @param captured - the in-flight capture, mutated in place
  */
@@ -51,8 +47,7 @@ export async function augmentInheritedChainViaCDP(captured: Captured): Promise<v
 				source: 'cdp',
 				...(rule.media ? { mediaQuery: rule.media } : {}),
 			};
-			// Inherited ancestor rules are broadly relevant to the snip root, so
-			// they live in the foundation layer.
+			// Inherited ancestor rules apply broadly, so they live in the foundation layer.
 			captured.foundationRules.push(entry);
 		}
 	} catch (err) {
@@ -63,13 +58,9 @@ export async function augmentInheritedChainViaCDP(captured: Captured): Promise<v
 }
 
 /**
- * Recovers cross-origin stylesheets that the content script could not read.
- *
- * sheets.ts records the hrefs of sheets that threw SecurityError. This fetches
- * each through the background, whose <all_urls> permission bypasses cors, parses
- * the text into rules, and merges them into Captured. Recovered hrefs are dropped
- * from the inaccessible list. Failures stay recorded as inaccessible with a
- * warning rather than blocking the snip.
+ * Recovers the cross-origin stylesheets sheets.ts recorded as unreadable, by fetching each
+ * through the privileged host, parsing the text, and merging the rules in. A recovered href
+ * leaves the inaccessible list; a failure stays on it with a warning rather than blocking.
  *
  * @param captured - the in-flight capture, mutated in place
  */
@@ -103,21 +94,15 @@ export async function recoverCrossOriginSheets(captured: Captured): Promise<void
 }
 
 /**
- * Recovers the @font-face rules that cross-origin stylesheets hide, by reading the text
- * the browser already parsed over cdp. recoverCrossOriginSheets above tries a privileged
- * re-fetch, which a cdn waf often blocks. This fallback reads
- * the same sheets through the devtools protocol, which is not bound by the same-origin
- * policy and needs no network round-trip. It runs over the hrefs still flagged
- * inaccessible after the fetch attempt, so it closes exactly the font-discovery gap those
- * sites leave, when a snip's web font lives only in a cdn-hosted, unreadable, unfetchable
- * sheet.
+ * Recovers the @font-face rules a cross-origin stylesheet hides, by reading the text the
+ * browser already parsed over cdp. A cdn waf often blocks the privileged re-fetch above. The
+ * protocol is not bound by the same-origin policy and needs no network round-trip. So this
+ * runs over the hrefs still flagged inaccessible, closing the font gap those sites leave.
  *
- * Scope is deliberately @font-face only. The goal is to recover fonts, a resource the
- * artifact must carry, not the full cross-origin cascade, so only the faces are
- * harvested and the inaccessible list is left untouched. parseCssText absolutizes each
- * recovered src against the sheet href, since a src is relative to its stylesheet, not the
- * page, so a relative or root-relative src on a cdn-hosted sheet resolves to the cdn
- * host rather than the wrong page origin.
+ * Scope is @font-face only. Fonts are a resource the artifact must carry; the full cross-origin
+ * cascade is not the goal, so the inaccessible list is left untouched. parseCssText absolutizes
+ * each recovered src against the sheet href, so a relative src on a cdn-hosted sheet resolves
+ * to the cdn rather than the page origin.
  *
  * @param captured - the in-flight capture. captured.fonts is extended in place
  */

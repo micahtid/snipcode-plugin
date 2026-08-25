@@ -1,10 +1,10 @@
 /**
  * features/icons.ts: resolving svg sprite references.
  *
- * A design system keeps icons as <symbol> definitions in a sprite outside the picked subtree,
- * so every <use href="#x"> renders as a blank 0x0 box once the snip is pasted elsewhere. This
- * reads the referenced symbols from the live document and inlines them in a hidden <defs> at
- * the top of the clone. currentColor keeps working because bake.ts already baked color onto
+ * A design system keeps icons as <symbol> definitions in a sprite outside the picked subtree.
+ * Every <use href="#x"> then renders as a blank 0x0 box once the snip is pasted elsewhere. So
+ * this reads the referenced symbols from the live document and inlines them in a hidden <defs>
+ * at the top of the clone. currentColor keeps working because bake.ts already baked color onto
  * the snip root.
  */
 import type { Captured } from '../../types';
@@ -12,11 +12,7 @@ import type { Captured } from '../../types';
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const XLINK_NS = 'http://www.w3.org/1999/xlink';
 
-/**
- * Inlines the <symbol> definitions referenced by <use> elements in the clone.
- *
- * @param captured - clone is mutated in place and returned for the handler chain
- */
+/** Inlines the <symbol> definitions the clone's <use> elements reference. Clone mutates here. */
 export function apply(captured: Captured): Captured {
 	const uses = Array.from(captured.clone.querySelectorAll('use'));
 	if (uses.length === 0) return captured; // No sprite refs, nothing to do
@@ -30,8 +26,8 @@ export function apply(captured: Captured): Captured {
 
 	const symbols: Element[] = [];
 	for (const id of wantedIds) {
-		// Symbols are global ids in the live document, so getElementById finds them
-		// even when they live outside the picked subtree, which is the whole point.
+		// Symbols are global ids, so getElementById finds one outside the picked subtree,
+		// which is the whole point.
 		const found = document.getElementById(id);
 		if (found) symbols.push(found.cloneNode(true) as Element);
 		else captured.warnings.push(`icons: sprite symbol #${id} not found in document`);

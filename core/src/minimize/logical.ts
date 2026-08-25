@@ -1,13 +1,13 @@
 /**
  * minimize/logical.ts: folding logical properties to physical.
  *
- * Runs in minimize, between prune and normalize. The engine computes margin-inline-start and
- * border-end-end-radius where the page was written margin-left and border-bottom-right-radius,
- * and left logical the four corner radii never fold, because border-radius is physical.
+ * Runs in minimize, between prune and normalize. The engine computes margin-inline-start where
+ * the page wrote margin-left, and left logical the four corner radii never fold, because
+ * border-radius is physical.
  *
- * The rewrite applies only to rules whose every matched element is horizontal-tb and ltr,
- * where the spec makes the two exactly equivalent. A vertical or rtl element keeps its logical
- * properties. Render-neutral by construction, and oracle-checked anyway as a backstop.
+ * The rewrite applies only where every matched element is horizontal-tb and ltr, which is where
+ * the spec makes the two equivalent. A vertical or rtl element keeps its logical properties.
+ * Render-neutral by construction, and oracle-checked anyway as a backstop.
  */
 import type { Captured } from '../types';
 import { withOracle } from './oracle';
@@ -52,13 +52,11 @@ const BOTH: Record<string, [string, string]> = {
 const HAS_LOGICAL = /(?:^|[;{\s])(?:border-(?:start|end)-(?:start|end)-radius|(?:inset|margin|padding|border)-(?:block|inline)|(?:block|inline|min-block|max-block|min-inline|max-inline)-size)/;
 
 /**
- * Rewrites logical properties to physical on the rules whose every matched element is
- * horizontal-tb and ltr. It is graceful by contract, returning the input unchanged on any
- * infrastructure failure, and reverting any rule whose rewrite is not render-neutral. It is
- * deterministic, so rules and declarations are processed in document order.
+ * Rewrites logical properties to physical wherever every matched element is horizontal-tb and
+ * ltr. Any infrastructure failure returns the input, and a rule whose rewrite is not
+ * render-neutral reverts. Document order throughout, so the result is deterministic.
  *
  * @param captured - source of the viewport size. Warnings are appended here on skip.
- * @returns the stylesheet with logical properties folded to physical where safe
  */
 export async function foldLogical(css: string, captured: Captured, markup: string): Promise<string> {
 	if (!HAS_LOGICAL.test(css)) return css;
@@ -79,8 +77,7 @@ export async function foldLogical(css: string, captured: Captured, markup: strin
 			if (rewritten === null) continue;
 			const saved = styleRule.style.cssText;
 			styleRule.style.cssText = rewritten;
-			// Render-neutral by construction for a horizontal-tb ltr element. The oracle is a
-			// backstop against a value the rewrite mishandled. Scoped to the rule's own subtree.
+			// Neutral by construction here; the oracle only backstops a mishandled value.
 			if (!oracle.matchesSubset(oracle.subtreeTargets(elements))) styleRule.style.cssText = saved;
 		}
 		return serializeRules(Array.from(oracle.sheet.cssRules));
@@ -94,9 +91,9 @@ function isHorizontalLtr(win: Window, el: Element): boolean {
 }
 
 /**
- * Rewrites a rule's logical declarations to physical, or null when it holds none. Longhands
- * are renamed. A two-value logical shorthand splits across its two physical sides, and a border
- * block/inline shorthand copies its value to both. A non-logical declaration passes through.
+ * Rewrites a rule's logical declarations to physical, or null when it holds none. A longhand is
+ * renamed, a two-value shorthand splits across its two sides, and a border block or inline
+ * shorthand copies to both.
  */
 function rewrite(cssText: string): string | null {
 	let changed = false;
@@ -121,9 +118,9 @@ function rewrite(cssText: string): string | null {
 }
 
 /**
- * Splits a two-value logical value into its start and end halves, carrying any !important to
- * both. One value applies to both sides. Splits on top-level whitespace so a function's inner
- * spaces do not split it.
+ * Splits a two-value logical value into its start and end halves, carrying any priority to
+ * both. A single value applies to both sides, and the split is top-level so a function's own
+ * spaces do not cut it.
  */
 function splitPair(value: string): [string, string] {
 	const bang = /\s*!important\s*$/i.exec(value);

@@ -30,7 +30,8 @@ import { apply as applyTables } from './reconcile/features/tables';
 import { apply as applyLists } from './reconcile/features/lists';
 import { apply as applyForms } from './reconcile/features/forms';
 import { resolveVariables } from './resolve/vars';
-import { resolveFonts, appendGenericFallbacks, correctFontMime, mergeIdenticalFaces } from './resolve/fonts';
+import { resolveFonts, appendGenericFallbacks } from './resolve/fonts';
+import { correctFontMime, mergeIdenticalFaces } from './resolve/font-bytes';
 import { resolveAnimations } from './resolve/anim';
 import { resolveTransitionTiming } from './resolve/transition';
 import { inlineResources } from './resolve/inline';
@@ -53,10 +54,7 @@ import { stripUnreferencedDataAttributes } from './minimize/attributes';
 import { assembleHtmlDocument, formatCss, isHtmlShaped } from './convert/format';
 import { splitAssets } from './convert/assets';
 
-/**
- * The reconcile-phase feature handlers, in apply order. Each handles one css/html
- * spec mechanism universally and is orthogonal to the others.
- */
+/** The reconcile feature handlers, in apply order. Each covers one mechanism, orthogonally. */
 const FEATURE_HANDLERS: Array<[string, (c: Captured) => Captured]> = [
 	['icons', applyIcons],
 	['fonts', applyFonts],
@@ -75,11 +73,7 @@ const FEATURE_HANDLERS: Array<[string, (c: Captured) => Captured]> = [
 	['forms', applyForms],
 ];
 
-/**
- * Runs every feature handler over the captured snip, isolating failures. A handler
- * that throws never halts the pipeline: the error is recorded as a warning and the
- * unmodified captured flows on.
- */
+/** Runs every feature handler, isolating failures: a throw becomes a warning and flows on. */
 function runFeatures(captured: Captured): void {
 	for (const [name, fn] of FEATURE_HANDLERS) {
 		try {
@@ -90,47 +84,39 @@ function runFeatures(captured: Captured): void {
 	}
 }
 
-/**
- * Runs the reconcile, resolve, and self-containment transform that turns a captured
- * snip into a self-contained clone.
- */
+/** Runs reconcile, resolve, and self-containment, turning a capture into a standalone clone. */
 export async function runCoreTransform(captured: Captured): Promise<void> {
-	// Reconcile phase. Authored and inherited styles bake onto the clone, the feature
-	// handlers run over the result with isolated failures, then de-noise drops the inert
-	// declarations they bake so every output format ships the smaller result.
+	// Reconcile. Authored and inherited styles bake onto the clone, the feature handlers run
+	// over the result, then de-noise drops the inert declarations they baked.
 	reconcile(captured);
 	runFeatures(captured);
 	denoise(captured);
 
-	// Resolve phase. Var resolution in a single pass, @font-face absolutization,
-	// @keyframes pairing. Order: vars first, which may rewrite values, then
-	// fonts/keyframes which read the now-stable baked styles.
+	// Resolve. Vars first, since they rewrite values, then fonts and keyframes, which read the
+	// now-stable baked styles.
 	resolveVariables(captured);
 	resolveFonts(captured);
 	resolveAnimations(captured);
-	// Var resolution can collapse a cycled transition timing sub-list to one literal
-	// against a multi-entry transition-property, which would serialize to a malformed
-	// shorthand. Re-expand the sub-lists so the fold stays lossless.
+	// Var resolution can collapse a cycled timing sub-list to one literal against a
+	// multi-entry transition-property, so re-expand it and keep the fold lossless.
 	resolveTransitionTiming(captured);
 
-	// Closing reconciliation: make the standalone artifact's own render the source of
-	// truth, baking the original's resolved value for any paint/box property that does
-	// not reproduce standalone. Runs last so it corrects anything resolve left dangling.
+	// Closing reconciliation: the artifact's own render becomes the source of truth. Last, so
+	// it corrects anything resolve left dangling.
 	reconcileStandalone(captured);
-	// Self-containment: guarantee every font stack ends in a generic, then inline the
-	// referenced fonts and images as data uris so the artifact does not depend on the origin.
+	// Self-containment: every font stack ends in a generic, then the referenced fonts and
+	// images inline as data uris so the artifact depends on no origin.
 	appendGenericFallbacks(captured);
 	await inlineResources(captured);
-	// Post-embed font sanity: relabel each font data uri with the mime its bytes actually are,
-	// then collapse faces that embed identical bytes into one weight-range @font-face.
+	// Post-embed: relabel each font data uri with the mime its bytes are, then collapse faces
+	// with identical bytes into one weight-range @font-face.
 	correctFontMime(captured);
 	mergeIdenticalFaces(captured);
 }
 
 /**
- * Runs the deterministic, key-free minimize pipeline over an assembled html-shaped
- * artifact. Every css step degrades to its input on failure, so the pipeline always
- * produces a shippable pair.
+ * Runs the minimize pipeline over an assembled html-shaped artifact. Every css step degrades
+ * to its input on failure, so the result is always shippable.
  */
 export async function minimizeArtifact(
 	captured: Captured,
@@ -151,10 +137,7 @@ export async function minimizeArtifact(
 	return { html: stripUnreferencedDataAttributes(html, finalCss), css: finalCss };
 }
 
-/**
- * Dispatches to the emitter for the chosen output format. Every format is a pure
- * transform of the same Captured, so all are derivable from one capture.
- */
+/** Dispatches to one format's emitter. Each is a pure transform of the same Captured. */
 export function emitFormat(captured: Captured, format: OutputFormat): HtmlOutput {
 	switch (format) {
 		case 'tailwind':
@@ -188,15 +171,14 @@ export interface ExtractResult {
 }
 
 /**
- * Runs the full deterministic pipeline for one already-resolved element and returns
- * a self-contained artifact in the chosen format. Every judgment layer, including which
- * element to pick and what to name it, stays with the calling agent.
+ * Runs the full pipeline for one resolved element and returns a self-contained artifact in the
+ * chosen format. Every judgment layer stays with the calling agent.
  *
  * @param screenshot - cropped png data url, may be empty
  */
 export async function extractElement(root: Element, screenshot: string, format: OutputFormat): Promise<ExtractResult> {
-	// Builder gate: refuse framer/wix/etc before any capture work. On a hit the agent
-	// gets the element screenshot crop and rebuilds it with a vision model itself.
+	// Builder gate, before any capture work. On a hit the agent gets the screenshot crop and
+	// rebuilds the element by eye.
 	const gate = detectBuilder(root);
 	if (gate.blocked) {
 		return { builderDetected: true, builder: gate.builder ?? null, html: '', css: '', output: '', warnings: [gate.message ?? 'unsupported builder site'] };
@@ -206,9 +188,8 @@ export async function extractElement(root: Element, screenshot: string, format: 
 	await runCoreTransform(captured);
 
 	const emitted = emitFormat(captured, format);
-	// The bem emitters (including the html format) put generated classes on a private
-	// copy, so the cleaner matches selectors against the emitted markup; tailwind/jsx/vue
-	// keep matching against the inline-styled clone.
+	// The bem emitters, html included, put generated classes on a private copy, so the cleaner
+	// matches against the emitted markup. tailwind, jsx, and vue match the clone.
 	const classMarkup = format === 'html' || format === 'bem-css' ? emitted.html : undefined;
 	let css = cleanCss(emitted.css, captured, classMarkup);
 	let html = emitted.html;
@@ -226,8 +207,7 @@ export async function extractElement(root: Element, screenshot: string, format: 
 	}
 
 	const output = composeDocument(html, css);
-	// Delivery split for the self-contained html-shaped output: lift inline svgs and
-	// data-uri images into their own referenced files.
+	// Delivery split: lift inline svgs and data-uri images into their own referenced files.
 	const files = isHtmlShaped(format) ? splitAssets(output, captured.warnings) : undefined;
 
 	return {

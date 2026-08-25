@@ -15,12 +15,10 @@ import { generalize, MARKER } from './states-anchor';
 
 /**
  * Emits the measured states. Each is already a list of concrete computed deltas keyed to the
- * original elements and their generating pseudo layers. So this maps those to clones, marks
- * them, builds the marker selector with a safe generalized combinator and the layer's
- * pseudo-element, denoises against the resting baseline, and emits the rest !important. A pinned
- * endpoint also gets a coherent transition re-emitted on the element's resting rule, so it
- * animates in both directions rather than snapping on the way out. No cascade merge and no var()
- * survival remain, because the engine resolved both when the value was measured.
+ * original elements and their pseudo layers. So this maps them to clones, marks them, builds
+ * the marker selector, denoises against the resting baseline, and emits the rest !important.
+ * A pinned endpoint also gets a coherent transition on the element's resting rule, so it
+ * animates in both directions rather than snapping on the way out.
  *
  * @param captured - clone is mutated in place: markers and an appended <style>
  */
@@ -29,20 +27,18 @@ export function applyMeasured(captured: Captured, measuredStates: MeasuredState[
 	const pairs = pairedSubtrees(captured.root, captured.clone);
 	const originalToClone = new Map<Element, Element>(pairs.map(([original, clone]) => [original, clone]));
 
-	// Resolve each measured trigger, state, and affected-element triple to clone elements. An
-	// element a later feature handler did not carry into the clone is skipped, since it cannot
-	// be re-anchored.
+	// Resolve each measured triple to clone elements. One a later handler did not carry into
+	// the clone is skipped, since it cannot be re-anchored.
 	const units = resolveMeasuredUnits(measuredStates, originalToClone);
 	if (units.length === 0) return captured;
 
-	// Number every marked element by clone document order, so markers and the rules keying them
-	// are deterministic regardless of the order states were measured in.
+	// Number marked elements by clone document order, so markers stay deterministic whatever
+	// order the states were measured in.
 	const markerIds = assignMeasuredMarkers(pairs, units);
 	for (const [el, id] of markerIds) el.setAttribute(MARKER, String(id));
 
-	// Group declarations by the selector they re-anchor to. Distinct trigger, state, and affected
-	// triples produce distinct marker selectors, so a group is normally one triple. The merge is
-	// just the natural home for its denoised declarations.
+	// Group declarations by the selector they re-anchor to. Distinct triples produce distinct
+	// marker selectors, so a group is normally one triple.
 	const groups = new Map<string, Map<string, string>>();
 	// The element-box props each affected clone pins across all its states, plus its live original,
 	// so one coherent resting transition can be emitted per element below.
@@ -54,15 +50,13 @@ export function applyMeasured(captured: Captured, measuredStates: MeasuredState[
 			continue;
 		}
 		const winners = groups.get(selector) ?? new Map<string, string>();
-		// A pseudo layer is denoised against its own resting pseudo, already shed at capture by the
-		// per-pseudo diff, not the element's baked map, which describes a different box. The element
-		// box keeps its baked-value baseline.
+		// A pseudo layer denoises against its own resting pseudo, already shed at capture, not
+		// against the element's baked map, which describes a different box.
 		const resting = unit.pseudoElement ? undefined : captured.bakedStyles.get(unit.affectedClone);
 		denoiseMeasured(unit.decls, resting, winners);
 		groups.set(selector, winners);
-		// Collect the element box's pinned props. A coherent transition over them is emitted on the
-		// resting rule below. Pseudo layers are excluded, because a pseudo's own resting transition,
-		// shipped on its pseudo rule, already governs its fade in both directions.
+		// The element box's pinned props, for the coherent transition emitted below. Pseudo
+		// layers are excluded: their own resting transition already governs the fade.
 		if (!unit.pseudoElement) {
 			const entry = pinned.get(unit.affectedClone) ?? { original: unit.affectedOriginal, props: new Set<string>() };
 			for (const prop of winners.keys()) entry.props.add(prop);
@@ -75,13 +69,10 @@ export function applyMeasured(captured: Captured, measuredStates: MeasuredState[
 		const lines = [...winners].map(([prop, value]) => `\t${prop}: ${value} !important;`);
 		if (lines.length > 0) rules.push(`${selector} {\n${lines.join('\n')}\n}`);
 	}
-	// Re-emit a coherent transition on each affected element's resting rule, not its state rule, so
-	// the pinned endpoints animate when both entering and leaving the state. A transition lives on
-	// the base rule by spec. The engine reads timing from the after-change style, which is the
-	// hovered state on the way in and the resting state on the way out, so a transition placed only
-	// on the :hover rule animates the entry and snaps the exit. The base rule governs both. This is
-	// render-neutral, since a transition produces no pixels at rest, so the resting render is
-	// unchanged.
+	// The coherent transition goes on the resting rule, not the state rule, so the pinned
+	// endpoints animate both entering and leaving. The engine reads timing from the
+	// after-change style, so a transition only on the :hover rule eases the entry and snaps
+	// the exit. Render-neutral, since a transition paints nothing at rest.
 	for (const [clone, { original, props }] of pinned) {
 		const id = markerIds.get(clone);
 		if (id === undefined || props.size === 0) continue;
@@ -146,11 +137,10 @@ function assignMeasuredMarkers(pairs: Array<[Element, Element]>, units: Measured
 }
 
 /**
- * Builds the output selector for one unit. It is the trigger marker carrying its state pseudos,
- * then, when the affected element is not the trigger itself, the generalized combinator and the
- * affected marker. The affected layer's pseudo-element, if any, is appended to the subject, as in
- * `[marker]:hover::after` when the trigger is the subject, or `[trigger]:hover [affected]::after`
- * for a descendant. Returns null when the relationship is not expressible by a single combinator.
+ * The output selector for one unit. It is the trigger marker with its state pseudos, then,
+ * when the affected element is not the trigger, the generalized combinator and the affected
+ * marker. The layer's pseudo-element is appended to the subject, giving `[marker]:hover::after`
+ * or `[trigger]:hover [affected]::after`. Null when no single combinator expresses the relation.
  */
 function buildMeasuredSelector(unit: MeasuredUnit, markerIds: Map<Element, number>): string | null {
 	const triggerId = markerIds.get(unit.triggerClone);
@@ -165,14 +155,13 @@ function buildMeasuredSelector(unit: MeasuredUnit, markerIds: Map<Element, numbe
 }
 
 /**
- * Color-family properties that resolve to `currentColor` when not pinned to a divergent value.
- * This happens either by css default (border, outline, decoration, emphasis, caret, column-rule,
- * and text-stroke) or because reconcile/features/colors.ts normalized an icon's matching literal
- * back to it (fill and stroke). A measured change to one of these that equals the forced `color`
- * is carried by the `color` declaration we already emit. A color pinned to its own divergent
- * value would not have tracked `color` into the diff in the first place, so dropping it is sound.
- * `color` itself, the source, and `-webkit-text-fill-color`, the one channel the resting bake
- * pins per element and so severs the inheritance a text recolor rides, are never dropped this way.
+ * Color-family properties that resolve to `currentColor` unless pinned elsewhere, either by css
+ * default or because features/colors.ts normalized an icon's literal back to it. A measured
+ * change equal to the forced `color` is already carried by the `color` declaration. One pinned
+ * to its own value would not have tracked `color` into the diff at all.
+ *
+ * Two are never dropped this way: `color` itself, the source, and `-webkit-text-fill-color`,
+ * the channel the resting bake pins per element, which severs the inheritance a recolor rides.
  */
 const CURRENT_COLOR_TRACKERS = new Set([
 	'caret-color', 'outline-color', 'text-decoration-color', 'text-emphasis-color', 'column-rule-color',
@@ -184,14 +173,13 @@ const CURRENT_COLOR_TRACKERS = new Set([
 const AUTO_SIZED_PROPS = new Set(['width', 'height', 'inline-size', 'block-size']);
 
 /**
- * Whether a measured property's resting base resolves to `auto`, and so cannot interpolate to
- * the concrete length measured in the state. A transition animates between two values only when
- * both are interpolable. `auto` is not, so a size pinned onto the state over an `auto` base can
- * only snap while every concrete-valued neighbour eases. An `auto`-sized box is content-driven,
- * and the content deltas that grow it are pinned in their own right, so left unpinned it resizes
- * standalone exactly as the live element does when its own `auto` box flows. The base is read as
- * `auto` from the resting bake, or inferred for a size property the bake left unset since its
- * initial value is `auto`. A base already pinned to a concrete length stays pinned and animates.
+ * Whether a property's resting base is `auto`, which cannot interpolate to the concrete length
+ * measured in the state. Pinned over such a base, a size can only snap while its neighbours
+ * ease. An `auto` box is content-driven, and the content deltas that grow it are pinned in
+ * their own right. Left unpinned it resizes exactly as the live element does.
+ *
+ * The base reads `auto` from the resting bake, or is inferred for a size property the bake
+ * left unset, since its initial value is `auto`. A base already pinned to a length animates.
  *
  * @param resting - the affected element's resting baked value for it, or undefined when unset
  */
@@ -201,12 +189,9 @@ function baseIsAuto(property: string, resting: string | undefined): boolean {
 }
 
 /**
- * Folds a unit's measured declarations into a selector's winners, dropping any that merely
- * restate the element's resting baked value, cannot animate from an `auto` base, have no effect
- * in this element's context, or only track the forced `color`, so the emitted rule stays
- * proportional to the real change. A later unit for the same selector overwrites an earlier
- * property, but distinct triples carry distinct selectors, so this is just the per-selector
- * accumulation point.
+ * Folds a unit's declarations into a selector's winners. Four kinds drop along the way. Those
+ * that restate the resting baked value, cannot animate from an `auto` base, do nothing in this
+ * element's context, or only track the forced `color`. What is left matches the real change.
  *
  * @param winners - the per-property winners for the selector, mutated in place
  */
@@ -215,8 +200,8 @@ function denoiseMeasured(decls: MeasuredStateDecl[], resting: Map<string, string
 		const value = decls.find((d) => d.property === prop)?.value ?? resting?.get(prop);
 		return value !== undefined && value !== '' && value !== 'none';
 	};
-	// transform-origin/perspective-origin resolve to per-element pixels, so a size change shifts
-	// them, but they only have an effect on a box that actually establishes a transform/perspective.
+	// The origin properties shift with any size change, but act only on a box that establishes
+	// a transform or perspective.
 	const hasTransform = present('transform') || present('translate') || present('rotate') || present('scale');
 	const hasPerspective = present('perspective');
 	const forcedColor = decls.find((d) => d.property === 'color')?.value;
@@ -233,17 +218,16 @@ function denoiseMeasured(decls: MeasuredStateDecl[], resting: Map<string, string
 }
 
 /**
- * The transition to broaden onto an affected element's resting rule so its pinned endpoints
- * animate coherently in both directions, or null when none is needed. It reads the element's
- * resting transition live from the original. The measurement shim suppressed it, so it is only
- * readable here, at emit, with the page at rest. Returns null when the element has no real resting
- * transition, since the live element snaps too and adding motion would be wrong, or when the
- * resting transition already covers every changed property, in which case the resting baked
- * transition shipped at rest governs the animation and re-emitting would be redundant. Otherwise
- * it broadens to `all` with the element's longest-running timing, so a property the resting
- * transition does not cover, such as the dot's colors-only timing vs our pinned width, animates
- * in step rather than snapping. This is the deliberate approximation: coordinated motion at the
- * element's rhythm, not exact per-property timing.
+ * The transition to broaden onto an element's resting rule so its pinned endpoints animate in
+ * both directions, or null when none is needed. The element's resting transition is read live
+ * from the original, since the measurement shim suppressed it and only emit time, with the
+ * page at rest, can see it.
+ *
+ * Null when the element has no real resting transition, because the live element snaps too, or
+ * when the resting one already covers every changed property. Otherwise it broadens to `all`
+ * at the element's longest timing, so a property the resting transition misses animates in
+ * step. A deliberate approximation: coordinated motion at the element's rhythm, not exact
+ * per-property timing.
  */
 function broadenedTransition(original: Element, changed: Set<string>): string | null {
 	const cs = getComputedStyle(original);
@@ -251,8 +235,8 @@ function broadenedTransition(original: Element, changed: Set<string>): string | 
 	const durations = splitCommas(cs.getPropertyValue('transition-duration'));
 	const timings = splitCommas(cs.getPropertyValue('transition-timing-function'));
 	const delays = splitCommas(cs.getPropertyValue('transition-delay'));
-	// Pair each transitioned property with its timing, repeating the shorter lists as the cascade
-	// does. Keep only the ones that actually animate (a real, positive duration).
+	// Pair each property with its timing, cycling the shorter lists as the cascade does, and
+	// keep only the ones that actually animate.
 	const entries = properties
 		.map((property, i) => ({
 			property,
@@ -278,9 +262,9 @@ function durationSeconds(value: string): number {
 }
 
 /**
- * Splits a comma list at top level, so a `cubic-bezier(..., ...)` timing function stays one
- * entry. Interior empty entries are kept, since these lists are read positionally against a
- * sibling list, but a trailing empty one, which a trailing comma leaves behind, is dropped.
+ * Splits a comma list at top level, so a `cubic-bezier(..., ...)` stays one entry. Interior
+ * empties are kept, since these lists are read positionally against a sibling list, but a
+ * trailing one, left by a trailing comma, is dropped.
  */
 function splitCommas(value: string): string[] {
 	const parts = splitTopLevel(value, ',').map((part) => part.trim());

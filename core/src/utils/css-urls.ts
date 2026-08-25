@@ -1,10 +1,9 @@
 /**
- * reconcile/features/urls.ts: relative url() rewriting, shared by the handlers that need it.
+ * utils/css-urls.ts: relative url() rewriting, shared by every phase that needs it.
  *
- * A snip is pasted somewhere other than the page it came from, so any `url(logo.png)` in a
- * baked value would resolve against the wrong document. Both the effects handler (masks,
- * filters, clip paths) and the images handler (backgrounds) rewrite those to absolute, and
- * they did it with their own copy of the same function.
+ * A snip is pasted somewhere other than the page it came from. Any `url(logo.png)` in a baked
+ * value or a @font-face src would resolve against the wrong document. Capture, resolve, and
+ * reconcile each had their own copy of this rewrite; there is one now.
  */
 
 /** Matches one `url(...)` and captures its optional quote and its target. */
@@ -14,12 +13,10 @@ const URL_IN_VALUE = /url\(\s*(['"]?)([^'")]+)\1\s*\)/g;
 const ALREADY_RESOLVED = /^(data:|blob:|https?:|#)/i;
 
 /**
- * Rewrites every relative url() in a css value to absolute against `base`.
+ * Rewrites every relative url() in a css value to absolute against `base`. A target that
+ * already resolves is untouched, so `clip-path: url(#mask)` keeps its fragment. A `local()`
+ * source is never a url(), which is what makes this safe on a font src.
  *
- * A target that already resolves is returned untouched, so `clip-path: url(#mask)` keeps
- * pointing at the in-document fragment it names.
- *
- * @param value - the css value, which may hold several url()s
  * @param warnings - optional sink for a url that will not resolve; omit it for silence
  */
 export function absolutizeUrls(value: string, base: string, warnings?: string[], source = 'urls'): string {

@@ -1,30 +1,29 @@
 /**
  * convert/assets.ts: lifting inline svgs, images, and fonts into their own files.
  *
- * Runs last in convert, on the assembled document. The self-contained form renders and grades
- * as one file but is hard to read: a 30-line icon sits in the middle of the markup and an
- * embedded font is hundreds of kilobytes dwarfing the stylesheet. Each is lifted out and
- * referenced instead. The caller keeps the single-file document too; this is delivery shape only.
+ * Runs last in convert, on the assembled document. The self-contained form renders as one file
+ * but reads badly: a 30-line icon sits in the middle of the markup and an embedded font dwarfs
+ * the stylesheet. Each is lifted out and referenced. The caller keeps the single-file document
+ * too, so this is delivery shape only.
  *
- * One fidelity catch: an svg loaded through <img> no longer inherits the page's color, so each
- * icon's currentColor is resolved by laying the document out in a hidden iframe and reading the
- * computed color, which is ground truth whatever set it. The computed box carries onto the
- * replacement <img> so it lays out where the svg did. An svg taken out of flow by position or
- * transform, or a sprite whose <use> points outside itself, cannot be reproduced that way and
- * is left inline. What lifts is faithful; what would not stays put.
+ * One fidelity catch. An svg loaded through <img> no longer inherits the page's color. Each
+ * icon's currentColor is resolved by laying the document out in a hidden iframe and reading
+ * the computed color. The computed box carries onto the replacement <img> so it lands where
+ * the svg did. An svg out of flow, or a sprite whose <use> points outside itself, cannot be
+ * reproduced that way and stays inline. What lifts is faithful; what would not stays put.
  */
 import type { AssetFile } from '../types';
 import { escapeHtmlAttr } from './document';
 import { parseDeclarations } from '../utils/css-split';
+import { withProbeFrame } from '../reconcile/frame';
 
 /** The color an icon falls back to when nothing in its ancestry sets one. */
 const DEFAULT_COLOR = '#000000';
 
 /**
- * An svg that composes through references, a mask, a filter, a <use> of defs, or a
- * <foreignObject>, cannot be trusted to paint the same once detached into a standalone
- * <img>, so it is left inline. Simple shape-and-path icons carry no such construct and lift
- * faithfully.
+ * An svg composing through references cannot be trusted to paint the same once detached. A
+ * mask, a filter, a <use> of defs, or a <foreignObject> keeps it inline. Simple shape-and-path
+ * icons carry no such construct and lift faithfully.
  */
 const COMPOSES_VIA_REFERENCE = /<(?:use|mask|filter|foreignObject)\b/i;
 
@@ -33,13 +32,11 @@ const DATA_IMG_ATTR = /(\b(?:src|href)\s*=\s*)(["'])(data:image\/[^"']+)\2/gi;
 const DATA_IMG_URL = /url\(\s*(["']?)(data:image\/[^"')]+)\1\s*\)/gi;
 
 /**
- * Splits an assembled html document into its index file plus one file per inline
- * svg and data-uri image. Identical assets dedupe to a single shared file. On any
- * failure the document is returned whole as the only file, so the panel always has
- * something to show.
+ * Splits an assembled document into index.html plus one file per inline svg and data-uri
+ * image, deduped by content. Any failure returns the document whole as the only file.
  *
  * @param warnings - appended to if the split is skipped
- * @returns index.html first, then the extracted svg/image files in encounter order
+ * @returns index.html first, then the extracted files in encounter order
  */
 export function splitAssets(documentHtml: string, warnings: string[]): AssetFile[] {
 	try {
@@ -53,16 +50,14 @@ export function splitAssets(documentHtml: string, warnings: string[]): AssetFile
 		let svgIndex = 0;
 		let html = extractSvgs(documentHtml, (svg) => {
 			const box = boxes[svgIndex++];
-			// An icon pointing at a fragment defined outside itself, a shared sprite via
-			// <use href="#id">, would lose its target once detached, so keep it inline.
+			// A sprite pointing at a fragment defined outside itself loses its target once
+			// detached, so keep it inline.
 			if (referencesExternalFragment(svg)) return svg;
-			// An svg positioned or transformed out of normal flow (a decorative graphic that
-			// bleeds past its container) cannot be reproduced by an in-flow <img> without
-			// carrying its full positioning context, so keep it inline where it lays out right.
+			// An svg out of normal flow, a decorative graphic bleeding past its container,
+			// needs its whole positioning context, which an in-flow <img> cannot carry.
 			if (box && (box.position !== 'static' || box.transform !== 'none')) return svg;
-			// An svg that composes cross-references, a <mask>/<filter>, a <use> pointing at defs,
-			// or a <foreignObject>, renders through the document that hosts it. Detached into a
-			// standalone <img> those either break or paint differently, so keep it inline.
+			// An svg composing cross-references renders through its host document, and detached
+			// into a standalone <img> those break or paint differently.
 			if (COMPOSES_VIA_REFERENCE.test(svg)) return svg;
 			const file = bakeColor(ensureXmlns(svg), box?.color ?? DEFAULT_COLOR);
 			const name = register(assets, fileByContent, file, () => `icon-${++svgCount}.svg`, 'svg', { text: file });
@@ -73,9 +68,8 @@ export function splitAssets(documentHtml: string, warnings: string[]): AssetFile
 			register(assets, fileByContent, dataUrl, () => `image-${++imageCount}.${mimeExtension(dataUrl)}`, 'image', { dataUrl }),
 		);
 
-		// Fonts are the bulk of the stylesheet's bytes: a single @font-face src data uri can be
-		// hundreds of KB. Lift each to its own file the way images are lifted, so the css a user
-		// reads shrinks to the @font-face rule plus a short relative url.
+		// Fonts are the bulk of the stylesheet's bytes. Lifting each to its own file shrinks
+		// the css a reader sees to the @font-face rule plus a short relative url.
 		html = extractFontUris(html, (dataUrl, ext) =>
 			register(assets, fileByContent, dataUrl, () => `font-${++fontCount}.${ext}`, 'font', { dataUrl }),
 		);
@@ -109,9 +103,8 @@ function register(
 // ---------------------------------------------------------------------------
 
 /**
- * Replaces each top-level inline <svg>...</svg> with the string `replace` returns
- * for it, leaving the surrounding markup, and its formatting, untouched. Nested
- * svgs travel inside their top-level parent, so only the outermost is replaced.
+ * Replaces each top-level inline svg with what `replace` returns, leaving the surrounding
+ * markup and its formatting alone. A nested svg travels inside its outermost parent.
  */
 function extractSvgs(html: string, replace: (svg: string) => string): string {
 	let result = '';
@@ -191,24 +184,20 @@ function buildImgTag(svg: string, name: string, box: SvgBox | undefined): string
 	return `<img src="${name}"${style ? ` style="${escapeHtmlAttr(style)}"` : ''}${hidden} alt="${escapeHtmlAttr(alt)}">`;
 }
 
-/**
- * The inline props an extracted <img> must not copy: paint is already baked into the svg
- * file, and size, display, and baseline come from the computed box instead.
- */
+/** Props an extracted <img> must not copy: paint is baked in, and the box supplies the rest. */
 const BAKED_IMG_PROPS = new Set(['fill', 'stroke', 'color', 'width', 'height', 'display', 'vertical-align']);
 
 /**
- * The box styles the <img> needs to lay out exactly where the inline svg did, minus the
- * now-baked paint props. The svg's size, display, and baseline can come from an attribute, an
- * inline style, or a class rule. Only the computed box (`box`) captures all three, so it is
- * the ground truth for those. Any other box props authored inline, a margin say, are kept as
- * written. `display`/`vertical-align` are emitted only when they deviate from the <img>
- * defaults (inline, baseline), so a plain icon stays clean.
+ * The box styles the <img> needs to land where the inline svg did, minus the now-baked paint.
+ * An svg's size, display, and baseline can come from an attribute, an inline style, or a class
+ * rule. Only the computed box captures all three, so that is the ground truth. Other box props
+ * authored inline, a margin say, are kept as written, and display and vertical-align are
+ * emitted only when they deviate from the <img> defaults.
  */
 function imgStyle(el: Element, box: SvgBox | undefined): string {
 	const decls: string[] = [];
-	// The shared top-level split keeps a `;` inside a url(data:...;base64,) or any other
-	// function with its value, so a data-uri background survives the copy intact.
+	// The shared top-level split keeps a `;` inside a data uri with its value, so a data-uri
+	// background survives the copy intact.
 	for (const { prop, value } of parseDeclarations(el.getAttribute('style') ?? '')) {
 		const name = prop.toLowerCase();
 		// Paint is baked into the file. Size, display, and baseline come from the computed box.
@@ -248,11 +237,10 @@ function mimeExtension(dataUrl: string): string {
 // ---------------------------------------------------------------------------
 
 /**
- * A css url() carrying a data uri, with the optional format() hint that follows it in an
- * @font-face src. The capture groups are the opening quote, the data uri, the whole
- * format() span to preserve, and the hint token, in that order. This runs after image
- * extraction, so any remaining data uri in a url() is a font or another non-image asset,
- * which the mime check below filters.
+ * A css url() carrying a data uri, plus the optional format() hint that follows it in a
+ * @font-face src. The groups are the opening quote, the uri, the format() span to preserve,
+ * and the hint token. Image extraction ran first, so what is left is a font or a non-image
+ * asset the mime check below filters.
  */
 const DATA_FONT_URL = /url\(\s*(["']?)(data:[^"')]+)\1\s*\)(\s*format\(\s*["']?([\w+-]+)["']?\s*\))?/gi;
 
@@ -272,9 +260,8 @@ const FONT_HINT_EXT: Record<string, string> = { woff2: 'woff2', woff: 'woff', tr
 const FONT_SIGNATURE_EXT: Record<string, string> = { wOF2: 'woff2', wOFF: 'woff', OTTO: 'otf', true: 'ttf', typ1: 'ttf', ttcf: 'ttc', '\x00\x01\x00\x00': 'ttf' };
 
 /**
- * Replaces each @font-face src data-uri font in a css url() with the filename `replace`
- * returns, passing the resolved extension, and preserves the format() hint that follows.
- * A url() whose data uri is not a font, an image the earlier pass missed, is left untouched.
+ * Replaces each data-uri font in a css url() with the filename `replace` returns for the
+ * resolved extension, preserving the format() hint. A non-font uri is left untouched.
  */
 function extractFontUris(html: string, replace: (dataUrl: string, ext: string) => string): string {
 	return html.replace(DATA_FONT_URL, (whole, quote: string, dataUrl: string, formatSpan: string | undefined, hint: string | undefined) => {
@@ -286,10 +273,9 @@ function extractFontUris(html: string, replace: (dataUrl: string, ext: string) =
 }
 
 /**
- * The file extension for a font data uri, or null when the uri is not a font. The font's own
- * magic bytes are the ground truth and are read first, so a mislabeled uri (a woff2 served as
- * binary/octet-stream) is still recognized. The declared mime and then the format() hint are
- * fallbacks for a container, eot say, whose header carries no clean signature.
+ * The extension for a font data uri, or null when it is not a font. The magic bytes are ground
+ * truth and are read first, so a woff2 served as octet-stream is still recognized. The mime
+ * and then the format() hint are fallbacks for a container whose header has no signature.
  */
 function fontExtension(dataUrl: string, mime: string, hint: string | undefined): string | null {
 	const bySignature = fontSignatureExt(dataUrl);
@@ -328,35 +314,27 @@ interface SvgBox {
 }
 
 /**
- * The computed box each top-level svg renders with, in document order, read from the
- * document laid out in a hidden same-origin iframe. getComputedStyle resolves color, size,
- * display, and baseline however they are set, whether inline, by a presentation attribute, or
- * by a class rule, so the replacement <img> matches for every output format. Returns fewer
- * entries, so callers fall back to defaults, if the document cannot be laid out.
+ * The computed box each top-level svg renders with, in document order, from the document laid
+ * out in a hidden iframe. getComputedStyle resolves color, size, display, and baseline however
+ * they were set, so the replacement <img> matches in every output format. Fewer entries come
+ * back when the document will not lay out, and callers fall back to defaults.
  */
 function resolveSvgBoxes(documentHtml: string): SvgBox[] {
 	const boxes: SvgBox[] = [];
-	const frame = document.createElement('iframe');
-	frame.setAttribute('aria-hidden', 'true');
-	frame.setAttribute('sandbox', 'allow-same-origin'); // Lay the markup out, but never run its scripts
-	frame.style.cssText = 'position:absolute;left:-99999px;top:0;width:0;height:0;border:0;visibility:hidden';
-	document.body.appendChild(frame);
 	try {
-		const doc = frame.contentDocument;
-		const win = frame.contentWindow;
-		if (!doc || !win) return boxes;
-		doc.open();
-		doc.write(documentHtml);
-		doc.close();
-		for (const svg of doc.querySelectorAll('svg')) {
-			if (!isTopLevelSvg(svg)) continue;
-			const cs = win.getComputedStyle(svg);
-			boxes.push({ color: cs.color || DEFAULT_COLOR, display: cs.display, verticalAlign: cs.verticalAlign, width: cs.width, height: cs.height, position: cs.position, transform: cs.transform });
-		}
+		// Sandboxed, because this frame is handed the artifact's own markup to lay out.
+		withProbeFrame((doc, win) => {
+			doc.open();
+			doc.write(documentHtml);
+			doc.close();
+			for (const svg of doc.querySelectorAll('svg')) {
+				if (!isTopLevelSvg(svg)) continue;
+				const cs = win.getComputedStyle(svg);
+				boxes.push({ color: cs.color || DEFAULT_COLOR, display: cs.display, verticalAlign: cs.verticalAlign, width: cs.width, height: cs.height, position: cs.position, transform: cs.transform });
+			}
+		}, true);
 	} catch {
 		// Layout unavailable, so callers fall back to defaults.
-	} finally {
-		frame.remove();
 	}
 	return boxes;
 }

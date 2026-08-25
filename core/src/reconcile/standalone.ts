@@ -1,26 +1,19 @@
 /**
  * reconcile/standalone.ts: making the artifact's own render the source of truth.
  *
- * Runs last in reconcile. bake.ts validates each authored value by forcing it onto the live
- * element, and that test passes for values which only resolve because the page is present: a
- * var() defined on :root, an inherited body font, an ancestor-relative length. Those dangle
- * once the snip is pasted. So the baked clone is mounted in an isolated iframe carrying only
- * the ua stylesheet, and any property whose standalone value diverges from the original's live
- * one is corrected. One anchor fixes missing backgrounds, dangling tokens, lost display, and
- * collapsed geometry at once, because they are all the same defect.
+ * Runs last in reconcile. bake.ts validates each authored value against the live element, and
+ * that test passes for values which only resolve because the page is there. A var() on :root,
+ * an inherited body font, an ancestor-relative length. Those dangle once the snip is pasted.
+ * So the baked clone is mounted in an isolated iframe with only the ua stylesheet, and any
+ * property whose standalone value diverges from the live one is corrected. One anchor fixes
+ * missing backgrounds, dangling tokens, lost display, and collapsed geometry at once, since
+ * they are all the same defect. It runs to a fixed point, because baking display shifts
+ * descendants.
  *
- * Box geometry is reconciled directionally, because the standalone render is authoritative on
- * size in one direction only. A non-replaced box that lost a sizing input from outside the snip
- * can only collapse, never grow, so its size is reclaimed only when it shrank; that is what
- * keeps a font-grown fallback box from being clipped back. A replaced element has an intrinsic
- * box, so either direction is a defect. See shouldReclaim in reconcile/diff.ts.
- *
- * The same anchor extends to structure: an element rendered in the original but absent from
- * the clone, dropped by some earlier handler, is restored, so a dropped element is corrected
- * universally rather than by special-casing whichever handler dropped it.
- *
- * It runs to a fixed point, because baking a structural property such as display changes
- * descendants' computed values.
+ * Geometry is the exception, authoritative on size in one direction only. A non-replaced box
+ * that lost a sizing input can only collapse, never grow, so its size is reclaimed only when
+ * it shrank. That is what keeps a font-grown fallback box from being clipped back. See
+ * shouldReclaim in reconcile/diff.ts.
  */
 import type { Captured } from '../types';
 import { pairedSubtrees } from './match';
@@ -35,25 +28,16 @@ interface Override {
 	value: string;
 }
 
-/** Max reconciliation rounds. A structural property (display) can shift descendants'
- * computed values, so the diff is run to a fixed point. In practice it converges in
- * one or two passes, and the cap guards against a pathological non-converging cycle. */
+/** Max reconciliation rounds. It converges in one or two; the cap guards a pathological cycle. */
 const MAX_ROUNDS = 4;
 
 /**
- * The closing reconciliation. It makes the standalone artifact's own render the source of
- * truth. For every paired element, any paint or box property whose standalone value
- * diverges from the original's live computed value, as shouldReclaim judges it, is
- * corrected by baking the original's resolved value, overriding an authored value that
- * does not reproduce standalone, such as a dangling token, a lost inherited font, an
- * ancestor-relative length, or a flex/grid track or inset that did not travel with the
- * snip. This is the single anchor that fixes missing backgrounds, dangling variables,
- * lost display, and collapsed box geometry at once.
+ * The closing reconciliation, which makes the artifact's own render the source of truth. On
+ * every paired element, any property whose standalone value diverges from the live one, as
+ * shouldReclaim judges it, is corrected. The live value bakes over the authored one.
  *
- * It runs to a fixed point: baking a structural property such as `display` can change
- * descendants' computed values, so each round re-reads the standalone render, with the
- * bakes applied to the in-frame copy too so the next round sees them, and stops
- * when a round makes no further corrections.
+ * Each round re-reads the standalone render, with the bakes mirrored onto the in-frame copy so
+ * the next round sees them, and stops when a round corrects nothing.
  *
  * @param captured - bakedStyles + clone are mutated in place
  */
@@ -61,8 +45,7 @@ export function reconcileStandalone(captured: Captured): void {
 	try {
 		withStandaloneFrame(captured, (mapCloneToFrame, win) => {
 			const pairs = pairedSubtrees(captured.root, captured.clone).filter(([, clone]) => mapCloneToFrame.has(clone));
-			// Snapshot each element's live computed values once. The live page never
-			// changes, so this is the fixed target every round reconciles toward.
+			// Snapshot the live computed values once: the fixed target every round aims at.
 			const liveTargets = pairs.map(([original, clone]) => {
 				const live = getComputedStyle(original);
 				const want = new Map<string, string>();
@@ -96,9 +79,8 @@ export function reconcileStandalone(captured: Captured): void {
 }
 
 /**
- * Bakes one recovered value onto the clone, persistently in bakedStyles plus the inline
- * style, and mirrors it onto the in-frame copy so the next reconciliation round reads the updated
- * standalone render. A property the element rejects is skipped via the inline try/catch.
+ * Bakes one recovered value onto the clone, in bakedStyles and the inline style. It is mirrored
+ * onto the in-frame copy, so the next round reads the updated standalone render.
  */
 function applyOverride(captured: Captured, o: Override): void {
 	const baked = captured.bakedStyles.get(o.clone) ?? new Map<string, string>();
@@ -117,12 +99,10 @@ function applyOverride(captured: Captured, o: Override): void {
 }
 
 /**
- * Zeroes the snip root's own margin. A root margin positioned the element against
- * siblings that do not travel with the snip (the escaped context like the geometry
- * bake.ts recovers), so standalone it only pushes the component away from the origin.
- * A pasted component is positioned by its new container, not by a margin it carried
- * from the old page, so the faithful standalone form sits flush at the origin. Only the
- * root is affected. Descendant margins are real intra-component spacing and are kept.
+ * Zeroes the snip root's own margin. That margin positioned the element against siblings that
+ * do not travel with the snip, so standalone it only pushes the component off the origin. A
+ * pasted component is placed by its new container. Descendant margins are real intra-component
+ * spacing and are kept.
  *
  * @param captured - the root clone's baked margin is removed in place
  */
@@ -147,20 +127,14 @@ function zeroRootMargin(captured: Captured): void {
 }
 
 /**
- * Recovers the backdrop a snip lost with its ancestor chain. A component is often
- * authored with a transparent background because it sits on a section that paints the
- * color, such as a dark hero or a tinted band. Reparented standalone, that section is gone and
- * the component renders on white, so light text vanishes. This is the same escaped-
- * context recovery bake.ts already does for geometry (bakeEscapedLayout), applied to
- * paint. When the root's own background is transparent, bake the nearest opaque
- * ancestor background-color onto it.
+ * Recovers the backdrop a snip lost with its ancestor chain. A component authored transparent
+ * because it sits on a dark hero renders on white once reparented, and its light text
+ * vanishes. So when the root paints nothing, the nearest ancestor backdrop is baked onto it.
+ * Same escaped-context recovery bake.ts does for geometry, applied to paint.
  *
- * Runs after the standalone reconciliation deliberately. The reconciliation makes the
- * root reproduce its OWN computed style (a transparent background), and this is the
- * separate, later decision to restore the vanished backdrop, so it is not reverted.
- * Only the root needs it, because children paint over it. The recovered paint is a solid color,
- * or any reproducible backdrop image, such as a gradient, a tiled pattern, or a
- * cover/contain image. A positioned framed photo, sized for the full section, is still only flagged.
+ * It runs after the standalone reconciliation on purpose. That pass makes the root reproduce
+ * its own transparent background, and this is the separate later decision to restore what
+ * vanished. Only the root needs it, since children paint over it.
  *
  * @param captured - the root clone's baked map + inline style are extended
  */
@@ -177,12 +151,10 @@ function recoverEscapedBackground(captured: Captured): void {
 			bakeOnRoot(captured, 'background-color', cs.backgroundColor);
 			return;
 		}
-		// A nearer ancestor paints its backdrop with an image rather than a solid color.
-		// A reproducible backdrop, such as a gradient, a repeated tile, or a cover/contain image, is a
-		// paint that re-renders at any size, so baking the whole multi-layer value plus its
-		// placement onto the root reproduces the backdrop and makes light-on-backdrop text
-		// visible, even though it was authored for the whole section. A positioned framed
-		// photo is sized for that section and cannot be reproduced, so that residual is flagged.
+		// An ancestor paints its backdrop with an image. A gradient, a tile, or a cover image
+		// re-renders at any size, so baking the whole value plus its placement onto the root
+		// reproduces it. A positioned framed photo is sized for that section and cannot be
+		// reproduced, so it is flagged instead.
 		if (cs.backgroundImage && cs.backgroundImage !== 'none') {
 			if (isReproducibleBackdrop(node, cs)) {
 				const place = backdropPlacement(cs);
@@ -213,25 +185,19 @@ function bakeOnRoot(captured: Captured, prop: string, value: string): void {
 }
 
 /**
- * Whether a computed color paints nothing, in any notation that ends at zero alpha.
- *
- * Wider than isTransparentColor in utils/color.ts, which matches only the two spellings a
- * computed style produces for "nothing". Here any `rgba(r, g, b, 0)` counts, because this
- * decides whether an ancestor supplies a backdrop, and a zero-alpha color of any color
- * supplies none.
+ * Whether a computed color paints nothing, in any notation ending at zero alpha. Wider than
+ * isTransparentColor in utils/color.ts: here any `rgba(r, g, b, 0)` counts, because a
+ * zero-alpha color of any hue supplies no backdrop.
  */
 function paintsNothing(color: string): boolean {
 	return color === 'transparent' || color === 'rgba(0, 0, 0, 0)' || /,\s*0\)\s*$/.test(color);
 }
 
 /**
- * Whether a computed backdrop reproduces faithfully when baked onto the snip's own,
- * smaller box. A value with no raster layer is judged on its gradients, since a paint
- * function reproduces at any size. A raster layer reproduces in three cases. It tiles,
- * where a repeat fills any box. It scales, where a cover/contain image fits any box. Or
- * it paints the whole ancestor box, a full-bleed backdrop which can be rescaled to cover
- * the snip. A smaller placed raster is a framed image positioned for its section and does
- * not reproduce.
+ * Whether a backdrop reproduces faithfully on the snip's own smaller box. With no raster
+ * layer it is judged on its gradients, which paint at any size. A raster reproduces when it
+ * tiles, when it scales to cover or contain, or when it is full-bleed and so can be rescaled.
+ * A smaller placed raster is a framed image and does not.
  */
 function isReproducibleBackdrop(node: Element, cs: CSSStyleDeclaration): boolean {
 	if (!/url\(/i.test(cs.backgroundImage)) return isReproducibleGradient(cs.backgroundImage);
@@ -239,10 +205,9 @@ function isReproducibleBackdrop(node: Element, cs: CSSStyleDeclaration): boolean
 }
 
 /**
- * The size and repeat to bake when reproducing a backdrop on the snip. A tiled or
- * scaling backdrop keeps its own placement: a tile repeats, and a cover/contain image fits.
- * A full-bleed raster sized in fixed pixels for the original section is rescaled to
- * cover, so it fills the smaller snip box rather than overflowing it.
+ * The size and repeat to bake for a backdrop. A tiled or scaling one keeps its own placement.
+ * A full-bleed raster sized in fixed pixels for the original section is rescaled to cover, so
+ * it fills the smaller snip box rather than overflowing it.
  */
 function backdropPlacement(cs: CSSStyleDeclaration): { size: string; repeat: string } {
 	const keepsOwn = !/url\(/i.test(cs.backgroundImage) || backdropTiles(cs.backgroundRepeat) || backdropScales(cs.backgroundSize);
@@ -264,10 +229,9 @@ function backdropScales(backgroundSize: string): boolean {
 }
 
 /**
- * Whether the first background-size layer paints the full width of the ancestor box, the
- * mark of a decorative full-bleed backdrop rather than a smaller placed image. A
- * percentage of 100 or more, or a length at least as wide as the box, is full-bleed. An
- * auto or smaller size is a placed image.
+ * Whether the first background-size layer covers the full width of the ancestor box, which
+ * marks a decorative backdrop rather than a placed image. A percentage of 100 or more, or a
+ * length as wide as the box, is full-bleed; auto or smaller is a placed image.
  */
 function isFullBleed(node: Element, backgroundSize: string): boolean {
 	const first = (backgroundSize.split(',')[0] ?? '').trim().split(/\s+/)[0] ?? '';
@@ -277,9 +241,8 @@ function isFullBleed(node: Element, backgroundSize: string): boolean {
 }
 
 /**
- * Whether a computed background-image is purely css gradients: linear/radial/conic,
- * including repeating and -webkit- forms. A gradient is a paint function, not positioned
- * pixels, so baking it onto a smaller box still renders a faithful backdrop.
+ * Whether a background-image is purely css gradients, repeating and prefixed forms included.
+ * A gradient is a paint function rather than positioned pixels, so it survives a smaller box.
  */
 function isReproducibleGradient(backgroundImage: string): boolean {
 	if (/url\(/i.test(backgroundImage)) return false; // A raster layer cannot be reproduced.

@@ -20,34 +20,28 @@ import { withOracle, type RenderOracle } from './oracle';
 import { parseSegments, inScopeRule, serializeRules, type Segment } from './declarations';
 
 /**
- * Properties held out of deletion because the resting subtree oracle cannot verify them.
- * Animation and transition carry motion, not resting style. The oracle freezes them, so
- * they look inert at rest and deleting one would silently strip the reveal, hover, and
- * transition motion earlier phases reproduce. Counter properties act across the tree: a
- * counter-increment on one element changes the counter a later sibling's generated content
- * renders, an effect outside the element's own subtree that the subtree-scoped check cannot
- * see. Holding both out by property name is universal.
+ * Properties held out of deletion, because the resting subtree oracle cannot verify them.
+ * Animation and transition carry motion: the oracle freezes them, so they look inert at rest
+ * and deleting one would silently strip a reveal or hover. Counter properties act across the
+ * tree, changing what a later sibling's generated content renders, which is outside the
+ * subtree the check can see.
  */
 const UNVERIFIABLE_PROP = /^(animation|transition|counter-)/;
 
 /**
- * Wall-time ceiling for one component's minimization, the safety valve that bounds the
- * delta-debugging on a large component. It is not the mount that costs, which profiling put at
- * a few hundred milliseconds. It is the bisection's per-check style recalc, and on the two
- * largest, most restated components in the corpus, apple and f1, that recalc volume reaches the
- * ceiling and the pass stops early. That is the valve working as designed. Every deletion
- * accepted so far is already render-verified, so shipping the partial result is safe and stays
- * deterministic for a fixed input. Ordinary components finish in well under a second with the
- * valve never near.
+ * Wall-time ceiling for one component's minimization. The cost is not the mount, which
+ * profiling put at a few hundred milliseconds, but the bisection's per-check style recalc. On
+ * the two most restated components in the corpus that recalc reaches the ceiling and the pass
+ * stops early. That is the valve working: every deletion accepted so far is already
+ * render-verified, so the partial result is safe and still deterministic. Ordinary components
+ * finish well under a second.
  */
 const BUDGET_MS = 20_000;
 
 /**
- * The css properties that inherit, from the css spec. Used only by the pre-pass to guess
- * which declarations merely restate an inherited value, so the guess is verified by the
- * oracle and a missing or extra entry only shifts work between the pre-pass and the
- * bisection, never the result. This is universal spec knowledge, the same kind the
- * codebase already encodes for inline, void, and replaced tags, never corpus-derived.
+ * The css properties that inherit, from the spec. Only the pre-pass reads it, to guess which
+ * declarations restate an inherited value. The oracle verifies every guess, so a missing or
+ * extra entry shifts work between the pre-pass and the bisection, never the result.
  */
 const INHERITED = new Set<string>([
 	'azimuth', 'border-collapse', 'border-spacing', 'caption-side', 'caret-color', 'color',
@@ -69,9 +63,8 @@ const INHERITED = new Set<string>([
 ]);
 
 /**
- * Measurement of one minimization run, filled when the caller passes a stats sink. The
- * production call sites ignore it. The measurement harness reads it to report deletion
- * rate, char shrink, and wall time from a single snip.
+ * Measurement of one minimization run. Production call sites ignore it; the measurement
+ * harness reads it for deletion rate, char shrink, and wall time.
  */
 export interface MinimizeStats {
 	/** Wall time of the minimization step in milliseconds. */
@@ -87,21 +80,18 @@ export interface MinimizeStats {
 }
 
 /**
- * Minimizes an emitted stylesheet by deleting every declaration whose removal is
- * render-invisible, verified by the computed-style oracle. It is graceful by contract, so
- * any infrastructure failure appends a warning and returns the css unchanged, and a snip
- * always ships. It is deterministic. The only await is a one-time font settle at setup, after
- * which the bisection is synchronous and processes declarations in a fixed order, so the
- * same input always yields the same output.
+ * Deletes every declaration whose removal the computed-style oracle confirms is invisible.
+ * Graceful by contract: any infrastructure failure warns and returns the css unchanged, so a
+ * snip always ships. Deterministic too, since the only await is a one-time font settle at
+ * setup and the bisection then runs synchronously in a fixed order.
  *
  * @param captured - source of the viewport size. Warnings are appended here on skip.
  * @param stats - optional measurement sink, filled with this run's numbers when provided
- * @returns the minimized stylesheet, or the input unchanged on any failure
  */
 export async function minimizeCss(css: string, captured: Captured, markup: string, stats?: MinimizeStats): Promise<string> {
 	if (stats) fillNoOpStats(stats, css);
-	// A mid-run failure discards the frame's partial edits and ships the original css,
-	// never a half-minimized stylesheet. withOracle owns that fallback.
+	// withOracle owns the fallback: a mid-run failure discards the frame's partial edits and
+	// ships the original css, never a half-minimized stylesheet.
 	return withOracle(css, captured, markup, 'minimize: skipped', (oracle) => {
 		const t0 = now();
 		const result = run(oracle, stats);
@@ -133,26 +123,22 @@ interface DeclRef {
 }
 
 /**
- * Runs the minimization against a mounted oracle and returns the serialized result. The
- * oracle frame's own stylesheet is the working copy: declarations are removed from it,
- * checked, and kept or restored, then the surviving rules are serialized back to text.
+ * Runs the minimization against a mounted oracle. The frame's own stylesheet is the working
+ * copy: declarations come out of it, get checked, and are kept or restored.
  *
  * @param oracle - the mounted render whose stylesheet is minimized in place
- * @param stats - optional measurement sink for declaration counts
  */
 function run(oracle: RenderOracle, stats?: MinimizeStats): string {
 	oracle.captureReference();
 	const topRules = Array.from(oracle.sheet.cssRules);
 
-	// Index every in-scope rule's declarations through the parser. A touched rule is a
-	// top-level style rule whose selector is not withheld. Its declarations are parsed into
-	// author segments, shorthands kept intact, and a candidate is any segment that is not a
-	// motion or custom property. Everything else, withheld rules, at-rules, grouping rules,
-	// and the held-out segments, is preserved. A per-rule kept flag is the whole working
-	// state. A removal rebuilds the rule's cssText from the kept segments, a full re-parse
-	// each time, so the frame always renders exactly as a fresh parse of the emitted text
-	// would. Per-longhand removeProperty was avoided here because it can leave the live
-	// cssom serializing differently than it renders, which makes the oracle unsound.
+	// Index every in-scope rule's declarations through the parser: author segments with
+	// shorthands intact, and a candidate is any segment that is not motion or custom.
+	// Everything else is preserved. A per-rule kept flag is the whole working state. A removal
+	// rebuilds the rule's cssText from the kept segments, a full re-parse each time. The frame
+	// then renders exactly as a fresh parse of the emitted text would. Per-longhand
+	// removeProperty is avoided: it can leave the cssom serializing differently than it
+	// renders, which makes the oracle unsound.
 	const rules: MinRule[] = [];
 	const index: DeclRef[] = [];
 	for (const rule of topRules) {
@@ -168,9 +154,8 @@ function run(oracle: RenderOracle, stats?: MinimizeStats): string {
 	}
 	if (stats) {
 		stats.declsBefore = index.length;
-		// Resting-css chars, the in-scope style rules only, so the shrink metric is not
-		// swamped by the inlined @font-face and image data-uris that dominate the byte count
-		// and are never touched here.
+		// In-scope style rules only, so the shrink metric is not swamped by the inlined fonts
+		// and image data-uris that dominate the byte count and are never touched here.
 		stats.charsBefore = rules.reduce((sum, r) => sum + r.rule.cssText.length, 0);
 	}
 	if (index.length === 0) return serializeRules(topRules);
@@ -189,11 +174,9 @@ function run(oracle: RenderOracle, stats?: MinimizeStats): string {
 		for (const rIdx of dirty) rebuild(rIdx);
 	};
 
-	// The elements each rule matches, and the target set a removal on that rule can affect,
-	// meaning those elements plus their descendants. Computed once so the bisection can check a
-	// removal against just the affected subtree rather than the whole render, which is what
-	// makes large components finish inside the budget. See oracle.subtreeTargets for why the
-	// subtree is a sound scope.
+	// What each rule matches, plus the descendants a removal there can reach. Computed once so
+	// the bisection checks a removal against that subtree rather than the whole render, which
+	// is what makes large components finish inside the budget. See oracle.subtreeTargets.
 	const matched: Element[][] = rules.map((r) => {
 		try {
 			return Array.from(oracle.body.querySelectorAll(r.rule.selectorText));
@@ -213,10 +196,9 @@ function run(oracle: RenderOracle, stats?: MinimizeStats): string {
 	const deadline = now() + BUDGET_MS;
 	const all = index.map((_, i) => i);
 
-	// Delta-debugging bisection: remove a chunk, and if the affected subtree still matches
-	// the reference keep it removed, otherwise restore it and split. Every accepted removal
-	// leaves the frame equal to the reference, so every later check compares against the same
-	// baseline.
+	// Delta-debugging bisection: remove a chunk, keep it removed if the affected subtree still
+	// matches, otherwise restore and split. Every accepted removal leaves the frame equal to
+	// the reference, so later checks compare against the same baseline.
 	const bisect = (idxs: number[]): void => {
 		if (idxs.length === 0 || now() > deadline) return;
 		setKept(idxs, false);
@@ -228,13 +210,11 @@ function run(oracle: RenderOracle, stats?: MinimizeStats): string {
 		bisect(idxs.slice(mid));
 	};
 
-	// Pre-pass: batch the declarations most likely to be dead, the ones that merely restate
-	// an inherited value or a ua default, and try removing them all in one check. A pass
-	// clears the whole batch at once, the big win on large components. A fail salvages the
-	// batch by bisecting only it, still cheap because it is nearly all removable, so the
-	// pre-pass only ever saves checks and never changes the outcome. The bisection then
-	// handles whatever the batch left. The batch spans nearly every rule, so it is checked
-	// against the whole render.
+	// Pre-pass: batch the declarations most likely dead, those restating an inherited value or
+	// a ua default, and try removing them in one check. A pass clears the whole batch at once,
+	// the big win on large components; a fail bisects only the batch, still cheap because it
+	// is nearly all removable. Either way the outcome is the same, only the check count moves.
+	// The batch spans nearly every rule, so it is checked against the whole render.
 	const batch = redundantDefaults(oracle, rules, index, matched, uaDefaults(oracle, matched, rules, index));
 	const inBatch = new Set(batch);
 	const rest = all.filter((i) => !inBatch.has(i));
@@ -247,9 +227,8 @@ function run(oracle: RenderOracle, stats?: MinimizeStats): string {
 	}
 	bisect(rest);
 
-	// Soundness fallback: with reliable rebuild the frame equals the reference here, but if
-	// some pathological cascade left it diverging, restore everything and ship the input
-	// unchanged rather than a wrong render.
+	// Soundness fallback: the frame should equal the reference here, but if a pathological
+	// cascade left it diverging, restore everything rather than ship a wrong render.
 	if (!oracle.matchesReference()) {
 		for (let rIdx = 0; rIdx < rules.length; rIdx++) {
 			rules[rIdx]!.kept.fill(true);
@@ -265,15 +244,13 @@ function run(oracle: RenderOracle, stats?: MinimizeStats): string {
 }
 
 /**
- * The candidate indices most likely to be dead, the pre-pass batch. A candidate qualifies
- * when, for every element its rule matches, removing it would leave the element at the
- * same computed value it already has. For an inherited property that means the element
- * already equals its parent, and for a non-inherited property it means the element already
- * equals the ua default for its tag. A candidate on a rule that matches nothing also
- * qualifies, since removing it can change no render. A shorthand reads as empty in computed
- * style and is left to the bisection. This is only a guess, since a value can equal the
- * default yet be load-bearing over a lower-cascade rule. The oracle verifies the batch, so
- * a wrong guess only costs the batch a re-bisection, never correctness.
+ * The pre-pass batch: candidates that, on every element their rule matches, already sit at the
+ * value they would fall back to. Inherited means equal to the parent; non-inherited means
+ * equal to the ua default for the tag. A rule matching nothing qualifies too, and a shorthand
+ * reads as empty so it goes to the bisection.
+ *
+ * A guess only, since a value can equal the default and still be load-bearing over a
+ * lower-cascade rule. The oracle verifies the batch, so a wrong guess costs a re-bisection.
  *
  * @param oracle - the mounted render, read only here
  */
@@ -297,7 +274,7 @@ function redundantDefaults(
 		let redundant = true;
 		for (const el of els) {
 			const own = win.getComputedStyle(el).getPropertyValue(prop);
-			// A shorthand reads as empty and cannot be judged this way, so leave it to the bisection.
+			// A shorthand reads as empty, so it cannot be judged here.
 			if (own === '') {
 				redundant = false;
 				break;
@@ -316,13 +293,13 @@ function redundantDefaults(
 }
 
 /**
- * The ua default value of each non-inherited candidate property, per element tag. Reads it
- * from a bare element of that tag mounted transiently in the frame, so the value is the
- * engine's own initial, never a hand-written table. The bare element is appended, read, and
- * removed while no comparison is in flight, so its transient presence perturbs nothing. A
- * layout property reads a context-dependent value on a bare element, so it will not match a
- * real element and simply never joins the batch, which is what keeps risky sizes such as a
- * form control's intrinsic height out of the fast path and in the verified bisection.
+ * The ua default of each non-inherited candidate property, per tag. It is read from a bare
+ * element mounted transiently in the frame, so the value is the engine's own rather than a
+ * table. That element is appended, read, and removed while no comparison is in flight.
+ *
+ * A layout property reads a context-dependent value on a bare element, so it never matches a
+ * real one and never joins the batch. That is what keeps a risky size, such as a form
+ * control's intrinsic height, out of the fast path and in the verified bisection.
  */
 function uaDefaults(oracle: RenderOracle, matched: Element[][], rules: MinRule[], index: DeclRef[]): Map<string, Map<string, string>> {
 	const props = new Set<string>();

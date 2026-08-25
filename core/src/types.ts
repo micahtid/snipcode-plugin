@@ -1,12 +1,11 @@
 /**
  * core/src/types.ts: the contracts every pipeline phase shares.
  *
- * The pipeline threads one mutable object, `Captured`, through capture, resolve,
- * reconcile, minimize, and convert. Defining it here is what lets each phase know the
- * shape without knowing the other phases.
+ * The pipeline threads one mutable `Captured` through capture, resolve, reconcile, minimize,
+ * and convert. Defining it here lets each phase know the shape without knowing the others.
  *
- * A feature handler under reconcile/features/ may add a field to `Captured` through
- * module augmentation in a paired `<module>.d.ts`, naming the phase that reads it.
+ * A feature handler may add a field to `Captured` through module augmentation in a paired
+ * `<module>.d.ts`, naming the phase that reads it.
  */
 
 /** The shared object that flows through the whole pipeline. */
@@ -58,11 +57,9 @@ export interface Captured {
 	// Reconciliation working state: populated by bake.ts, consumed by emit
 	bakedStyles: Map<Element, Map<string, string>>;
 
-	// Interactive states measured by forcing them live. The capture phase writes via
-	// capture/states-measure.ts, and the reconcile phase reads via reconcile/features/states.ts.
-	// Null means measurement did not run for this snip because cdp was unavailable, and states.ts
-	// falls back to copying authored rules. An empty array means measurement ran and found
-	// no in-subtree state effect.
+	// Interactive states measured by forcing them live: capture/states-measure.ts writes,
+	// reconcile/features/states.ts reads. Null means measurement did not run, so states.ts
+	// copies authored rules instead. An empty array means it ran and found no state effect.
 	measuredStates: MeasuredState[] | null;
 
 	// Warnings accumulated across phases: never throw, always append
@@ -143,10 +140,8 @@ export interface Keyframes {
 export type OutputFormat = 'tailwind' | 'bem-css' | 'jsx-tailwind' | 'vue' | 'html';
 
 /**
- * One file in a split snip result: the index.html document plus the inline svgs,
- * data-uri images, and @font-face fonts lifted out into their own referenced files by
- * convert/assets.ts. Text files (html/svg/json) carry `text`. Binary files (images and
- * fonts) carry the original `dataUrl`.
+ * One file in a split snip result: index.html plus whatever convert/assets.ts lifted out. A
+ * text file carries `text`; an image or font carries the original `dataUrl`.
  */
 export interface AssetFile {
 	name: string; // 'index.html', 'icon-1.svg', 'image-1.png', 'font-1.woff2'

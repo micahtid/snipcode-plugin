@@ -2,8 +2,8 @@
  * convert/bem-classes.ts: what a generated class is called.
  *
  * Both the dedup pass in convert/bem.ts and the base-class factoring in convert/bem-factor.ts
- * create classes, and they must name them the same way from the same per-tag counters or the
- * two would collide. The rule shape and the naming live here so there is one answer.
+ * create classes. They must name them the same way from the same per-tag counters, or the two
+ * would collide. The rule shape and the naming live here so there is one answer.
  */
 
 /** One generated class and the declarations it carries. */
@@ -27,11 +27,10 @@ export function firstClassOrTag(el: Element): string {
 }
 
 /**
- * Lowercase, hyphenate, and trim a token for use in a class name. A leading digit is
- * prefixed with an underscore: a css class selector cannot start with an unescaped
- * digit, so a hashed author class like `15kfc`, common in css-in-js, would otherwise
- * emit the invalid selector `.15kfc`, which the browser silently ignores, leaving the
- * snip unstyled. Underscore is a valid identifier start, so `._15kfc` renders.
+ * Lowercase, hyphenate, and trim a token for a class name. A leading digit gains an underscore,
+ * because a class selector cannot start with an unescaped digit. A hashed css-in-js class like
+ * `15kfc` would emit `.15kfc`, which the browser silently ignores, leaving the snip unstyled.
+ * `._15kfc` is valid.
  */
 export function sanitize(name: string): string {
 	const base = name

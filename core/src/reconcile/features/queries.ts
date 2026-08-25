@@ -10,13 +10,9 @@
  * the container's width, so the two cooperate.
  */
 import type { Captured } from '../../types';
-import { pairedSubtrees } from '../match';
+import { pairedSubtrees, setBaked } from '../match';
 
-/**
- * Preserves the container-type containment context on each element.
- *
- * @param captured - bakedStyles + clone are mutated in place
- */
+/** Preserves the container-type containment context. bakedStyles + clone are mutated in place. */
 export function apply(captured: Captured): Captured {
 	for (const [original, clone] of pairedSubtrees(captured.root, captured.clone)) {
 		const computed = getComputedStyle(original);
@@ -33,13 +29,7 @@ export function apply(captured: Captured): Captured {
 	return captured;
 }
 
-/** Record a value in the baked map and on the clone's inline style. */
+/** Record a value in the baked map and on the clone's inline style, unless already baked. */
 function bake(clone: Element, baked: Map<string, string>, prop: string, value: string): void {
-	if (baked.has(prop)) return;
-	baked.set(prop, value);
-	try {
-		(clone as HTMLElement).style.setProperty(prop, value);
-	} catch {
-		// Invalid for this element, so skip it.
-	}
+	if (!baked.has(prop)) setBaked(clone, baked, prop, value);
 }

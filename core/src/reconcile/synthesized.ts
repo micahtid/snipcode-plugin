@@ -1,10 +1,10 @@
 /**
  * reconcile/synthesized.ts: the one <style> node the handlers share.
  *
- * The pseudo and state handlers both need real css rules, which an inline style cannot
- * express. If each created and managed its own <style> the clone would carry several, their
- * order would depend on handler order, and the formatter would have to find them all. One
- * node, created on first use and appended at a fixed place, removes all of that.
+ * The pseudo and state handlers both need real css rules, which an inline style cannot express.
+ * If each managed its own <style> the clone would carry several, their order would follow
+ * handler order, and the formatter would have to find them all. One node, created on first use
+ * and appended at a fixed place, removes that.
  */
 import type { Captured } from '../types';
 
@@ -12,9 +12,8 @@ import type { Captured } from '../types';
 const SYNTH_MARKER = 'data-snip-synth';
 
 /**
- * Void elements serialize no child nodes, since `<input>` has no closing tag, so a <style>
- * appended to a void snip root would be silently dropped by outerHTML. The handlers warn
- * rather than lose the rules without trace.
+ * A void element serializes no children, so a <style> appended to a void snip root would be
+ * dropped by outerHTML. The handlers warn rather than lose the rules without trace.
  */
 const VOID_TAGS = new Set([
 	'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
@@ -22,9 +21,8 @@ const VOID_TAGS = new Set([
 ]);
 
 /**
- * Appends synthesized css rules to the clone's single shared <style>, creating it on
- * first use. Both pseudo.ts and states.ts feed this, so every synthesized rule lands in
- * one block in handler order.
+ * Appends synthesized rules to the clone's shared <style>, creating it on first use, so every
+ * such rule lands in one block in handler order.
  *
  * @param captured - clone + warnings mutated in place
  */
@@ -42,10 +40,7 @@ export function appendSynthesizedRules(captured: Captured, rules: string[]): voi
 	style.textContent = existing ? `${existing}\n${rules.join('\n')}` : rules.join('\n');
 }
 
-/**
- * The clone's synthesized <style>, or null if no handler has created one. The resolve
- * passes use this to rewrite the synthesized rules' resource references.
- */
+/** The clone's synthesized <style>, or null when no handler has created one. */
 export function synthesizedStyle(captured: Captured): HTMLStyleElement | null {
 	return captured.clone.querySelector(`style[${SYNTH_MARKER}]`);
 }
@@ -77,9 +72,8 @@ interface SynthesizedRule {
 }
 
 /**
- * Walks every declaration in the synthesized <style>, read-only. The resolve passes use
- * this to gather the url()/var() references the synthesized rules carry, which the
- * resting bake never sees because these rules live in a <style>, not in bakedStyles.
+ * Walks every declaration in the synthesized <style>, read-only. The resolve passes gather the
+ * url() and var() references from here, which the resting bake never sees.
  */
 export function forEachSynthesizedDeclaration(captured: Captured, fn: (decl: SynthesizedDeclaration) => void): void {
 	const style = synthesizedStyle(captured);
@@ -88,19 +82,13 @@ export function forEachSynthesizedDeclaration(captured: Captured, fn: (decl: Syn
 }
 
 /**
- * Rewrites the synthesized <style> declaration by declaration. The transform returns a
- * replacement value (or the same value to keep it), or null to drop the declaration
- * entirely. A rule left with no declarations is removed.
+ * Rewrites the synthesized <style> declaration by declaration. The transform returns a new
+ * value, the same value to keep it, or null to drop it, and a rule left empty is removed. This
+ * is the one place the resolve phase mutates synthesized rules.
  *
- * Parsing is line-based over the exact shape the handlers emit (one `\tprop: value;` per
- * line), deliberately not a cssom round-trip. A shorthand carrying a var()
- * (`background: var(--x)`) is not enumerable as longhands through the cssom, so a re-serialize
- * would silently drop it. Working on the emitted text preserves every declaration verbatim
- * except the one the transform changes.
- *
- * This is the single place the resolve phase mutates synthesized rules. resolve/inline.ts
- * rewrites their url() to data uris, and resolve/vars.ts drops a declaration whose var()
- * is defined outside the snip, which cannot be resolved by copying (see resolve/vars.ts).
+ * Parsing is line-based over the shape the handlers emit, deliberately not a cssom round-trip.
+ * A shorthand carrying a var() does not enumerate as longhands, so a re-serialize would
+ * silently drop it. Working on the text preserves every declaration verbatim.
  *
  * @param captured - the capture whose synthesized <style> is rewritten in place
  * @param transform - maps a declaration's value to a new value, or null to drop it
@@ -125,9 +113,9 @@ export function rewriteSynthesizedDeclarations(
 }
 
 /**
- * Parses the synthesized <style> text into rules and declarations. The text is always in
- * the handlers' own one-declaration-per-line shape, so a line parser is exact and avoids
- * the cssom's shorthand-with-var() loss (see rewriteSynthesizedDeclarations).
+ * Parses the synthesized <style> into rules and declarations. The text is always in the
+ * handlers' one-declaration-per-line shape, so a line parser is exact and avoids the cssom's
+ * shorthand-with-var() loss. See rewriteSynthesizedDeclarations.
  */
 function parseSynthesized(style: HTMLStyleElement): SynthesizedRule[] {
 	const rules: SynthesizedRule[] = [];

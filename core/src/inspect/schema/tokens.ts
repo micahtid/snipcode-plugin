@@ -1,14 +1,14 @@
 /**
  * inspect/schema/tokens.ts: the design tokens the walk saw.
  *
- * Collects the colors, fonts, spacing, radii, and shadows, then makes them useful: the palette
+ * Collects the colors, fonts, spacing, radii, and shadows, then makes them useful. The palette
  * is clustered perceptually, because a page paints hundreds of near-identical colors, and the
  * type sizes are fitted to a modular scale.
  *
- * Every collector reads a computed style, which serializes whatever the cascade produced and
- * is not always one value of the kind being asked for. Nothing here decides that alone: each
- * candidate crosses validateToken in shared.ts, so a corner shorthand, a pill radius, or a
- * two-axis gap is handled once rather than at whichever call site meets it first.
+ * Every collector reads a computed style, which serializes whatever the cascade produced and is
+ * not always one value of the kind asked for. Nothing here decides that alone. Each candidate
+ * crosses validateToken in shared.ts, so a corner shorthand, a pill radius, or a two-axis gap
+ * is handled once, not at whichever call site meets it first.
  */
 import { hexToRgb, oklabDistance, parseRgba, rgbToOklab, type Oklab } from '../../utils/color';
 import {
@@ -17,9 +17,8 @@ import {
 } from './shared';
 import type { ColorEntry, FontEntry } from './types';
 
-// row-gap and column-gap, never the `gap` shorthand: with two different gaps the shorthand
-// serializes as "40px 64px", which is not a length. The token gate would reject that anyway,
-// but reading the two axes separately keeps both real values instead of losing the pair.
+// row-gap and column-gap, never the `gap` shorthand, which serializes as "40px 64px" when the
+// two differ. The gate would reject that; reading each axis keeps both real values.
 const SPACING_PROPS =['padding-top', 'padding-right', 'padding-bottom', 'padding-left', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left', 'row-gap', 'column-gap'];
 /** The four border sides, read one at a time. The shorthand is never read: it is not a color. */
 const BORDER_SIDES = ['top', 'right', 'bottom', 'left'] as const;
@@ -55,13 +54,12 @@ interface RawColor {
 }
 
 /**
- * Collects the page's colors, weighted by what each one paints.
+ * The page's colors, weighted by what each one paints.
  *
- * Three things make the result honest. A border color counts only when the side it belongs to
- * actually paints, so a framework reset that sets `border-color` on every element with zero
- * width no longer turns the page's text ink into a border token. Identical sides count once
- * per element rather than four times. And a gradient's stops are read out of background-image,
- * which is the only place a brand accent lives on a page that paints it as a gradient.
+ * Three things make the result honest. A border color counts only when its side actually
+ * paints, so a framework reset with zero width no longer turns the page's text ink into a
+ * border token. Identical sides count once per element rather than four times. And a
+ * gradient's stops are read from background-image, the only place a gradient brand lives.
  */
 export function collectColors(walked: WalkedElement[]): ColorEntry[] {
 	const colorMap = new Map<string, RawColor>();
@@ -100,8 +98,8 @@ function paintedHex(value: string, alpha: boolean, el: Element): string {
 }
 
 /**
- * The distinct colors of the border sides that actually paint. A side with zero width or no
- * style still reports a color, and counting those is what made a page's ink read as a border.
+ * The distinct colors of the border sides that paint. A side with zero width still reports a
+ * color, and counting those is what made a page's ink read as a border.
  */
 function paintingBorderColors(computed: CSSStyleDeclaration): string[] {
 	const out = new Set<string>();
@@ -116,13 +114,13 @@ function paintingBorderColors(computed: CSSStyleDeclaration): string[] {
 }
 
 /**
- * Clusters colors by Oklab perceptual distance, merging below 0.04, keeping the most frequent
- * member as the representative and a frequency-weighted centroid.
+ * Clusters colors by Oklab distance, merging below 0.04 and keeping the most frequent member as
+ * the representative.
  *
- * Translucent colors cluster only against other translucent colors, positioned by the hex they
- * composite to. That gives a hairline like rgba(45,45,45,0.08) a real place in color space
- * instead of the zeroed position every alpha value used to share, while stopping the near-white
- * it paints from folding it into the page background and erasing it.
+ * A translucent color clusters only against other translucent ones, positioned by the hex it
+ * composites to. That gives a hairline like rgba(45,45,45,0.08) a real place in color space,
+ * rather than the zeroed position every alpha used to share. The near-white it paints over
+ * still does not fold it into the page background.
  */
 function clusterColorsOklab(colors: RawColor[]): ColorEntry[] {
 	interface ColorCluster {
@@ -181,9 +179,9 @@ function clusterColorsOklab(colors: RawColor[]): ColorEntry[] {
 }
 
 /**
- * Ranks a color's contexts by how much of its use each accounts for, dropping the trivial
- * ones. A color used four hundred times as text and twice as a border is a text color; a flat
- * list that gave both equal standing is what made a redesign outline every card in body ink.
+ * Ranks a color's contexts by share of its use, dropping the trivial ones. A color used four
+ * hundred times as text and twice as a border is a text color. A flat list giving both equal
+ * standing is what made a redesign outline every card in body ink.
  */
 export function weightedContexts(groups: Map<ColorGroup, number> | Record<string, number>): string[] {
 	const entries = groups instanceof Map ? Array.from(groups.entries()) : Object.entries(groups);
@@ -240,12 +238,9 @@ export function collectSpacing(walked: WalkedElement[]): string[] {
 }
 
 /**
- * Collects the distinct corner radii, sorted ascending.
- *
- * Everything the gate does shows up here: a corner shorthand enters as its distinct corner
- * values rather than as the one string "32px 32px 0px 0px", and a pill, which a browser
- * serializes as a radius of 3.35544e+07px, enters as the 9999px a page would author for the
- * same shape.
+ * The distinct corner radii, sorted ascending. Everything the gate does shows here. A corner
+ * shorthand enters as its distinct values rather than one "32px 32px 0px 0px" string. A pill
+ * serialized as 3.35544e+07px enters as the 9999px a page would author.
  */
 export function collectRadii(walked: WalkedElement[]): string[] {
 	const values = new Set<string>();

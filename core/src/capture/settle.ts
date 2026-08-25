@@ -6,9 +6,9 @@
  * scrolls it into view, finishes running transitions and animations, loads and decodes lazy
  * images, and awaits fonts. Infinite animations are left running.
  *
- * It nudges the page's own reveal machinery and waits; it never edits authored style or
+ * It nudges the page's own reveal machinery and waits, never editing authored style or
  * structure. A reveal gated on something it cannot fire, a click or a custom timer, will not
- * settle, and that is returned as a warning rather than shipped silently blank.
+ * settle. That comes back as a warning rather than shipping silently blank.
  */
 
 /** Resolves after `n` animation frames, letting reveal classes and layout apply. */
@@ -31,8 +31,8 @@ function nextFrames(n: number): Promise<void> {
  */
 export async function settle(root: Element): Promise<{ warning?: string }> {
 	try {
-		// Scroll into view so IntersectionObserver and scroll-driven reveals fire. Center
-		// rather than nearest so an observer with a viewport-margin threshold still trips.
+		// Scroll into view so an IntersectionObserver fires. Center rather than nearest, so
+		// an observer with a viewport-margin threshold still trips.
 		root.scrollIntoView({ block: 'center', inline: 'nearest' });
 	} catch {
 		// Detached or non-scrollable context. The awaits below still help.
@@ -55,9 +55,9 @@ export async function settle(root: Element): Promise<{ warning?: string }> {
 }
 
 /**
- * Forces every image in the subtree to load eagerly and awaits decode, so the capture
- * reads loaded dimensions and the resolved currentSrc rather than a lazy spacer. Decode
- * failures, whether cross-origin or broken, are ignored, and the snip proceeds either way.
+ * Loads every image in the subtree eagerly and awaits decode, so the capture reads real
+ * dimensions and the resolved currentSrc rather than a lazy spacer. A decode failure is
+ * ignored and the snip proceeds.
  */
 async function loadImages(root: Element): Promise<void> {
 	const imgs = Array.from(root.querySelectorAll('img'));
@@ -70,18 +70,17 @@ async function loadImages(root: Element): Promise<void> {
 		} catch {
 			// Read-only in some contexts, but scrolling still triggers native lazy load.
 		}
-		// Decode resolves once the current source is ready. Catch so a broken image
-		// or a still-pending lazy swap never rejects the settle.
+		// Decode resolves once the current source is ready. Caught, so a broken image never
+		// rejects the settle.
 		decodes.push(el.decode().catch(() => undefined));
 	}
 	await Promise.all(decodes);
 }
 
 /**
- * Finishes running transitions and finite animations across the subtree, jumping each
- * to its end state so the capture is a stable, deterministic frame rather than a
- * mid-flight one. Infinite looping animations are skipped: finishing them is
- * undefined, and forcing it would either throw or pin an arbitrary frame.
+ * Jumps every running transition and finite animation to its end state, so the capture is a
+ * stable frame rather than a mid-flight one. An infinite animation is skipped, since finishing
+ * one is undefined and forcing it would throw or pin an arbitrary frame.
  */
 function finishTransientAnimations(root: Element): void {
 	const el = root as Element & { getAnimations?: (opts?: { subtree?: boolean }) => Animation[] };
@@ -104,9 +103,8 @@ function finishTransientAnimations(root: Element): void {
 }
 
 /**
- * Heuristic check for a reveal that never fired: after settling, the root still paints
- * nothing because it, or its only child wrapper, is held invisible. Returns a warning
- * string so the snip is flagged. This never blocks or alters the snip. It only reports.
+ * Checks for a reveal that never fired: after settling, the root still paints nothing because
+ * it, or its only child wrapper, is held invisible. Reports a warning and alters nothing.
  */
 function detectUnrevealed(root: Element): { warning?: string } {
 	try {

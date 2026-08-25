@@ -2,15 +2,14 @@
  * inspect/schema/sections.ts: measuring the page's top-level sections.
  *
  * Runs during the page-scoped inspect pass, against the live dom. A landing page is a sequence
- * of recognizable sections, and that sequence is most of what a redesign has to reproduce.
+ * of recognizable sections, and that sequence is most of what a redesign reproduces.
  *
- * The order of work is the point. Everything is measured here first, the layout from the
- * rendered boxes, the repeated items and their shape, the element catalog, the heading scale,
- * and only then does section-type.ts put a name on what those readings found. It never touches
- * the dom, so a guess can never outrank a measurement.
+ * The order of work is the point. Layout, repeated items, the element catalog, and the heading
+ * scale are all measured here first, and only then does section-type.ts name what the readings
+ * found. It never touches the dom, so a guess cannot outrank a measurement.
  *
  * The content-pattern pass at the bottom reports which element groupings recur across sections,
- * which is the page's compositional habit rather than any single section.
+ * which is the page's compositional habit rather than any one section.
  */
 import { classNameOf } from './classify';
 import { contentRoot, hasDirectText, textLines } from './boxes';
@@ -110,13 +109,11 @@ export function extractSections(roots: Element[], navBar: Element | null): Secti
 }
 
 /**
- * The color a section's content actually sits on.
- *
- * A gradient wins, since a hero painted as a gradient carries no background color at all and
- * calling that "transparent" said the section paints nothing while it painted the page's
- * brand. Otherwise it is the section's own color, or, when the section declares none, the
- * backdrop it inherits. A page that paints its background on a wrapper above every section
- * would otherwise report every one of them as transparent, which tells a redesign nothing.
+ * The color a section's content sits on. A gradient wins, since a hero painted as one carries
+ * no background color and calling that "transparent" says it paints nothing while it paints
+ * the page's brand. Otherwise the section's own color, or the backdrop it inherits. A page
+ * painting its background on a wrapper above every section then does not report them all as
+ * transparent.
  */
 function readBackground(el: Element, computed: CSSStyleDeclaration): string {
 	const image = computed.backgroundImage;
@@ -125,12 +122,9 @@ function readBackground(el: Element, computed: CSSStyleDeclaration): string {
 }
 
 /**
- * How tall the page is, measured from the sections themselves.
- *
- * Not from `scrollHeight`: a page that scrolls an inner element rather than the document leaves
- * both body and documentElement reporting the viewport height, and a live site doing exactly
- * that had its 1021px hero read as covering a "900px document". What the sections span is a
- * measurement no scroll arrangement can distort.
+ * How tall the page is, measured from the sections rather than `scrollHeight`. A page that
+ * scrolls an inner element leaves body and documentElement both reporting the viewport height.
+ * A live site doing that had its 1021px hero read as covering a "900px document".
  */
 function sectionExtent(roots: Element[]): number {
 	let top = Infinity;
@@ -160,13 +154,12 @@ interface CatalogReading {
 }
 
 /**
- * Catalogs the ordered, deduplicated semantic elements present in a section, and the size of its
- * largest heading.
+ * The ordered, deduplicated semantic elements a section holds, plus its largest heading size.
  *
- * The walk starts at the section's first content-bearing element and does not spend depth on
- * single-child wrappers, so a framework build's chain of hashed divs no longer exhausts the
- * budget before the content. Heading size is reported alongside because the classifier needs the
- * section's type scale and re-querying for it would be a second, disagreeing measurement.
+ * The walk starts at the first content-bearing element and spends no depth on single-child
+ * wrappers, so a chain of hashed divs cannot exhaust the budget before the content. Heading
+ * size rides along because the classifier needs it and a second query would be a second,
+ * disagreeing measurement.
  */
 function catalogElements(section: Element, baseFontPx: number): CatalogReading {
 	const elements: string[] = [];
@@ -201,8 +194,8 @@ function catalogElements(section: Element, baseFontPx: number): CatalogReading {
 		} else if (tag === 'img' || tag === 'picture' || tag === 'video') {
 			addOnce('image');
 		} else if (tag === 'button' || (tag === 'a' && isButtonLike(el))) {
-			// A pair replaces the lone button by name, not by position: popping the last entry
-			// removed whatever the walk had added most recently, which was rarely the button.
+			// The pair replaces the lone button by name. Popping the last entry removed
+			// whatever the walk added most recently, which was rarely the button.
 			const siblings = el.parentElement?.querySelectorAll(BUTTON_SELECTOR);
 			if (siblings && siblings.length >= 2) {
 				dropOnce('button');
@@ -225,9 +218,8 @@ function catalogElements(section: Element, baseFontPx: number): CatalogReading {
 		}
 		if (tag === 'svg' || /icon/.test(classList)) addOnce('icon');
 
-		// A single-child wrapper is a step in a chain, not a level of structure, so descending
-		// through it costs no depth. This is what keeps a deeply wrapped hero from cataloguing
-		// as an empty list.
+		// A single-child wrapper is a step in a chain, not a level of structure, so it costs no
+		// depth. That is what keeps a deeply wrapped hero from cataloguing as an empty list.
 		const passthrough = el.children.length === 1 && !hasDirectText(el);
 		const next = passthrough ? depth : depth + 1;
 		for (let i = 0; i < el.children.length; i++) walk(el.children[i]!, next);

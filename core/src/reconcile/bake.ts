@@ -2,15 +2,15 @@
  * reconcile/bake.ts: baking the winning value of every property onto the clone.
  *
  * Runs first in reconcile. The subtree's styles live in stylesheets that do not travel, so
- * each element gets its own. Per property: if the authored value from match.ts round-trips to
- * the captured computed value when forced onto the live element, ship the authored string,
- * which preserves var(), clamp(), %, oklch(), and calc(). Otherwise ship the computed value.
+ * each element gets its own. Per property, the authored value from match.ts ships when it
+ * round-trips to the captured computed value on the live element, which preserves var(),
+ * clamp(), %, oklch(), and calc(). Otherwise the computed value ships.
  *
- * Two passes act on the root alone. Inherited properties whose value diverges from the
- * document default are baked there, since children inherit from the root anyway; which
- * properties inherit is read from a live parent/child probe, never hardcoded. And a root that
- * was a flex or grid item of a vanished parent gets its resolved geometry baked, so it renders
- * at the same size with no synthetic wrapper.
+ * Two passes act on the root alone. An inherited property diverging from the document default
+ * is baked there, since children inherit from the root anyway. Which properties inherit comes
+ * from a live parent-child probe, never a table. And a root that was a flex or grid item of a
+ * vanished parent gets its resolved geometry baked. It then renders at the same size with no
+ * synthetic wrapper.
  *
  * The probe is the whole trick: nothing trusts the matched cascade, every decision is checked
  * against getComputedStyle. That is why this file needs no property tables or per-tag branches.
@@ -20,9 +20,8 @@ import { authoredCascade } from './match';
 import { subtreeElements } from './tree';
 
 /**
- * Runs reconcile: bakes every element's authored cascade onto the detached
- * clone, recording the result in bakedStyles and writing inline styles so the
- * clone serializes to standalone html.
+ * Bakes every element's authored cascade onto the detached clone, into bakedStyles and inline
+ * styles, so the clone serializes to standalone html.
  *
  * @param captured - the capture whose clone and bakedStyles are mutated in place
  */
@@ -31,9 +30,8 @@ export function reconcile(captured: Captured): void {
 	const originals = subtreeElements(captured.root);
 	const clones = subtreeElements(captured.clone);
 	if (originals.length !== clones.length) {
-		// Structural divergence should be impossible since the clone is cloneNode(true),
-		// but if a feature mutated structure earlier, fail soft and bail rather
-		// than mis-pair styles onto the wrong nodes.
+		// Impossible with a cloneNode(true), but if something mutated structure earlier, bail
+		// rather than mis-pair styles onto the wrong nodes.
 		captured.warnings.push('bake: clone/original structure diverged; skipping reconcile');
 		return;
 	}
@@ -48,9 +46,8 @@ export function reconcile(captured: Captured): void {
 		writeInline(clone, baked);
 	}
 
-	// The inherited-divergence and escaped-layout passes act only on the snip
-	// root at index 0. Inherited values flow down to children automatically, and
-	// the escaped-layout box belongs to the root.
+	// Both root passes act on index 0 alone: inherited values flow down on their own, and the
+	// escaped-layout box belongs to the root.
 	const rootOriginal = originals[0];
 	const rootClone = clones[0];
 	if (rootOriginal && rootClone) {
@@ -58,36 +55,29 @@ export function reconcile(captured: Captured): void {
 	}
 }
 
-/**
- * Applies the inherited-divergence and escaped-layout passes to the snip root.
- */
+/** Applies the inherited-divergence and escaped-layout passes to the snip root. */
 function bakeRootContext(original: Element, clone: Element, captured: Captured): void {
 	const baked = captured.bakedStyles.get(clone) ?? new Map<string, string>();
-	bakeInheritedDivergence(original, baked); // inherited divergence
-	bakeEscapedLayout(original, baked); // escaped layout
+	bakeInheritedDivergence(original, baked);
+	bakeEscapedLayout(original, baked);
 	captured.bakedStyles.set(clone, baked);
 	writeInline(clone, baked);
 }
 
 /**
- * Bakes inherited properties whose computed value at the root diverges from
- * the document default.
+ * Bakes inherited properties whose value at the root diverges from the document default.
  *
- * For each property in the root's computed style, this asks the browser two
- * questions via a detached probe: does the property inherit, and does the root's
- * value differ from a fresh same-tag element's default? If both, the value would
- * be lost when the snip is reparented, so it is baked onto the root. Per-element
- * authored values already baked are left untouched (authored wins).
+ * A detached probe answers two questions per property: does it inherit, and does the root's
+ * value differ from a fresh same-tag element's default? Both yes means the value is lost on
+ * reparenting, so it is baked. An authored value already baked wins and is left alone.
  *
  * @param baked - the root's baked map, extended in place
  */
 function bakeInheritedDivergence(original: Element, baked: Map<string, string>): void {
 	const rootComputed = getComputedStyle(original);
-	// The value `currentcolor` resolves to on this element. Every color property whose
-	// initial value is `currentcolor` follows it unless set (see the guard in the loop).
+	// What `currentcolor` resolves to here. See the guard in the loop.
 	const rootColor = rootComputed.getPropertyValue('color');
-	// A same-tag element in a neutral parent gives both the ua default values and
-	// the child probe for inheritance detection.
+	// A same-tag element in a neutral parent gives both the ua defaults and the child probe.
 	const probeParent = document.createElement('div');
 	const probeChild = document.createElement(original.tagName);
 	probeParent.appendChild(probeChild);
@@ -102,16 +92,11 @@ function bakeInheritedDivergence(original: Element, baked: Map<string, string>):
 			const rootVal = rootComputed.getPropertyValue(prop);
 			const defaultVal = childDefault.getPropertyValue(prop);
 			if (rootVal === defaultVal) continue; // No divergence from default
-			// A property whose value merely equals the root's own `color` is resolving from its
-			// `currentcolor` initial value: -webkit-text-fill-color, -webkit-text-stroke-color,
-			// caret-color, text-emphasis-color, and their kin. Baking it freezes a concrete color
-			// onto the root that then inherits down and overrides every descendant, so a button
-			// that sets only a light `color` keeps inheriting the root's dark fill and paints dark.
-			// The `color` divergence is baked in this same pass and carries the real value to
-			// descendants, whose derived colors track their own `color` again. Freezing the
-			// color-derived property is therefore both redundant and harmful. `color` itself is
-			// excluded so the load-bearing divergence still bakes. A non-color property's value can
-			// never equal the color string, so this fires only for currentcolor-derived colors.
+			// A value equal to the root's own `color` is resolving from its `currentcolor`
+			// initial: caret-color, text-fill-color, and their kin. Freezing it onto the root
+			// inherits down and overrides every descendant, so a button setting only a light
+			// `color` would keep the root's dark fill. `color` itself is baked in this same
+			// pass and carries the real value down, so those track their own color again.
 			if (prop !== 'color' && rootVal === rootColor) continue;
 			if (isInherited(probeParent, probeChild, prop, rootVal, defaultVal)) {
 				baked.set(prop, rootVal);
@@ -123,16 +108,15 @@ function bakeInheritedDivergence(original: Element, baked: Map<string, string>):
 }
 
 /**
- * Dynamic inheritance test: sets `value` on the probe parent and checks whether
- * the probe child (which has no own declaration for the property) picks it up.
- * The value is the root's own computed value, always a valid css value for the
- * property, so the probe never needs a per-property sentinel.
+ * Dynamic inheritance test: set `value` on the probe parent and see whether the probe child,
+ * which declares nothing itself, picks it up. The value is the root's own computed value, so
+ * it is always valid for the property and the probe needs no per-property sentinel.
  *
- * @returns true when the property inherits (and is therefore divergence-prone)
+ * @returns true when the property inherits, and so is divergence-prone
  */
 function isInherited(parent: HTMLElement, child: Element, prop: string, value: string, defaultVal: string): boolean {
-	// If the root value equals the default we never get here, so value!==default,
-	// which makes the child's pickup observable.
+	// The caller only reaches here when value differs from the default, which is what makes
+	// the child's pickup observable.
 	parent.style.setProperty(prop, value);
 	try {
 		const childNow = getComputedStyle(child).getPropertyValue(prop);
@@ -143,14 +127,10 @@ function isInherited(parent: HTMLElement, child: Element, prop: string, value: s
 }
 
 /**
- * When the root was a flex/grid item of a parent outside the snip, its used
- * width/height came from that vanished container. Bake the resolved geometry so
- * the root keeps its size standalone. No synthetic wrapper is created.
- *
- * width/height are named explicitly here because they are the specific geometry
- * a flex/grid container imposes on its items. That is a bounded css-spec mechanism
- * rather than a curated heuristic Set, and it applies only when the escaped-context
- * condition holds.
+ * When the root was a flex or grid item of a parent outside the snip, its used width and
+ * height came from that vanished container. So the resolved geometry is baked and the root
+ * keeps its size standalone. No synthetic wrapper. Only width and height, because those are
+ * exactly what such a container imposes on its items.
  *
  * @param baked - the root's baked map, extended in place
  */
@@ -170,8 +150,7 @@ function bakeEscapedLayout(original: Element, baked: Map<string, string>): void 
 }
 
 /**
- * Applies the per-element authored-vs-computed test to one element, returning
- * its baked prop->value map.
+ * Runs the authored-versus-computed test over one element's properties.
  *
  * @param original - the live element, which has document context for getComputedStyle
  */
@@ -180,8 +159,8 @@ function bakeElement(original: Element, authored: Map<string, string>): Map<stri
 	const computedStyle = getComputedStyle(original);
 	for (const [prop, authoredValue] of authored) {
 		const computed = computedStyle.getPropertyValue(prop);
-		// Shorthands and custom props do not appear in computed style. We cannot
-		// validate them against ground truth, so trust the authored value.
+		// Shorthands and custom properties never appear in computed style, so there is no
+		// ground truth to check them against and the authored value is trusted.
 		if (computed === '') {
 			baked.set(prop, authoredValue);
 			continue;
@@ -197,12 +176,9 @@ function bakeElement(original: Element, authored: Map<string, string>): Map<stri
 }
 
 /**
- * Tests whether forcing `value` onto the element's inline style reproduces the
- * captured computed value, in the element's real context, so rem/%/var resolve
- * correctly. Transiently mutates then restores the live inline style within the
- * same synchronous frame, so the page never visibly changes.
- *
- * @returns true when the authored value round-trips
+ * Whether forcing `value` onto the element's inline style reproduces the captured computed
+ * value. It runs in the element's real context, so rem, %, and var() resolve correctly. The
+ * mutation is undone in the same synchronous frame, so the page never visibly changes.
  */
 function reproducesComputed(el: Element, prop: string, value: string, computed: string): boolean {
 	const style = (el as HTMLElement).style;

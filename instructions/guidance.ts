@@ -6,10 +6,10 @@
  * as a `guidance` field on every json result; gen-skill.ts composes it into the Claude
  * Code SKILL.md. Editing guidance means editing this file only.
  *
- * The division of labor, stated once: the plugin is deterministic eyes and hands (load a
- * page, harvest its elements, extract and convert markup); the agent provides every
- * judgment layer (which element, polish-style naming, redesign). The plugin makes zero
- * llm calls, so the naming and redesign blocks below are the whole of that judgment layer.
+ * The division of labor, stated once. The plugin is deterministic eyes and hands: load a page,
+ * harvest its elements, extract and convert markup. The agent provides every judgment layer:
+ * which element, polish-style naming, redesign. The plugin makes zero llm calls, so the naming
+ * and redesign blocks below are the whole of that judgment layer.
  */
 
 /** Skill-priority rule, for the skills only: snipcode output is the authority, no competing skills. */
@@ -28,6 +28,11 @@ export const SETUP = `The CLI ships as the npm package 'snipcode'. If the comman
 'npx snipcode' (or 'npm install -g snipcode' for a persistent install). The first run on a machine
 also needs the browser: 'npx playwright install chromium' (a one-time download). A "command not
 found" or a Playwright missing-browser error means one of these two steps, not a broken page.`;
+
+/** What a <url> argument accepts, for the skills and top-level help. */
+export const URLS = `Every command takes a <url> that must be a live http or https page. A bare host is fine:
+'example.com' is loaded as 'https://example.com'. Any other scheme (file:, data:, about:) is refused
+with code BAD_URL, so snipcode cannot be pointed at a local file.`;
 
 /** The component-extraction flow, for the snip skill and top-level help. */
 export const SNIP_FLOW = `Component-extraction flow ("extract the login button on <url>"):
@@ -109,7 +114,7 @@ Never change declarations, sizes, colors, or geometry: those are already correct
  *
  * Hardness follows ownership, which is why the contract has two levels rather than one. The
  * design language is the schema's everywhere. The page-level arrangement is the schema's only
- * when the job is to rebuild the reference page; when the user brings their own structure, it
+ * when the job is to rebuild the reference page. When the user brings their own structure it
  * is theirs, and applying one hardness to both made the guidance wrong for every use but one.
  */
 export const REDESIGN = `When redesigning with a page as reference, the schema is a hard contract, not a soft starting point.

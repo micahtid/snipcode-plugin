@@ -18,8 +18,8 @@ import { registeredProperties } from '../reconcile/properties';
 const VAR_REF = /var\(\s*(--[A-Za-z0-9_-]+)/g;
 
 /**
- * Resolves every var() reference in the baked styles: a reference is kept if its
- * definition lives inside the snip, otherwise resolved to its computed literal.
+ * Keeps every var() whose definition lives inside the snip and resolves the rest to their
+ * computed literal.
  *
  * @param captured - clone + bakedStyles are mutated in place
  */
@@ -33,20 +33,18 @@ export function resolveVariables(captured: Captured): void {
 	for (const v of captured.variables) {
 		if (v.scope === 'root') rootVars.set(v.name, v.value);
 	}
-	// Ambient definitions a state rule may also lean on: every foundation-scoped custom
-	// property, meaning the `*`/html/body resets, for example older tailwind's `--tw-translate-x: 0`
-	// transform chain, on top of :root. Those resets carry no @property registration, so
-	// they inherit. Re-emitting a referenced one on the root carries it to the subject. Used
-	// only by the state path. The resting path below still resolves an outside-snip var to
-	// its computed literal, unchanged.
+	// Ambient definitions a state rule may lean on: the foundation-scoped custom properties
+	// from the `*`/html/body resets, such as older tailwind's `--tw-translate-x` chain, on top
+	// of :root. Those carry no @property registration, so they inherit, and re-emitting a
+	// referenced one on the root carries it to the subject. The state path alone uses this.
 	const ambientVars = new Map<string, string>(rootVars);
 	for (const rule of captured.foundationRules) {
 		for (const [prop, value] of rule.properties) {
 			if (prop.startsWith('--') && !ambientVars.has(prop)) ambientVars.set(prop, value);
 		}
 	}
-	// Definitions declared on some element inside the snip subtree already travel
-	// with that clone node. They were baked as inline custom properties.
+	// A definition on an element inside the subtree already travels with that clone node,
+	// baked as an inline custom property.
 	const subtreeDefs = collectSubtreeDefs(captured);
 
 	const neededRootVars = new Set<string>();
@@ -67,8 +65,8 @@ export function resolveVariables(captured: Captured): void {
 				mustResolveToLiteral = true; // Defined outside the snip, so it cannot survive
 			}
 			if (mustResolveToLiteral && original) {
-				// The live element already resolved the var to its used value. That
-				// computed literal is the faithful replacement and locks the pixel.
+				// The live element already resolved this var, so its computed literal is
+				// the faithful replacement.
 				const literal = getComputedStyle(original).getPropertyValue(prop);
 				if (literal) {
 					baked.set(prop, literal);
@@ -78,40 +76,28 @@ export function resolveVariables(captured: Captured): void {
 		}
 	}
 
-	// Synthesized state/pseudo rules carry their own var() references, which the
-	// bakedStyles loop above never sees. They live in a <style>, not in bakedStyles.
-	// Resolve them against the ambient definitions, with one state-specific exception.
-	// See resolveSynthesizedVariables.
+	// The synthesized state and pseudo rules live in a <style>, not in bakedStyles, so the
+	// loop above never saw their var() references. See resolveSynthesizedVariables.
 	resolveSynthesizedVariables(captured, subtreeDefs, ambientVars, neededAmbientVars);
 
-	// Re-emit every ambient definition a surviving reference needs: the resting :root deps
-	// and the state-rule deps alike, each with its own dependency closure.
+	// Re-emit every ambient definition a surviving reference needs, with its own closure.
 	const needed = new Set<string>([...closeOver(neededRootVars, rootVars), ...closeOver(neededAmbientVars, ambientVars)]);
 	emitAmbientVars(captured, ambientVars, needed);
 }
 
 /**
- * Resolves the var() references inside the synthesized <style>, meaning the state and pseudo
- * rules. A reference whose definition survives the snip is kept verbatim and renders
- * standalone: a subtree-scoped definition already travels on its clone node, and a
- * :root definition is marked needed so it is re-emitted on the root.
+ * Resolves the var() references inside the synthesized <style>. A declaration is kept when
+ * every reference in it resolves standalone, through any of three routes:
+ *  - a surviving definition: a subtree-baked value, a re-emitted ambient one, or a custom
+ *    property the synthesized rules define themselves, as in the tailwind `--tw-*` chain,
+ *    taken to a fixpoint so a chain of such definitions holds.
+ *  - a registered @property initial-value, which `var(--x)` yields even when nothing sets it.
+ *  - a fallback on the reference itself, which always produces a value.
  *
- * A reference resolves in the standalone artifact through any of the ways a value
- * legitimately reaches it, so a declaration is kept whenever all of its references do:
- *  - a surviving definition: a subtree-baked value, a re-emitted ambient definition that is
- *    :root or foundation/`*`-scoped, or a custom property the synthesized rules define
- *    themselves, as in `:hover { --x: red; color: var(--x) }` or the tailwind `--tw-*` chain,
- *    resolved to a fixpoint so a chain of synthesized defs holds.
- *  - a registered @property initial-value: `var(--x)` yields the registered initial even
- *    when nothing sets it, and reconcile/properties.ts ships those registrations.
- *  - a fallback on the reference itself: `var(--x, black)` always produces a value.
- *
- * Only a reference that resolves through none of these is unreproducible: its state-time
- * value cannot be copied, because the live element's computed value is its RESTING value,
- * wrong for a `:hover { color: var(--accent-hover) }` whose accent only takes its hover
- * value while hovered. Only a forced-state measurement could get it, the deferred
- * follow-up. That declaration is dropped with a warning rather than baked to a wrong
- * color. Dropping is transitive through the fixpoint, so no dangling var() is ever emitted.
+ * A reference resolving through none of them is unreproducible. Its state-time value cannot be
+ * copied, because the live element's computed value is the RESTING one, wrong for a
+ * `:hover { color: var(--accent-hover) }`. That declaration is dropped with a warning rather
+ * than baked to a wrong color, transitively through the fixpoint, so no dangling var() ships.
  *
  * @param captured - the synthesized <style> is rewritten in place, and warnings appended
  */
@@ -125,9 +111,8 @@ function resolveSynthesizedVariables(
 	if (!style || !(style.textContent ?? '').includes('var(')) return;
 
 	const registered = registeredProperties();
-	// A reference resolves when its name has a surviving definition, whether subtree, ambient,
-	// or synthesized, or a registered @property initial-value, or when the reference carries
-	// its own fallback.
+	// A reference resolves through a surviving definition, a registered initial-value, or its
+	// own fallback.
 	const nameResolves = (name: string, synthOk: Set<string>): boolean =>
 		subtreeDefs.has(name) || ambientVars.has(name) || synthOk.has(name) || registered.get(name)?.initialValue != null;
 	const valueResolves = (value: string, synthOk: Set<string>): boolean =>
@@ -140,8 +125,7 @@ function resolveSynthesizedVariables(
 		synthDefs.set(decl.prop, [...(synthDefs.get(decl.prop) ?? []), decl.value]);
 	});
 
-	// Fixpoint: a synth-defined var survives once one of its definitions resolves. Re-scan
-	// until no new name becomes survivable.
+	// Fixpoint: a synth-defined var survives once one of its definitions resolves.
 	const survivableSynth = new Set<string>();
 	for (let changed = true; changed; ) {
 		changed = false;
@@ -169,9 +153,9 @@ function resolveSynthesizedVariables(
 }
 
 /**
- * Every var() reference in a value, each with whether it carries a fallback, meaning a top-level
- * comma inside its own parens. A reference with a fallback always yields a value, so it
- * never forces a declaration to drop. One without a fallback must resolve by name.
+ * Every var() reference in a value, each flagged for whether it carries a fallback, meaning a
+ * top-level comma inside its own parens. One with a fallback always yields a value; one
+ * without must resolve by name.
  */
 function varRefs(value: string): Array<{ name: string; hasFallback: boolean }> {
 	const refs: Array<{ name: string; hasFallback: boolean }> = [];
@@ -194,9 +178,8 @@ function varRefs(value: string): Array<{ name: string; hasFallback: boolean }> {
 }
 
 /**
- * Re-emit the surviving ambient custom properties, the :root and foundation-scoped
- * definitions a reference needs, onto the snip root clone, where they inherit down to the
- * subtree. The :root ones also flip their source-of-truth flag for transparency.
+ * Re-emits the ambient definitions a surviving reference needs onto the snip root clone, where
+ * they inherit down. The :root ones also flip their source-of-truth flag.
  *
  * @param captured - bakedStyles + clone mutated in place
  */
@@ -215,9 +198,8 @@ function emitAmbientVars(captured: Captured, ambientVars: Map<string, string>, n
 }
 
 /**
- * Expands a set of needed root vars to include the vars their own values
- * reference, since a root var may be defined in terms of another. This is a
- * dependency closure within the definitions, not a second pass over the output.
+ * Expands a set of needed root vars to cover the vars their own values reference, since one
+ * root var can be defined in terms of another. A closure within the definitions.
  */
 function closeOver(initial: Set<string>, rootVars: Map<string, string>): Set<string> {
 	const needed = new Set<string>();

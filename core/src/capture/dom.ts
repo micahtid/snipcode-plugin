@@ -2,25 +2,19 @@
  * capture/dom.ts: the detached clone and the element metadata.
  *
  * Runs first in capture. Every later phase mutates the clone, so the live page is never
- * touched. Lazy image sources are promoted at clone time, because a src the page has not
- * swapped in yet is a broken image once the snip is pasted somewhere else.
+ * touched. Lazy image sources are promoted here, at clone time: a src the page has not swapped
+ * in yet is a broken image once the snip is pasted elsewhere.
  */
 import type { Captured } from '../types';
 
-/**
- * Common lazy-loading attribute names, in priority order. These are html
- * attribute names for a universal lazy-img convention, normalized at capture so
- * output is portable.
- */
+/** Common lazy-loading attribute names, in priority order, normalized here so output travels. */
 const LAZY_SRC_ATTRS = ['data-src', 'data-lazy-src', 'data-original', 'data-srcset'] as const;
 
 /**
- * Deep-clones the picked subtree into a detached node and promotes lazy images.
- *
- * cloneNode(true) already copies every attribute and child. The extra work here
- * is replacing placeholder `src`s, such as 1x1 gifs or data-uri spacers, with the real url
- * stashed in a data-* attribute, so a pasted snip shows the image immediately
- * instead of waiting for the host page's lazy-load script that no longer runs.
+ * Deep-clones the picked subtree into a detached node and promotes lazy images. cloneNode
+ * copies the attributes; the extra work is replacing a placeholder src, a 1x1 gif or a spacer,
+ * with the real url stashed in a data-* attribute. The page's lazy-load script will not run
+ * where the snip lands.
  *
  * @returns a detached clone, safe to mutate downstream
  */
@@ -46,15 +40,9 @@ function isPlaceholderSrc(src: string): boolean {
 }
 
 /**
- * Builds the element metadata block.
- *
- * Both modes need this. The snip mode uses the tag/box, and the assistive mode
- * emits the whole block as json. It emits two selectors: `selector`, the shortest
- * unique one, and `robustSelector`, which prefers stable data-attributes or ids
- * over class hashes, so a downstream agent can re-find the element even if class
- * hashes churn.
- *
- * @returns the populated metadata block
+ * The element metadata block. It carries two selectors. `selector` is the shortest unique one.
+ * `robustSelector` prefers a stable data-attribute or id over a class hash, so an agent can
+ * re-find the element after those hashes churn.
  */
 export function buildElementMetadata(root: Element): Captured['element'] {
 	const rect = root.getBoundingClientRect();
@@ -84,12 +72,9 @@ export function serializeRaw(clone: Element): string {
 }
 
 /**
- * Shortest css selector that uniquely identifies `el` in its document.
- *
- * Tries cheapest-first: a unique id, then a unique single-class, then walks up
- * building a descendant path with :nth-of-type segments until querySelectorAll
- * returns exactly this element. Uniqueness is verified against the live document
- * rather than assumed, so the emitted selector is always correct.
+ * The shortest css selector that uniquely identifies `el`, cheapest first: a unique id, then a
+ * unique single class, then a descendant path with :nth-of-type segments. Uniqueness is
+ * verified against the live document rather than assumed.
  */
 function shortestSelector(el: Element): string {
 	if (el.id && isUnique(`#${cssEscape(el.id)}`, el)) return `#${cssEscape(el.id)}`;

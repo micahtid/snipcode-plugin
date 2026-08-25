@@ -9,22 +9,15 @@
  * mid-flight frame would lock the element to it.
  */
 import type { Captured } from '../../types';
-import { pairedSubtrees } from '../match';
+import { pairedSubtrees, setBaked } from '../match';
 
-/**
- * The transform-context and animation properties this handler preserves. This is
- * the bounded css-spec surface for animation and 3d, a feature-handler spec set
- * rather than a hardcoded property list. `transform` is intentionally absent.
- */
+/** The transform-context and animation properties preserved. `transform` is deliberately absent. */
 const ANIM_CONTEXT_PROPS = [
 	'transform-origin', 'perspective', 'perspective-origin', 'transform-style', 'backface-visibility',
 	'animation', 'transition', 'transition-timing-function', 'animation-timing-function', 'will-change',
 ];
 
-/**
- * Whether an animation-context value is the property's resting default, so baking it would
- * add a declaration that changes nothing.
- */
+/** Whether an animation-context value is the resting default, so baking it would add nothing. */
 function isAnimationDefault(prop: string, value: string): boolean {
 	const v = value.trim();
 	if (v === '' || v === 'none' || v === 'auto' || v === 'normal') return true;
@@ -37,11 +30,7 @@ function isAnimationDefault(prop: string, value: string): boolean {
 	return false;
 }
 
-/**
- * Bakes non-default transform-context and animation declarations onto each element.
- *
- * @param captured - bakedStyles + clone are mutated in place
- */
+/** Bakes non-default transform-context and animation declarations. Mutates bakedStyles + clone. */
 export function apply(captured: Captured): Captured {
 	for (const [original, clone] of pairedSubtrees(captured.root, captured.clone)) {
 		const computed = getComputedStyle(original);
@@ -50,12 +39,7 @@ export function apply(captured: Captured): Captured {
 			if (baked.has(prop)) continue;
 			const value = computed.getPropertyValue(prop);
 			if (isAnimationDefault(prop, value)) continue;
-			baked.set(prop, value);
-			try {
-				(clone as HTMLElement).style.setProperty(prop, value);
-			} catch {
-				// Invalid for this element, so skip it.
-			}
+			setBaked(clone, baked, prop, value);
 		}
 		captured.bakedStyles.set(clone, baked);
 	}

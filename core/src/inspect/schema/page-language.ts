@@ -1,14 +1,14 @@
 /**
  * inspect/schema/page-language.ts: the page's decorative and responsive language.
  *
- * Runs during the page-scoped inspect pass, against the live dom. This is the part a token
- * list always misses: the gradients, blobs, illustration mix, accent treatments, and what the
- * page's media queries say about its breakpoints and its mobile navigation.
+ * Runs during the page-scoped inspect pass, against the live dom. This is what a token list
+ * misses: gradients, blobs, illustration mix, accent treatments, and what the media queries
+ * say about breakpoints and mobile navigation.
  *
- * Every background effect names the section it was seen in. Stated page-wide it was true and
- * useless: an agent read `effects gradient` as permission and painted gradients into a hero
- * whose measured background is flat. An effect no section holds carries no location, and the
- * renderer drops it rather than offering the reader a fact it cannot place.
+ * Every background effect names the section it was seen in. Page-wide it was true and useless,
+ * since an agent read `effects gradient` as permission and painted one into a hero whose
+ * measured background is flat. An effect no section holds carries no location, and the
+ * renderer drops it rather than offer a fact the reader cannot place.
  */
 import { isElementVisible } from './classify';
 import { sectionFinder } from './discovery';
@@ -42,11 +42,9 @@ const MAX_NAV_LINK_CLIMB = 4;
 const MAX_BREAKPOINTS = 5;
 
 /**
- * Detects the page's decorative language: blobs, located background effects, illustration mix,
- * and accent treatments.
- *
- * The illustration mix stays page-wide on purpose. It describes what kind of media the page
- * uses, which has no single location, and nothing in it licenses painting anything.
+ * The page's decorative language: blobs, located background effects, illustration mix, and
+ * accent treatments. The mix stays page-wide on purpose, since it describes what kind of media
+ * the page uses, which has no single location and licenses painting nothing.
  */
 export function extractDecorativeInfo(sectionRoots: Element[]): DecorativeInfo {
 	const findSection = sectionFinder(sectionRoots);
@@ -55,8 +53,7 @@ export function extractDecorativeInfo(sectionRoots: Element[]): DecorativeInfo {
 	const accentTreatments = new Set<string>();
 	let hasBlobs = false;
 
-	// One entry per effect per section: a page with gradients in three sections reports three,
-	// and a section painting two gradients reports one.
+	// One entry per effect per section, so gradients in three sections report three.
 	const record = (effect: string, el: Element): void => {
 		const root = findSection(el);
 		const section = root ? indexOfSection.get(root) : undefined;
@@ -64,17 +61,14 @@ export function extractDecorativeInfo(sectionRoots: Element[]): DecorativeInfo {
 		if (!effects.has(key)) effects.set(key, section === undefined ? { effect } : { effect, section });
 	};
 
-	// Every element, not a spread sample of them. A strided sample lands on different elements
-	// as soon as the page's element count moves by one, so two reads of one page reported the
-	// gradient in different sections. A contract that answers differently each time it is read
-	// is not a measurement.
+	// Every element, not a strided sample. A sample lands differently as soon as the element
+	// count moves by one, so two reads of one page put the gradient in different sections.
 	const allElements = document.querySelectorAll('*');
 	const examined = Math.min(allElements.length, MAX_DECORATIVE_ELEMENTS);
 	for (let i = 0; i < examined; i++) {
 		const el = allElements[i]!;
-		// An element that paints no box carries no design fact. A live page declared a gradient
-		// on a 0x0 node and the schema reported a gradient in that node's section, which is an
-		// effect the reader can see nowhere on the page.
+		// An element painting no box carries no design fact. A live page declared a gradient on
+		// a 0x0 node, and the schema reported an effect visible nowhere.
 		if (!isElementVisible(el)) continue;
 		const computed = window.getComputedStyle(el);
 
@@ -121,8 +115,8 @@ function readIllustrationStyle(): string {
 	const totalSvgs = svgImgCount + significantSvgCount;
 	const totalMedia = totalSvgs + rasterCount;
 	if (totalMedia === 0) return 'none';
-	// Both shares are rounded to the same two places the ratios were reported in, so the two
-	// thresholds compare against one number rather than each against its own precision.
+	// Both shares round to the two places the ratios were reported in, so the thresholds
+	// compare against one number rather than each against its own precision.
 	const svgShare = Math.round((totalSvgs / totalMedia) * 100) / 100;
 	const photoShare = Math.round((rasterCount / totalMedia) * 100) / 100;
 	if (svgShare > MEDIA_MAJORITY && totalSvgs >= MIN_MEDIA_ITEMS) return 'icon-based';
@@ -131,12 +125,10 @@ function readIllustrationStyle(): string {
 }
 
 /**
- * Reads the page's responsive behavior from its media queries.
- *
- * Both behaviors report `unknown` when no rule provides evidence, exactly as an unmeasurable
- * layout does. They used to default to `unchanged` and `stack`, so a page that hides its nav
- * links behind a hamburger was described, confidently and wrongly, as one whose navigation does
- * not change. A silent fallback under a hard contract costs more than an honest gap.
+ * The page's responsive behavior, from its media queries. Both readings report `unknown` when
+ * no rule provides evidence, as an unmeasurable layout does. They used to default to
+ * `unchanged` and `stack`, which described a page hiding its nav behind a hamburger as one
+ * whose navigation does not change.
  */
 export function extractResponsiveInfo(rules: CSSRule[], navBar: Element | null): ResponsiveInfo {
 	const breakpoints = new Set<string>();
@@ -161,18 +153,17 @@ export function extractResponsiveInfo(rules: CSSRule[], navBar: Element | null):
 }
 
 /**
- * True when the page's own nav links are hidden at mobile widths, which means a hamburger.
+ * True when the page's nav links are hidden at mobile widths, which means a hamburger.
  *
- * The test is per element, not per selector text. A utility build never emits a rule that
- * mentions "nav", so matching rule text for `nav ... display: none` found nothing on the builds
- * that most need reading; it matched only pages that happened to name their selectors the way
- * the regex expected. Asking each real link element whether a rule matches it works whatever the
- * selector is called, and `el.matches` handles the escaped utility selectors natively.
+ * The test is per element, not per selector text. A utility build never emits a rule mentioning
+ * "nav", so matching rule text found nothing on the builds that most need reading. Asking each
+ * real link whether a rule matches it works whatever the selector is called, and `el.matches`
+ * handles escaped utility selectors natively.
  *
- * Two shapes count. A link hidden under a max-width condition is the plain case. A link shown
- * only above a min-width is the utility case, `class="hidden md:flex"`, and it counts only when
- * some unconditioned rule really does hide that same element, so a media query that merely
- * switches a visible display for another one is not read as a hamburger.
+ * Two shapes count. A link hidden under a max-width is the plain case. A link shown only above
+ * a min-width is the utility case, `class="hidden md:flex"`. That one counts only when some
+ * unconditioned rule really does hide the element. A media query that merely swaps one visible
+ * display for another is not a hamburger.
  */
 function navHiddenOnMobile(rules: CSSRule[], navBar: Element | null): boolean {
 	if (!navBar) return false;
@@ -236,11 +227,9 @@ function matchesSafely(el: Element | null, selector: string): boolean {
 }
 
 /**
- * The width a media condition turns on at, in whichever notation it was authored.
- *
- * Both notations have to be read. Every current utility framework emits the range form,
- * `(width >= 40rem)`, and matching only `min-width:` reported that such a page declares no
- * breakpoints at all.
+ * The width a media condition turns on at, in whichever notation it was authored. Both have to
+ * be read. Every current utility framework emits the range form, `(width >= 40rem)`, and
+ * matching only `min-width:` reported such a page as declaring no breakpoints at all.
  */
 function breakpointOf(media: string): string | null {
 	const LENGTH = '(\\d+(?:\\.\\d+)?(?:px|em|rem))';

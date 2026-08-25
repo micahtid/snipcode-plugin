@@ -1,11 +1,10 @@
 /**
  * features/states-anchor.ts: how a state effect is re-anchored to the artifact.
  *
- * Shared by both state paths. A captured state selector is written against the live page's
- * classes and ancestor chain, which the emitters rewrite and the artifact does not carry, so
- * both paths tag each element with a unique data-* marker and rebuild the selector from those
- * markers joined by a combinator true for the concrete pair. The marker name and the
- * combinator rule are that shared contract.
+ * Shared by both state paths. A captured selector names the live page's classes and ancestor
+ * chain, which the emitters rewrite and the artifact does not carry. So both paths tag each
+ * element with a unique data-* marker and rebuild the selector from those. The marker name and
+ * the combinator rule are that contract.
  */
 import type { Combinator } from '../selector';
 
@@ -13,12 +12,10 @@ import type { Combinator } from '../selector';
 export const MARKER = 'data-snip-state';
 
 /**
- * The combinator that safely expresses the relationship between two marked elements in
- * the artifact. Because each marker is unique, a looser combinator cannot match a wrong
- * element, so the only requirement is that it be true for this concrete pair. It is descendant
- * when right is contained in left, and general-sibling when they share a parent and left
- * precedes right. Any other relationship, such as an "uncle", is not expressible by a single
- * combinator, so the caller drops the branch.
+ * The combinator expressing how two marked elements relate. Each marker is unique, so a looser
+ * combinator cannot reach a wrong element and the only requirement is that it hold for this
+ * pair. Descendant when right is inside left, general-sibling when they share a parent and
+ * left comes first. Anything else, an "uncle" say, no single combinator expresses.
  *
  * @returns the generalized combinator, or null if the relationship is inexpressible
  */

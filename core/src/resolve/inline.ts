@@ -2,7 +2,7 @@
  * resolve/inline.ts: carrying the pixels with the snip.
  *
  * Runs last in resolve, after the standalone reconciliation. A snip that still points at the
- * origin breaks the moment it is pasted somewhere that cannot reach those urls: hotlink
+ * origin breaks the moment it is pasted somewhere that cannot reach those urls. Hotlink
  * protected fonts, authenticated image cdns, or simply offline. Every referenced font and
  * image is fetched through the Host and rewritten to a data uri.
  *
@@ -32,10 +32,9 @@ const FETCH_TIMEOUT_MS = 8000;
 const MAX_INLINE_BYTES = 3 * 1024 * 1024;
 
 /**
- * Inlines every referenced font and image as a data uri. Collects the unique absolute
- * urls across @font-face src, <img> src, and baked background-image, fetches them
- * within bounds, and rewrites each reference to the fetched data uri. Leaves any url it
- * could not fetch untouched.
+ * Inlines every referenced font and image as a data uri. It collects the unique absolute urls
+ * across @font-face src, img src, and baked background-image, fetches them within bounds, then
+ * rewrites each reference. A url that would not fetch is left as it was.
  *
  * @param captured - clone, bakedStyles, and fonts are rewritten in place
  */
@@ -54,8 +53,8 @@ export async function inlineResources(captured: Captured): Promise<void> {
 	for (const [, baked] of captured.bakedStyles) {
 		for (const prop of BG_PROPS) for (const u of urlsIn(baked.get(prop) ?? '')) add(u);
 	}
-	// Synthesized state/pseudo rules carry their own url(), such as a hover background or a
-	// css-icon content, which the bakedStyles loop never sees because they live in a <style>.
+	// The synthesized rules carry their own url(), a hover background or a css icon, which the
+	// bakedStyles loop never sees because they live in a <style>.
 	forEachSynthesizedDeclaration(captured, (decl) => { for (const u of urlsIn(decl.value)) add(u); });
 
 	if (wanted.size === 0) return;
@@ -66,9 +65,8 @@ export async function inlineResources(captured: Captured): Promise<void> {
 
 	const dataByUrl = await fetchAll(urls);
 	if (dataByUrl.size === 0) {
-		// Nothing inlined: the rewrite passes below are all no-ops, but the closing
-		// self-containment guard must still run so an un-inlinable face is dropped to its
-		// fallback rather than shipping a dead origin url.
+		// Nothing inlined, so the rewrites below are no-ops. The closing guard still runs, so
+		// an un-inlinable face drops to its fallback rather than shipping a dead url.
 		captured.warnings.push('inline: no resources could be inlined; the snip references the origin for fonts/images');
 	}
 
@@ -97,9 +95,8 @@ export async function inlineResources(captured: Captured): Promise<void> {
 		}
 	}
 
-	// Rewrite the synthesized rules' url()s the same way, but only when one was actually
-	// inlined, so the synthesized <style> is not re-serialized, and reformatted, for the
-	// common case that carries no url() at all.
+	// Only when one was actually inlined, so the synthesized <style> is not re-serialized, and
+	// reformatted, in the common case that carries no url() at all.
 	if (dataByUrl.size > 0 && (synthesizedStyle(captured)?.textContent ?? '').includes('url(')) {
 		rewriteSynthesizedDeclarations(captured, (decl) =>
 			decl.value.includes('url(') ? rewriteUrls(decl.value, base, dataByUrl) : decl.value,
@@ -110,17 +107,14 @@ export async function inlineResources(captured: Captured): Promise<void> {
 }
 
 /**
- * Drops any @font-face the inlining could not make self-contained, so the artifact never
- * ships a dead origin reference. A face whose src resolves only to an external url, with no
- * data: bytes inlined and no local() system source, cannot render once the snip is pasted
- * away from the origin, and appendGenericFallbacks has already guaranteed every baked
- * font-family stack ends in a generic, so the text falls back deterministically rather
- * than depending on (or 404ing from) the origin.
+ * Drops any @font-face the inlining could not make self-contained, so the artifact never ships
+ * a dead origin reference. Such a face cannot render once pasted away from the origin, and
+ * appendGenericFallbacks has already given every stack a generic. The text falls back
+ * deterministically instead of 404ing.
  *
- * This is the closing guard for the resource path: whatever the recovery and inlining
- * steps could not carry is corrected to a clean fallback here, never left to break, and
- * the standalone resource probe still counts the family as unresolved so the loss stays
- * visible. Only un-inlinable faces are removed, so a fully inlined corpus is untouched.
+ * The closing guard for the resource path. Whatever recovery and inlining could not carry is
+ * corrected to a clean fallback rather than left to break. The standalone probe still counts
+ * the family unresolved, so the loss stays visible.
  *
  * @param captured - captured.fonts is filtered in place
  */
@@ -134,9 +128,8 @@ function dropUncontainedFaces(captured: Captured): void {
 }
 
 /**
- * Whether a @font-face src can render without the origin: it has no external url at all,
- * whether data:, local(), or already resolved, or it pairs an external url with an inlined
- * data: source or a local() system fallback the browser can use offline.
+ * Whether a @font-face src renders without the origin: no external url at all, or one paired
+ * with an inlined data: source or a local() system fallback.
  */
 function isSelfContained(src: string): boolean {
 	if (!/url\(\s*['"]?https?:/i.test(src)) return true; // No external url to depend on.
@@ -167,11 +160,9 @@ async function fetchAll(urls: string[]): Promise<Map<string, string>> {
 }
 
 /**
- * Fetches one url as a data uri, null on any failure or timeout. Tries a direct fetch
- * from the content script first, which succeeds for same-origin and cors-enabled
- * resources without a worker round-trip, then falls back to the privileged background
- * broker, whose <all_urls> permission reaches cross-origin and hotlink-protected
- * resources the page's own context cannot.
+ * Fetches one url as a data uri, null on failure or timeout. A direct page fetch first, which
+ * covers same-origin and cors-enabled resources with no round-trip, then the privileged host,
+ * which reaches the cross-origin and hotlink-protected ones the page cannot.
  */
 async function fetchData(url: string): Promise<string | null> {
 	const direct = await fetchDataDirect(url);

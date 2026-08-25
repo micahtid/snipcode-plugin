@@ -4,20 +4,17 @@
  * Runs during resolve. A @font-face src is usually relative to the source page, so it 404s
  * once the snip is pasted elsewhere; each is resolved to an absolute url.
  *
- * The face list is then narrowed to what the subtree actually renders. Narrowing by family
- * alone is not enough: a page ships every weight and a component renders one or two, so the
- * rest would be dead downloads. Matching is on family, weight, and style through the css
- * font-matching algorithm, so a request with no exact face still keeps the one the browser
- * substitutes. Generic keywords never match a captured family and fall out on their own.
+ * The face list is then narrowed to what the subtree renders. Family alone is not enough: a
+ * page ships every weight and a component renders one or two, so the rest would be dead
+ * downloads. Matching runs on family, weight, and style through the css font-matching
+ * algorithm, so a request with no exact face keeps the one the browser substitutes.
  */
 import type { Captured, FontFace } from '../types';
-
-const URL_IN_SRC = /url\(\s*(['"]?)([^'")]+)\1\s*\)/g;
+import { absolutizeUrls } from '../utils/css-urls';
 
 /**
- * The generated-content pseudo-elements whose own font can differ from the host
- * element's, mirroring the set features/pseudo.ts materializes. Sampling them
- * keeps a face that only a pseudo renders, for example an icon-font ::before.
+ * The pseudo-elements whose own font can differ from the host element's, mirroring what
+ * features/pseudo.ts materializes. Sampling them keeps a face only a pseudo renders.
  */
 const PSEUDO_ELEMENTS = ['::before', '::after', '::marker', '::placeholder', '::file-selector-button'];
 
@@ -34,12 +31,10 @@ const GENERIC_FAMILIES = new Set([
 ]);
 
 /**
- * Guarantees every baked font-family stack ends in a generic family, so text never
- * falls back to the browser default serif, Times New Roman, when a custom font is
- * unavailable. A stack that already ends in a generic is left untouched. Otherwise a
- * generic is appended, inferred from the first family's monospace hint, else sans-serif,
- * the overwhelmingly common case for ui type. Runs after the standalone
- * reconciliation has baked the resolved family stacks.
+ * Guarantees every baked font-family stack ends in a generic family, so an unavailable custom
+ * font never drops text to Times New Roman. A stack already ending in one is untouched;
+ * otherwise a generic is appended, monospace when the first family hints at it and sans-serif
+ * otherwise. Runs after the standalone reconciliation baked the resolved stacks.
  *
  * @param captured - every baked font-family value is normalized in place
  */
@@ -61,12 +56,7 @@ export function appendGenericFallbacks(captured: Captured): void {
 	}
 }
 
-/**
- * Narrows captured @font-face entries to the faces the snip renders and
- * absolutizes their src.
- *
- * @param captured - fonts is replaced in place with the resolved, used subset
- */
+/** Narrows captured faces to the ones the snip renders and absolutizes their src. */
 export function resolveFonts(captured: Captured): void {
 	const { requests, codepoints } = faceRequests(captured.root);
 	const base = document.baseURI || location.href;
@@ -74,7 +64,7 @@ export function resolveFonts(captured: Captured): void {
 	const resolved: FontFace[] = [];
 
 	for (const font of keptFaces(captured.fonts, requests, codepoints)) {
-		const src = absolutizeSrc(font.src, base);
+		const src = absolutizeUrls(font.src, base);
 		const key = `${normalizeFamily(font.family).toLowerCase()}|${src}|${descriptorKey(font)}`;
 		if (seen.has(key)) continue; // Dedupe identical faces
 		seen.add(key);
@@ -84,16 +74,13 @@ export function resolveFonts(captured: Captured): void {
 }
 
 /**
- * The faces to keep, in their captured order: a face survives when its family is
- * rendered in the subtree and its (weight, style) is the one css font-matching
- * picks for one of that family's requests. A family with no request never
- * renders, so all of its faces drop.
+ * The faces to keep, in captured order. A face survives when its family renders in the subtree
+ * and its weight and style are what css font-matching picks for one of that family's requests.
  *
- * unicode-range subsetting is honored: a family split into latin, latin-ext, cyrillic,
- * and further files, the next.js and google-fonts shape. Of the faces at the matched
- * (weight, style), only those whose range covers a codepoint the snip actually renders
- * survive, so a latin snip keeps the latin subset rather than an arbitrary first subset
- * that would render nothing and silently fall back.
+ * unicode-range subsetting is honored, the next.js and google-fonts shape of one family split
+ * across latin, latin-ext, and cyrillic files. Of the faces at the matched weight and style,
+ * only those covering a codepoint the snip renders survive. A latin snip then keeps the latin
+ * subset rather than an arbitrary first one that would render nothing.
  */
 function keptFaces(fonts: FontFace[], requests: Map<string, FaceRequest[]>, codepoints: Set<number>): FontFace[] {
 	const byFamily = new Map<string, FontFace[]>();
@@ -122,9 +109,8 @@ interface SubtreeFaces {
 }
 
 /**
- * The family, weight, and style triples the live subtree renders, keyed by lowercased
- * family, plus the set of codepoints it renders, so unicode-range narrowing can keep the
- * subset faces that actually cover the text. Reads element and generated-content text.
+ * The family, weight, and style triples the live subtree renders, keyed by lowercased family,
+ * plus every codepoint it renders, so unicode-range narrowing can keep the covering subsets.
  */
 function faceRequests(root: Element): SubtreeFaces {
 	const requests = new Map<string, FaceRequest[]>();
@@ -177,14 +163,13 @@ function renderedPseudos(el: Element): string[] {
 }
 
 /**
- * The captured faces one weight request resolves to, empty when the family has none.
- * Faces of the requested style win. If the family has no face in that style the browser
- * synthesizes it from any weight, so all faces stay eligible. The css weight-matching
- * algorithm picks one weight. Every face at that matched (weight, style) whose
- * unicode-range covers a rendered codepoint is kept, because subset faces partition the
- * codepoint space and the snip may render glyphs from several subsets. If no subset
- * covers the text, whether an exotic repertoire or an unparseable range, the weight winner is
- * kept as a floor so the family still renders rather than vanishing.
+ * The captured faces one weight request resolves to. Faces of the requested style win, and if
+ * the family has none the browser synthesizes from any weight, so all stay eligible. The css
+ * algorithm then picks one weight. Every face at that weight and style whose unicode-range
+ * covers a rendered codepoint is kept, since subsets partition the codepoint space.
+ *
+ * When no subset covers the text, an exotic repertoire or an unparseable range, the weight
+ * winner is kept as a floor so the family renders rather than vanishing.
  */
 function selectFaces(request: FaceRequest, faces: FontFace[], codepoints: Set<number>): FontFace[] {
 	const styled = faces.filter((face) => faceStyle(face) === request.style);
@@ -202,10 +187,9 @@ function selectFaces(request: FaceRequest, faces: FontFace[], codepoints: Set<nu
 }
 
 /**
- * Whether a face renders any codepoint the snip shows. A face with no unicode-range
- * descriptor covers the full repertoire, so it always qualifies. Otherwise at least one
- * of its declared ranges must contain a rendered codepoint. An empty codepoint set, meaning
- * no text, or an unparseable range qualifies too, so coverage never wrongly drops a face.
+ * Whether a face renders any codepoint the snip shows. No unicode-range means the full
+ * repertoire, so it always qualifies; otherwise one declared range must contain a rendered
+ * codepoint. An empty codepoint set or an unparseable range qualifies, erring toward keeping.
  */
 function faceCoversCodepoints(font: FontFace, codepoints: Set<number>): boolean {
 	const descriptor = font.descriptors['unicode-range'];
@@ -220,9 +204,8 @@ function faceCoversCodepoints(font: FontFace, codepoints: Set<number>): boolean 
 }
 
 /**
- * Parses a css unicode-range descriptor into [lo, hi] codepoint ranges. Handles the
- * single (U+41), range (U+460-52F), and wildcard (U+00??) forms. A token it cannot read
- * is skipped rather than failing the whole descriptor.
+ * Parses a unicode-range descriptor into [lo, hi] pairs: the single, range, and wildcard
+ * forms. A token it cannot read is skipped rather than failing the whole descriptor.
  */
 function parseUnicodeRange(descriptor: string): Array<[number, number]> {
 	const out: Array<[number, number]> = [];
@@ -255,8 +238,8 @@ function matchWeight(desired: number, ranges: Array<[number, number]>): number {
 	// A face whose declared range covers the request is an exact match.
 	const exact = ranges.findIndex(([lo, hi]) => desired >= lo && desired <= hi);
 	if (exact !== -1) return exact;
-	// Otherwise rank faces by the spec's directional preference, scoring each by
-	// the range boundary nearest the request.
+	// Otherwise rank by the spec's directional preference, scoring each face by the range
+	// boundary nearest the request.
 	const boundary = ([lo, hi]: [number, number]) => (desired < lo ? lo : hi);
 	for (const weight of weightSearchOrder(desired, ranges.map(boundary))) {
 		const index = ranges.findIndex((range) => boundary(range) === weight);
@@ -266,9 +249,9 @@ function matchWeight(desired: number, ranges: Array<[number, number]>): number {
 }
 
 /**
- * The order css font-matching prefers candidate weights in, for a request with
- * no exact face. The 400-500 band searches up to 500 first, then down, then the
- * heavier weights. Below 400 prefers lighter, and above 500 prefers heavier.
+ * The order css font-matching prefers weights in when no face matches exactly. The 400-500
+ * band searches up to 500, then down, then heavier. Below 400 prefers lighter, above 500
+ * prefers heavier.
  */
 function weightSearchOrder(desired: number, weights: number[]): number[] {
 	const unique = [...new Set(weights)];
@@ -282,7 +265,7 @@ function weightSearchOrder(desired: number, weights: number[]): number[] {
 }
 
 /** A face's [min, max] weight from its font-weight descriptor, either a single value or a range. */
-function faceWeightRange(font: FontFace): [number, number] {
+export function faceWeightRange(font: FontFace): [number, number] {
 	const parts = (font.descriptors['font-weight'] ?? '400').trim().split(/\s+/).map(normalizeWeight);
 	const lo = parts[0] ?? 400;
 	const hi = parts[1] ?? lo;
@@ -311,20 +294,8 @@ function normalizeStyle(raw: string): string {
 	return 'normal';
 }
 
-/** Rewrite every url() inside an @font-face src to an absolute url. local()/data: untouched. */
-function absolutizeSrc(src: string, base: string): string {
-	return src.replace(URL_IN_SRC, (match, quote: string, url: string) => {
-		if (/^(data:|blob:|https?:)/i.test(url)) return match; // Already absolute or inline
-		try {
-			return `url(${quote}${new URL(url, base).href}${quote})`;
-		} catch {
-			return match;
-		}
-	});
-}
-
-/** Strip quotes and trim a font-family token. The `font` shorthand may carry size/style noise, but the last comma-list entries are still family names. */
-function normalizeFamily(raw: string): string {
+/** Strip quotes and trim a font-family token, dropping the size noise a `font` shorthand adds. */
+export function normalizeFamily(raw: string): string {
 	return raw
 		.replace(/^["']|["']$/g, '')
 		.replace(/^\s*(?:\d+(?:\.\d+)?(?:px|rem|em|%)?\/?\S*\s+)+/, '') // Drop leading size/line-height from `font` shorthand
@@ -337,102 +308,4 @@ function descriptorKey(font: FontFace): string {
 		.sort(([a], [b]) => a.localeCompare(b))
 		.map(([k, v]) => `${k}:${v}`)
 		.join(';');
-}
-
-/** Each font container's leading magic bytes as hex, mapped to its true mime type. */
-const FONT_MAGIC: Array<[string, string]> = [
-	['774f4632', 'font/woff2'], // wOF2
-	['774f4646', 'font/woff'], // wOFF
-	['4f54544f', 'font/otf'], // OTTO, an OpenType/CFF outline font
-	['74746366', 'font/collection'], // ttcf, a TrueType collection
-	['00010000', 'font/ttf'], // TrueType outlines
-	['74727565', 'font/ttf'], // 'true', a legacy TrueType tag
-];
-
-/**
- * Relabels every embedded font data uri with the mime its bytes actually are, reading the
- * container from the leading magic bytes rather than trusting the source's label. A source that
- * serves a woff2 as `binary/octet-stream`, as f1 does, is corrected to `font/woff2`. Browsers
- * sniff the bytes regardless, so this is a serialization fix, not a behavior change. The honest
- * label also gives the split-asset writer the right file extension. Runs after inlineResources
- * has embedded the bytes, so `font.src` carries the data uri.
- *
- * @param captured - captured.fonts src strings are relabeled in place
- */
-export function correctFontMime(captured: Captured): void {
-	for (const font of captured.fonts) {
-		font.src = font.src.replace(/data:([^;,)]*)(;base64)?,([A-Za-z0-9+/=]+)/g, (whole, _mime: string, base64: string, payload: string) => {
-			if (!base64) return whole; // A url-encoded data uri is left as written, since its bytes are not base64.
-			const mime = fontMimeFromBytes(payload);
-			return mime ? `data:${mime};base64,${payload}` : whole;
-		});
-	}
-}
-
-/** The true mime of a base64 font payload, read from its container magic, or null if unknown. */
-function fontMimeFromBytes(base64Payload: string): string | null {
-	let head: string;
-	try {
-		head = atob(base64Payload.slice(0, 8)); // Eight base64 chars decode the four-byte magic.
-	} catch {
-		return null;
-	}
-	const magic = Array.from(head.slice(0, 4))
-		.map((c) => c.charCodeAt(0).toString(16).padStart(2, '0'))
-		.join('');
-	for (const [signature, mime] of FONT_MAGIC) if (magic === signature) return mime;
-	return null;
-}
-
-/**
- * Collapses faces that embed the identical bytes and match on every descriptor except weight
- * into one `@font-face` whose font-weight spans the merged range. A source that ships one file
- * under three weights, as cluely does for weights 400, 500, and 600, then pays for those bytes
- * once instead of three times in the single-file form and drops from three rules to one in both
- * forms. Byte identity is the strongest equivalence, and the browser resolves a weight-range
- * face for every weight the merged faces served, so the render is unchanged. Runs after
- * inlineResources, so the data uri payload is the byte identity. Faces differing in any other
- * descriptor keep their own rule.
- */
-export function mergeIdenticalFaces(captured: Captured): void {
-	const groups = new Map<string, FontFace[]>();
-	const order: string[] = [];
-	for (const font of captured.fonts) {
-		const key = faceMergeKey(font);
-		let group = groups.get(key);
-		if (!group) {
-			groups.set(key, (group = []));
-			order.push(key);
-		}
-		group.push(font);
-	}
-	captured.fonts = order.map((key) => {
-		const group = groups.get(key)!;
-		return group.length === 1 ? group[0]! : mergeWeightRange(group);
-	});
-}
-
-/** A face's identity for merging: its family, its byte payload, and every descriptor but weight. */
-function faceMergeKey(font: FontFace): string {
-	const descriptors = Object.entries(font.descriptors)
-		.filter(([name]) => name !== 'font-weight')
-		.sort(([a], [b]) => a.localeCompare(b))
-		.map(([name, value]) => `${name}:${value}`)
-		.join(';');
-	const payload = font.src.match(/data:[^,]*,([A-Za-z0-9+/=]+)/);
-	// The data uri payload identifies the bytes. A face still on a url groups by that url instead.
-	return `${normalizeFamily(font.family).toLowerCase()}|${descriptors}|${payload ? payload[1] : font.src}`;
-}
-
-/** One face carrying the group's shared bytes and descriptors, its font-weight spanning the range. */
-function mergeWeightRange(faces: FontFace[]): FontFace {
-	let lo = Infinity;
-	let hi = -Infinity;
-	for (const face of faces) {
-		const [flo, fhi] = faceWeightRange(face);
-		lo = Math.min(lo, flo);
-		hi = Math.max(hi, fhi);
-	}
-	const base = faces[0]!;
-	return { family: base.family, src: base.src, descriptors: { ...base.descriptors, 'font-weight': lo === hi ? String(lo) : `${lo} ${hi}` } };
 }

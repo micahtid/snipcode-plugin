@@ -8,9 +8,9 @@
 /**
  * One color the page uses, with a total usage count and the parts of an element it paints.
  *
- * `contexts` is ranked by weight and trimmed: a context that accounts for a trivial share of
- * the color's uses is left out, so the list reads as what the color is for rather than as
- * every place it was ever seen. `usage` carries the raw per-context counts behind that call.
+ * `contexts` is ranked by weight and trimmed, leaving out a context that accounts for a
+ * trivial share of the color's uses. The list then reads as what the color is for rather than
+ * everywhere it was seen. `usage` carries the raw per-context counts behind that call.
  */
 export interface ColorEntry {
 	value: string;
@@ -133,9 +133,9 @@ export interface NavBlueprint {
  * One background effect and the section it was seen in.
  *
  * The location is the point. An effect asserted of the whole page is true and useless as a
- * constraint: with nowhere attached, an agent reads it as permission to paint the effect
- * wherever convention suggests, and a rebuild put two gradients into a hero the schema
- * measured as flat. `section` indexes the schema's own sections list, and is absent when the
+ * constraint. With nowhere attached, an agent reads it as permission to paint the effect
+ * wherever convention suggests. A rebuild put two gradients into a hero the schema measured as
+ * flat. `section` indexes the schema's own sections list, and is absent when the
  * effect sits outside every section.
  */
 export interface BackgroundEffect {

@@ -2,14 +2,13 @@
  * inspect/schema/walk.ts: the stratified dom walk every later pass reads.
  *
  * The sample is taken once, here. A naive walk of a long page spends its whole budget in the
- * first section, so the budget is split across the discovered sections in proportion to size.
+ * first section, so the budget splits across the discovered sections in proportion to size.
+ * Those come from discovery, not body's children. On an app-root page body has one child, which
+ * gave the whole page a single bucket and made the stratification do nothing.
  *
- * The sections come from discovery, not from body's children: on an app-root page body has one
- * child, which gave the whole page a single bucket and made the stratification do nothing.
- *
- * Depth counts levels of structure, not dom nodes. A framework build separates a section from
- * its content by a chain of single-child divs, and charging each link a level spends the whole
- * depth budget before the walk reaches anything worth recording.
+ * Depth counts levels of structure, not dom nodes. A framework separates a section from its
+ * content by a chain of single-child divs. Charging each link a level spends the depth budget
+ * before the walk reaches anything worth recording.
  */
 import { computeFingerprint } from './fingerprint';
 import { classifyElement, isElementVisible, SKIP_TAGS } from './classify';
@@ -33,18 +32,16 @@ const MAX_DEPTH = 6;
 /** Smallest budget any one section gets, so a short section is never sampled down to nothing. */
 const MIN_SECTION_BUDGET = 10;
 /**
- * Extra share of its budget a section may spend on its over-budget tail sample. The tail is what
- * keeps a very long section from being represented only by its opening, and bounding it is what
- * stops that same section from eating the share belonging to the sections after it.
+ * Extra share of its budget a section may spend on its tail sample. The tail keeps a very long
+ * section from being represented only by its opening; the bound stops it eating the share
+ * belonging to the sections after it.
  */
 const TAIL_SHARE = 0.25;
 
 /**
- * Walks the visible dom, capturing each element's role, fingerprint, and tree
- * position. Sampling is stratified: each discovered section gets a share of the
- * element budget proportional to its size, so a long section cannot crowd out the
- * rest. Once a section exceeds its budget it is sampled every third element, up to
- * a bounded tail.
+ * Walks the visible dom, capturing each element's role, fingerprint, and tree position. Each
+ * discovered section gets a share of the budget proportional to its size, so a long one cannot
+ * crowd out the rest. Past its share, it is sampled every third element up to a bounded tail.
  */
 export function walkDOM(sectionRoots: Element[]): WalkedElement[] {
 	const elements: WalkedElement[] = [];
@@ -60,9 +57,9 @@ export function walkDOM(sectionRoots: Element[]): WalkedElement[] {
 		return el.ownerDocument !== document; // Inside an iframe.
 	};
 
-	// First pass: size each section so the budget can be split proportionally. The floors come
-	// out of the pool before the split, so the shares plus their tails cannot sum past the cap
-	// and leave the walk's global stop, rather than the split, deciding who gets sampled.
+	// Size each section first so the budget splits proportionally. The floors come out of the
+	// pool before the split, so the shares plus tails cannot sum past the cap. Otherwise the
+	// global stop, rather than the split, decides who gets sampled.
 	const sized = sectionRoots.map((el) => ({ el, count: el.querySelectorAll('*').length }));
 	const totalElements = sized.reduce((sum, sec) => sum + sec.count, 0);
 	const pool = Math.max(0, MAX_ELEMENTS / (1 + TAIL_SHARE) - MIN_SECTION_BUDGET * sized.length);

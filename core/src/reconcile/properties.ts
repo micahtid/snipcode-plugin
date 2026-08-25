@@ -1,15 +1,16 @@
 /**
  * reconcile/properties.ts: reading the document's @property registrations.
  *
- * A custom property registered with @property carries a syntax, an inherits flag, and often an
- * initial-value that govern how it falls back and interpolates. Two phases need that:
- * features/layers.ts re-emits the rules so the artifact keeps the behavior, and resolve/vars.ts
- * treats a registration with an initial-value as resolvable, since var() yields that initial
- * even when nothing sets it.
+ * A registration carries a syntax, an inherits flag, and often an initial-value, which govern
+ * how the property falls back and interpolates. features/layers.ts re-emits the rules so the
+ * artifact keeps that behavior. resolve/vars.ts treats a registration with an initial-value as
+ * resolvable, since var() yields it even when nothing sets the property.
  *
- * CSSPropertyRule is missing from some dom lib versions, so the rule is detected structurally
- * by its descriptor fields.
+ * CSSPropertyRule is missing from some dom lib versions, so a rule is detected structurally by
+ * its descriptor fields.
  */
+
+import { holdsChildRules, readableRuleLists } from '../utils/css-rules';
 
 /** One registered @property: its name, its initial-value or null when none, and its source text. */
 export interface RegisteredProperty {
@@ -21,24 +22,10 @@ export interface RegisteredProperty {
 	cssText: string;
 }
 
-/**
- * The custom properties registered via `@property` anywhere in the document, keyed by
- * name. Cross-origin sheets that cannot be read are skipped: their registrations are
- * unreadable from the content script, the same boundary every cssom read accepts.
- *
- * @returns a name -> registration map
- */
+/** Every `@property` registration in the document, keyed by name. Unreadable sheets skip. */
 export function registeredProperties(): Map<string, RegisteredProperty> {
 	const out = new Map<string, RegisteredProperty>();
-	for (const sheet of Array.from(document.styleSheets)) {
-		let rules: CSSRuleList;
-		try {
-			rules = sheet.cssRules;
-		} catch {
-			continue; // Cross-origin sheet, cannot read.
-		}
-		collect(rules, out);
-	}
+	for (const rules of readableRuleLists()) collect(rules, out);
 	return out;
 }
 
@@ -49,8 +36,8 @@ function collect(rules: CSSRuleList, out: Map<string, RegisteredProperty>): void
 		if (typeof r.name === 'string' && typeof r.syntax === 'string' && r.name.startsWith('--')) {
 			const initialValue = typeof r.initialValue === 'string' && r.initialValue !== '' ? r.initialValue : null;
 			out.set(r.name, { name: r.name, initialValue, cssText: r.cssText ?? serialize(r, initialValue) });
-		} else if ('cssRules' in rule && (rule as { cssRules?: unknown }).cssRules instanceof CSSRuleList) {
-			collect((rule as CSSRule & { cssRules: CSSRuleList }).cssRules, out);
+		} else if (holdsChildRules(rule)) {
+			collect(rule.cssRules, out);
 		}
 	}
 }

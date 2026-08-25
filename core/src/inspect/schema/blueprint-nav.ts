@@ -4,9 +4,9 @@
  * Runs during the page-scoped inspect pass, against the live dom. Reports the bar's fill,
  * position, height, backdrop blur, bottom border, arrangement, and link count.
  *
- * Which element is the bar is decided in discovery.ts, by geometry rather than by document
- * order, since what a reader means by the nav is the bar at the top and not whichever `nav`
- * element a framework emitted first.
+ * Which element is the bar is decided in discovery.ts, by geometry rather than document order.
+ * What a reader means by the nav is the bar at the top, not whichever `nav` element a
+ * framework emitted first.
  */
 import { contentChildren, contentRoot } from './boxes';
 import { normalizeColor } from './shared';
@@ -48,7 +48,7 @@ export function extractNavBlueprint(bar: Element | null): NavBlueprint | null {
 
 /**
  * True when a backdrop filter is actually declared. The prefixed property is absent from the
- * computed style in most engines, and testing an absent property against 'none' is true, which
+ * computed style in most engines, and testing an absent property against 'none' is true. That
  * reported every nav on every page as blurred.
  */
 function hasBackdropBlur(computed: CSSStyleDeclaration): boolean {

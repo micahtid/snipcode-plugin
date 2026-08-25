@@ -7,8 +7,8 @@
  * reported through the same JSON error contract as runtime failures.
  */
 import { runCandidates, runExtract, runSchema, type Args } from './commands';
-import { emitError, FORMAT_NAMES } from './output';
-import { WORKFLOW, CANDIDATES, EXTRACT, SCHEMA, NAMING, REDESIGN, RULES } from '../../instructions/guidance';
+import { emitError, normalizeUrl, FORMAT_NAMES } from './output';
+import { WORKFLOW, URLS, CANDIDATES, EXTRACT, SCHEMA, NAMING, REDESIGN, RULES } from '../../instructions/guidance';
 
 /**
  * The package version. Substituted from package.json by the bundler, see
@@ -33,6 +33,8 @@ Options:
   --expect-rect "<json>" (extract) recorded candidate rect {x,y,w,h}, for drift verification
   --headed               run the browser headed (debugging)
   --help, --version
+
+${URLS}
 
 Guidance:
 ${CANDIDATES}
@@ -61,7 +63,7 @@ const VALUE_FLAGS: Record<string, keyof Args> = {
  * Parse argv (after the command and url) into the flag bag. Value flags consume the next token.
  *
  * An unrecognized flag is an error, not a shrug. It used to be ignored so that a future flag
- * would not hard-fail an older cli, but the cli and the skill ship in one package and upgrade
+ * would not hard-fail an older cli. But the cli and the skill ship in one package and upgrade
  * together, so there is no such pairing. What it actually did was turn `--selctor "#login"`
  * into a confusing MISSING_SELECTOR, and a mistyped `--format` into a silent default.
  */
@@ -98,9 +100,16 @@ async function main(): Promise<void> {
 	}
 
 	const command = argv[0];
-	const url = argv[1];
-	if (!url || url.startsWith('--')) {
+	const raw = argv[1];
+	if (!raw || raw.startsWith('--')) {
 		emitError('MISSING_URL', `${command} requires a <url> as its first argument`);
+		return;
+	}
+	let url: string;
+	try {
+		url = normalizeUrl(raw);
+	} catch (err) {
+		emitError('BAD_URL', (err as Error).message);
 		return;
 	}
 	const parsed = parseFlags(argv.slice(2));

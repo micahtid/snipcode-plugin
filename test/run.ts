@@ -2,9 +2,9 @@
  * test/run.ts: end-to-end tests for the snipcode cli.
  *
  * Serves the fixtures over http, then drives the *built* cli as a subprocess for every
- * scenario and asserts against the JSON it prints and the files it writes. This is the
- * real integration surface an agent shells out to, so the tests exercise it exactly as
- * an agent would: argv in, one JSON object out, side-effect files under --out.
+ * scenario and asserts against the JSON it prints and the files it writes. This is the real
+ * integration surface an agent shells out to. So the tests exercise it exactly as an agent
+ * would: argv in, one JSON object out, side-effect files under --out.
  *
  * Run with: npm test (builds first). Requires `npx playwright install chromium`.
  */
@@ -48,10 +48,10 @@ function sourceFiles(dir: string): string[] {
 /**
  * The guidance surface, asserted directly rather than through a run.
  *
- * The rule this plan strengthened was already written down and was still ignored, and the
- * guidance had no tests at all, so the parts that can be held down mechanically are. Each check
- * keys on a short phrase, not a whole sentence, so rewording survives and dropping a rule does
- * not. A failure here is a decision to make, never a string to silence.
+ * The rule this plan strengthened was written down and still ignored, and the guidance had no
+ * tests at all. So the parts that can be held down mechanically are. Each check keys on a short
+ * phrase rather than a whole sentence, so rewording survives and dropping a rule does not. A
+ * failure here is a decision to make, never a string to silence.
  */
 function checkGuidance(): void {
 	process.stdout.write('\nguidance:\n');
@@ -87,8 +87,8 @@ function checkGuidance(): void {
 
 	// Editing guidance and forgetting to regenerate ships stale rules to every agent that reads
 	// the skill; bumping the version and forgetting ships a manifest reporting the old one. The
-	// text is composed in memory from the same source the generator uses, since shelling out to
-	// gen:skill would rewrite tracked files as a side effect of running tests.
+	// text is composed in memory from the generator's own source. Shelling out to gen:skill
+	// would rewrite tracked files as a side effect of running tests.
 	const stale = composeSkills().filter(({ path, text }) => {
 		if (!existsSync(path)) return true;
 		// Line endings are the checkout's business, not the guidance's.
@@ -165,9 +165,9 @@ function commentCensus(path: string): { code: number; comment: number; lines: nu
 /**
  * The rules the cleaning pass set, checked against every source file rather than a sample.
  *
- * Each one is a thing that was true once and would quietly stop being true: a dash creeping
- * back into agent-facing text, a module header growing into an essay again, or the next
- * 668-line file arriving one function at a time.
+ * Each one was true once and would quietly stop being true. A dash creeping back into
+ * agent-facing text, a module header growing into an essay again, or the next 668-line file
+ * arriving one function at a time.
  */
 function checkHouseRules(): void {
 	process.stdout.write('\nhouse rules:\n');
@@ -359,6 +359,14 @@ async function main(): Promise<void> {
 		check('an unknown flag fails UNKNOWN_FLAG', typo.code === 1 && (typo.json.error?.code) === 'UNKNOWN_FLAG', typo.raw.slice(0, 160));
 		check('the UNKNOWN_FLAG message names the flag', String(typo.json.error?.message ?? '').includes('--selctor'), typo.raw.slice(0, 160));
 
+		// The url used to reach page.goto untouched. A file: argument then read the caller's
+		// disk, and a scheme-less host died as a raw Playwright stack trace.
+		const disk = await runCli(['extract', 'file:///etc/passwd', '--selector', '#login', '--out', join(OUT_BASE, 'diskurl')]);
+		check('a file url fails BAD_URL', disk.code === 1 && (disk.json.error?.code) === 'BAD_URL', disk.raw.slice(0, 160));
+		check('BAD_URL is refused before anything is written', !existsSync(join(OUT_BASE, 'diskurl')));
+		const inline = await runCli(['schema', 'data:text/html,<h1>x</h1>', '--out', join(OUT_BASE, 'dataurl')]);
+		check('a data url fails BAD_URL', inline.code === 1 && (inline.json.error?.code) === 'BAD_URL', inline.raw.slice(0, 160));
+
 		// A malformed --expect-rect used to be dropped, leaving the caller believing rect
 		// verification was on while only the text was checked.
 		const badRect = await runCli(['extract', sample, '--selector', '#login', '--expect-rect', '{oops', '--out', join(OUT_BASE, 'badrect')]);
@@ -536,7 +544,7 @@ async function main(): Promise<void> {
 		check('an escaped utility-class state selector matches its element', fwStates.some((s) => s.selector.includes('hover\\:underline-x')), JSON.stringify(fwStates.map((s) => s.selector)));
 
 		// --- decorative effects carry the section they were seen in ---
-		// An effect stated for the whole page reads as permission to paint it anywhere, which is
+		// An effect stated for the whole page reads as permission to paint it anywhere. That is
 		// how a rebuild put a gradient into a hero the schema measured as flat. Every effect
 		// names a section, and one the schema cannot place is never shown.
 		process.stdout.write('\nschema (located effects):\n');
@@ -581,9 +589,9 @@ async function main(): Promise<void> {
 		check('the cli payload echoes the blueprints', Array.isArray(fw.json.buttons) && Array.isArray(fw.json.cards) && !!fw.json.nav && !!fw.json.responsive);
 
 		// --- schema on an app-root page with a compact type scale ---
-		// app.html covers what framework.html cannot: a thirteen-pixel base, a nav with no
-		// landmark tag, stats in two scripts, scroll-reveal content, radii a browser serializes
-		// strangely, a section long enough to exhaust the walk, and no media queries at all.
+		// app.html covers what framework.html cannot. A thirteen-pixel base, a nav with no
+		// landmark tag, stats in two scripts, scroll-reveal content. Also radii a browser
+		// serializes strangely, a section long enough to exhaust the walk, and no media queries.
 		process.stdout.write('\nschema (app-root page):\n');
 		const ap = await runCli(['schema', app, '--out', join(OUT_BASE, 'app')]);
 		check('app schema exits 0', ap.code === 0, ap.raw.slice(0, 200));

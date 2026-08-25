@@ -1,12 +1,9 @@
 /**
  * inspect/schema/shared.ts: the walked-element record and the helpers several passes need.
  *
- * They live here so no pass imports another just to borrow a helper, which is what would put a
- * cycle in the graph.
- *
- * validateToken at the bottom is the one boundary every candidate token crosses, and it is
- * here for the same reason: every collector needs it, and a gate only some of them go through
- * is not a gate.
+ * They live here so no pass imports another just to borrow a helper, which would put a cycle in
+ * the graph. validateToken at the bottom is here for the same reason: every collector needs it,
+ * and a gate only some of them go through is not a gate.
  */
 import { hexToRgb, isTransparentColor, parseRgba, rgbToHex, type Rgba } from '../../utils/color';
 import { splitCommaList } from '../../utils/css-split';
@@ -47,11 +44,9 @@ function countColorTokens(value: string): number {
 }
 
 /**
- * Normalizes a paint value to hex when opaque, keeps rgba when translucent, null if absent.
- *
- * A value carrying more than one color is rejected outright. `border-color` on an element
- * with different colors per side serializes as "rgb(a) rgb(b) rgb(c)", which is not a color;
- * accepting it put strings like that into the palette as if they were tokens.
+ * Normalizes a paint value: hex when opaque, rgba when translucent, null when absent. A value
+ * carrying more than one color is rejected. `border-color` with different colors per side
+ * serializes as "rgb(a) rgb(b) rgb(c)", which is not a color and used to reach the palette.
  */
 export function normalizeColor(value: string): string | null {
 	const trimmed = value.trim();
@@ -85,10 +80,9 @@ export function compositeOver(fg: Rgba, backdropHex: string): string {
 }
 
 /**
- * The opaque color an element actually sits on, found by climbing to the first ancestor that
- * paints a background and compositing any translucency on the way down. This is what a
- * translucent token has to be measured against; without it a hairline border has no position
- * in color space at all.
+ * The opaque color an element sits on: climb to the first ancestor that paints a background,
+ * compositing translucency on the way down. Without it a hairline border has no position in
+ * color space at all.
  */
 export function effectiveBackground(el: Element | null): string {
 	let current: Element | null = el;
@@ -104,12 +98,10 @@ export function effectiveBackground(el: Element | null): string {
 }
 
 /**
- * A box-shadow with its fully transparent layers dropped, 'none' when nothing is left.
- *
- * Utility frameworks stack placeholder layers so a shadow can be switched on by a variant, so
- * an element with no shadow at all still computes to a list of `rgba(0,0,0,0)` layers. Reported
- * verbatim that reads as an elevated component with a five-layer shadow, which is a design fact
- * the page does not contain.
+ * A box-shadow with its fully transparent layers dropped, 'none' when nothing is left. Utility
+ * frameworks stack placeholder layers so a variant can switch a shadow on, so an element with
+ * no shadow computes to a list of `rgba(0,0,0,0)`. Reported verbatim that reads as an elevated
+ * component with a five-layer shadow, a design fact the page does not contain.
  */
 export function paintedShadow(value: string): string {
 	if (!value || value === 'none') return 'none';
@@ -152,14 +144,12 @@ const MAX_FONT_PX = 400;
 
 /**
  * The one gate every candidate token crosses: the values of `kind` a string actually carries.
+ * None when it is not that kind at all, one for the ordinary case, several for a shorthand.
  *
- * None when the string is not a value of that kind at all, one for the ordinary case, and
- * several when it is a shorthand listing distinct values of the same kind. Everything upstream
- * of this reads a computed style, and a computed style serializes whatever the cascade produced:
- * a corner shorthand where a radius was expected, a pill authored as 3.35544e+07px, a gap
- * shorthand where a length belonged. Each of those used to be patched at the call site that
- * first met it, so the next serialization surprise got through somewhere else. One gate is what
- * makes that class of defect finite.
+ * Everything upstream reads a computed style, which serializes whatever the cascade produced.
+ * A corner shorthand where a radius was expected, a pill authored as 3.35544e+07px, a gap
+ * shorthand where a length belonged. Each used to be patched at the call site that first met
+ * it, so the next surprise got through elsewhere. One gate makes that defect class finite.
  */
 export function validateToken(kind: TokenKind, value: string): string[] {
 	const trimmed = (value ?? '').trim();
@@ -174,9 +164,8 @@ export function validateToken(kind: TokenKind, value: string): string[] {
 		return painted === 'none' ? [] : [painted];
 	}
 	if (kind === 'radius') {
-		// A corner shorthand lists up to four radii, and the elliptical form separates its two
-		// axes with a slash. Both are lists of radii, so each distinct member enters on its own
-		// rather than the whole string entering as if it were one value.
+		// A corner shorthand lists up to four radii and the elliptical form slashes its axes.
+		// Both are lists, so each distinct member enters on its own.
 		const out: string[] = [];
 		for (const part of trimmed.replace('/', ' ').split(/\s+/)) {
 			const radius = normalizeRadius(part);
@@ -186,7 +175,7 @@ export function validateToken(kind: TokenKind, value: string): string[] {
 	}
 
 	// Spacing and font sizes are single lengths, so a multi-value string is a shorthand read
-	// where a value belonged, and it is not a length whatever else it may mean.
+	// where a value belonged.
 	if (/\s/.test(trimmed)) return [];
 	const px = lengthPx(trimmed);
 	if (px === null) return [];
@@ -195,13 +184,10 @@ export function validateToken(kind: TokenKind, value: string): string[] {
 }
 
 /**
- * A border-radius as a component blueprint states it: every corner through the same gate the
- * token list uses, with the positions kept.
- *
- * A blueprint is a shape, not a token, so `12px 0px 0px 12px` is a real answer about a card and
- * has to survive whole, zeros included. What must not survive is a pill serialized as
- * 3.35544e+07px, which reached schema.md down this path while the token list beside it, reading
- * the same element, printed a clean 9999px.
+ * A border-radius as a blueprint states it: every corner through the token gate, positions
+ * kept. A blueprint is a shape rather than a token, so `12px 0px 0px 12px` is a real answer
+ * about a card and survives whole, zeros included. What must not survive is a pill serialized
+ * as 3.35544e+07px, which reached schema.md this way while the token list printed 9999px.
  */
 export function radiusShorthand(value: string): string {
 	const trimmed = (value ?? '').trim();
@@ -229,8 +215,8 @@ function normalizeRadius(part: string): string | null {
 	return lengthPx(corner) === null ? null : corner;
 }
 
-/** A css length in px, null when the string is not a length. Exponent notation included: that is
- * how a browser serializes the enormous radius a pill is authored with. */
+/** A css length in px, null when it is not one. Exponent notation included: that is how a
+ * browser serializes the enormous radius a pill is authored with. */
 function lengthPx(value: string): number | null {
 	if (!/^-?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?(?:px|rem|em|pt)?$/i.test(value)) return null;
 	const n = parseFloat(value);

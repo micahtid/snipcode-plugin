@@ -1,9 +1,9 @@
 /**
  * test/pixels.ts: shared png pixel-diff for the fidelity and parity benches.
  *
- * Both benches screenshot two renders and ask "how different are they?" This decodes
- * the pngs, crops both to their shared top-left region so pixelmatch gets matching
- * dimensions, and returns the fraction of mismatched pixels.
+ * Both benches screenshot two renders and ask how different they are. This decodes the pngs,
+ * crops both to their shared top-left region so pixelmatch gets matching dimensions, and
+ * returns the fraction of mismatched pixels.
  */
 import { PNG } from 'pngjs';
 import pixelmatch from 'pixelmatch';

@@ -2,17 +2,16 @@
  * inspect/schema/layout.ts: a section's layout, alignment, and repetition, read from its boxes.
  *
  * Runs during the page-scoped inspect pass, against the live dom. Reading `display: grid` off a
- * section element only works when the section element is the grid, which framework builds
- * almost never do: they nest the real grid several hashed-class divs deeper, so a style read
- * falls through to a default and every section comes back the same wrong shape. Clustering the
- * rendered children by the rows they occupy has no such blind spot, whatever css produced them.
+ * section only works when the section element is the grid, which framework builds almost never
+ * do. The real grid sits several hashed-class divs deeper, so the read falls through to a
+ * default and every section comes back the same wrong shape. Clustering the rendered children
+ * by the rows they occupy has no such blind spot.
  *
- * The container whose children actually divide horizontally is chosen by size, so a two-button
- * strip inside a stacked hero cannot pass itself off as the hero's layout: it is neither wide
- * enough nor large enough relative to the section.
+ * The container that actually divides horizontally is chosen by size, so a two-button strip
+ * inside a stacked hero cannot pass itself off as the hero's layout.
  *
- * Every reading says whether it was measured. A section whose content paints no box reports
- * `unknown`, never a default, because a confident wrong answer costs more than an honest gap.
+ * Every reading says whether it was measured. A section painting no box reports `unknown`
+ * rather than a default, because a confident wrong answer costs more than an honest gap.
  */
 import {
 	contentChildren, contentRoot, elementChildren, median, rowsOf, scanContainers,
@@ -101,8 +100,8 @@ function isRightAligned(container: Element, kids: Element[]): boolean {
 }
 
 /**
- * Reads a section's alignment from the container that holds its content, never from the
- * section wrapper, whose text-align says nothing about where the content actually sits.
+ * A section's alignment, read from the container holding its content. The section wrapper's
+ * own text-align says nothing about where that content sits.
  */
 export function readAlignment(section: Element): 'left' | 'center' | 'right' {
 	const content = contentRoot(section);
@@ -149,12 +148,10 @@ function gridPattern(columns: number): LayoutPattern {
 }
 
 /**
- * Measures a section's layout from its rendered boxes.
- *
- * The content root is always a candidate, so a section that divides at its top level is read
- * there. When it stacks instead, the largest nested container that both divides horizontally
- * and is a substantial part of the section wins, which is how a features grid under a heading
- * is found without a button strip inside a stacked hero being mistaken for one.
+ * Measures a section's layout from its rendered boxes. The content root is always a candidate,
+ * so a section dividing at its top level is read there. When it stacks instead, the largest
+ * nested container that divides horizontally and is a substantial part of the section wins.
+ * That finds a features grid under a heading without mistaking a hero's button strip for one.
  */
 export function readLayout(section: Element): LayoutReading {
 	const content = contentRoot(section);
@@ -163,9 +160,8 @@ export function readLayout(section: Element): LayoutReading {
 	const rootKids = contentChildren(content);
 
 	if (rootKids.length === 0) {
-		// A bare run of text is a measured single column. Nothing at all is not: a section whose
-		// content paints no box has no layout to report, and saying "single-column" there would
-		// be the silent fallback the whole contract depends on not making.
+		// A bare run of text is a measured single column. Nothing at all is not: that section
+		// has no layout to report, and "single-column" there is the silent fallback.
 		if ((content.textContent || '').trim() === '') {
 			return { pattern: 'unknown', measured: false, columns: 0, container: null, content };
 		}
@@ -180,9 +176,9 @@ export function readLayout(section: Element): LayoutReading {
 		const rect = candidate.getBoundingClientRect();
 		if (candidate !== content) {
 			if (base.width > 0 && rect.width < base.width * MIN_CONTAINER_WIDTH_SHARE) continue;
-			// A container wider than the section is a track being scrolled or animated through
-			// a window, not a row of columns. Counted as columns it reported a logo marquee as
-			// a fifty-six column grid, which is true of the boxes and useless as a layout.
+			// A container wider than its section is a track scrolled through a window, not a
+			// row of columns. Counted as columns, a logo marquee came back as a 56-column
+			// grid: true of the boxes, useless as a layout.
 			if (base.width > 0 && rect.width > base.width * MAX_CONTAINER_WIDTH_SHARE) {
 				if (kids.length >= 2) track = candidate;
 				continue;
@@ -227,13 +223,13 @@ export function readLayout(section: Element): LayoutReading {
 }
 
 /**
- * Measures a section's repetition: the run of similar boxes inside the container its layout was
- * read from.
+ * Measures a section's repetition: the run of similar boxes inside the container its layout
+ * came from.
  *
- * This exists because a label alone is useless. "logos, horizontal-scroll" tells an agent
- * nothing it can rebuild, so it invents a layout; fifteen boxes of 120x36 tells it exactly what
- * to draw. Similarity is judged by size against the median, never by class name, so a hashed
- * build reads the same as a hand-written one.
+ * A label alone is useless. "logos, horizontal-scroll" tells an agent nothing it can rebuild,
+ * so it invents a layout; fifteen boxes of 120x36 tells it what to draw. Similarity is judged
+ * by size against the median, never by class name, so a hashed build reads like a hand-written
+ * one.
  */
 export function readItems(layout: LayoutReading): ItemsReading | null {
 	const container = layout.container;
@@ -255,8 +251,8 @@ export function readItems(layout: LayoutReading): ItemsReading | null {
 		.sort((a, b) => sizeDistance(a.rect, midWidth, midHeight) - sizeDistance(b.rect, midWidth, midHeight))[0]!;
 	const items = similar.map((s) => s.el);
 
-	// An item the page holds but this viewport does not render, a carousel's off-slide panels,
-	// still belongs to the run: the count is what the dom carries, not what happens to be shown.
+	// A carousel's off-slide panels still belong to the run: the count is what the dom carries,
+	// not what this viewport happens to show.
 	const shown = new Set(items);
 	const hidden = kids.filter((el) => !shown.has(el) && el.tagName === representative.el.tagName).length;
 
@@ -270,12 +266,10 @@ export function readItems(layout: LayoutReading): ItemsReading | null {
 }
 
 /**
- * How many distinct items a run holds.
- *
- * A seamless marquee duplicates its whole item run so the loop has no visible seam, so the dom
- * carries every logo twice and a raw count reports twice as many logos as the page shows. When
- * the sequence is an exact repetition of its own first half, the first half is the run. This is
- * a property of the data, read off the items themselves, not a rule about marquees.
+ * How many distinct items a run holds. A seamless marquee duplicates its whole run so the loop
+ * has no visible seam, so a raw count reports twice the logos the page shows. When the sequence
+ * exactly repeats its own first half, that half is the run: a property of the data, read off
+ * the items, not a rule about marquees.
  */
 function distinctRunLength(items: Element[]): number {
 	if (items.length < 2 || items.length % 2 !== 0 || items.length > MAX_DUPLICATE_PROBES) return items.length;

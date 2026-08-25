@@ -2,9 +2,9 @@
  * core/src/candidates.ts: the element inventory an agent picks a target from.
  *
  * An agent has no cursor, so instead of clicking it reads a list. This harvests the page's
- * interactive controls, headings, and landmarks, collapses a repeated block to one
- * representative with a count, and gives each a durable selector plus the text and rect that
- * let extract verify the page has not shifted underneath it.
+ * controls, headings, and landmarks, and collapses a repeated block to one representative
+ * with a count. Each entry carries a durable selector, plus the text and rect that let extract
+ * verify the page has not shifted underneath it.
  */
 import { buildElementMetadata } from './capture/dom';
 import { classifyElement, isElementVisible, SKIP_TAGS, type SemanticRole } from './inspect/schema/classify';
@@ -97,10 +97,9 @@ function signatureOf(el: Element): string {
 }
 
 /**
- * Marks the representative of each repeated structural block with a sibling count. A
- * block is >= MIN_REPEAT direct children of one parent that share a structural
- * signature: the card grid, the nav list, the pricing tiers. Only the first of each
- * group survives into the inventory, tagged with how many it stands for, so the agent
+ * Marks each repeated block's representative with a sibling count. A block is MIN_REPEAT or
+ * more children of one parent sharing a structural signature: a card grid, a nav list, the
+ * pricing tiers. Only the first survives, tagged with how many it stands for, so the agent
  * sees "one card, repeated 6 times" rather than six near-identical entries.
  */
 function repeatCounts(elements: Set<Element>): Map<Element, number> {
@@ -166,10 +165,7 @@ function collectLandmarks(): Landmark[] {
 	return out;
 }
 
-/**
- * Walks the page and returns the targeting inventory. Pure in-page dom work: no host
- * calls, no capture, so it is cheap enough to run on every candidates invocation.
- */
+/** The targeting inventory. Pure in-page dom work, so no host calls and no capture. */
 export function harvestCandidates(): CandidateInventory {
 	const elements = collectElements();
 	const counts = repeatCounts(elements);

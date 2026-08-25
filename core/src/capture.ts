@@ -1,9 +1,9 @@
 /**
  * core/src/capture.ts: the capture phase, in order.
  *
- * Settles the element, clones it, reads the page's stylesheets, and adds the two privileged
- * reads the page context cannot make, the authored ancestor cascade and the cross-origin
- * sheets, through the Host. The result is the Captured object every later phase mutates.
+ * Settles the element, clones it, and reads the page's stylesheets. It then adds, through the
+ * Host, the two reads the page context cannot make: the authored ancestor cascade and the
+ * cross-origin sheets. The result is the Captured object every later phase mutates.
  */
 import type { Captured } from './types';
 import { buildElementMetadata, cloneElement } from './capture/dom';
@@ -13,16 +13,13 @@ import { augmentInheritedChainViaCDP, recoverCrossOriginSheets, recoverCrossOrig
 import { measureInteractiveStates } from './capture/states-measure';
 
 /**
- * Runs the capture phase on the chosen element, assembling the shared Captured
- * object every later phase reads.
+ * Runs the capture phase, assembling the Captured object every later phase reads.
  *
  * @param screenshot - cropped png data url from the runner, may be empty
- * @returns the populated Captured object
  */
 export async function capture(root: Element, screenshot: string): Promise<Captured> {
-	// Settle first: drive the element to its revealed, loaded state before anything is
-	// read or cloned, so the snip reflects what a human sees rather than a transient
-	// pre-reveal frame. Runs ahead of the clone and every computed-style read below.
+	// Settle first, before anything is read or cloned, so the snip reflects what a human sees
+	// rather than a transient pre-reveal frame.
 	const settled = await settle(root);
 
 	const sheets = discoverStylesheets();
@@ -61,12 +58,10 @@ export async function capture(root: Element, screenshot: string): Promise<Captur
 	// cssom-only data if the host refuses a cdp attach or a fetch is blocked.
 	await augmentInheritedChainViaCDP(captured); // inherited cascade via cdp
 	await recoverCrossOriginSheets(captured); // Recover cors-blocked sheets by privileged re-fetch
-	// Fallback for the @font-face rules the re-fetch could not get, such as when a cdn waf blocks
-	// the fetch. Read the sheet text the browser already parsed over cdp.
+	// Fallback for the @font-face rules the re-fetch could not get, when a cdn waf blocks it.
 	await recoverCrossOriginFontsViaCDP(captured);
-	// Measure interactive states by forcing them live. Soft-fails to copying authored rules
-	// if cdp is busy. Runs after the clone is taken, so the transient force/shim it applies
-	// to the live page never reaches the artifact.
+	// Measure interactive states by forcing them live, soft-failing to copied rules when cdp is
+	// busy. After the clone, so the transient force and shim never reach the artifact.
 	await measureInteractiveStates(captured);
 
 	return captured;

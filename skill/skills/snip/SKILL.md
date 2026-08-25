@@ -28,6 +28,12 @@ The CLI ships as the npm package 'snipcode'. If the command is missing, run it a
 also needs the browser: 'npx playwright install chromium' (a one-time download). A "command not
 found" or a Playwright missing-browser error means one of these two steps, not a broken page.
 
+## Urls
+
+Every command takes a <url> that must be a live http or https page. A bare host is fine:
+'example.com' is loaded as 'https://example.com'. Any other scheme (file:, data:, about:) is refused
+with code BAD_URL, so snipcode cannot be pointed at a local file.
+
 ## Workflow
 
 Component-extraction flow ("extract the login button on <url>"):

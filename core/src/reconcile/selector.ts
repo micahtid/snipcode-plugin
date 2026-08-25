@@ -4,21 +4,19 @@
  * Used by the state handlers. Re-anchoring a rule like `.nav > .btn:hover` means taking it
  * apart: which compound is the subject, which carry a dynamic pseudo, and how they are joined.
  *
- * A regex cannot do it safely, because a selector nests parens, brackets, and strings, any of
- * which can hide a comma, a combinator, or a colon. So this walks the string tracking depth and
- * quotes. It is structural only: it does not validate beyond balanced delimiters, and the
- * caller's live element.matches() is the real arbiter. Unbalanced input throws.
+ * A regex cannot do it safely: a selector nests parens, brackets, and strings, any of which
+ * can hide a comma, a combinator, or a colon. So this walks the string tracking depth and
+ * quotes. Structural only, validating nothing past balanced delimiters, because the caller's
+ * live element.matches() is the real arbiter. Unbalanced input throws.
  */
 
 /** A combinator between two compounds: descendant as a space, child, next-sibling, subsequent-sibling. */
 export type Combinator = ' ' | '>' | '+' | '~';
 
 /**
- * The interactive pseudo-classes whose state is not present in a resting capture, so
- * a rule using one is silently dropped by the resting cascade. This is the closed
- * css-spec set states.ts reproduces. The form-state pseudos (`:checked`, `:disabled`)
- * are excluded deliberately because they reflect current dom state already captured
- * at rest.
+ * The interactive pseudo-classes absent from a resting capture, so a rule using one is
+ * silently dropped by the resting cascade. The closed set states.ts reproduces. Form-state
+ * pseudos are excluded: they reflect dom state that is already captured at rest.
  */
 export const DYNAMIC_PSEUDOS = new Set([':hover', ':focus', ':focus-visible', ':focus-within', ':active']);
 
@@ -35,10 +33,9 @@ export function safeMatches(el: Element, selector: string): boolean {
 }
 
 /**
- * The forgiving/relational functional pseudo-classes whose argument is itself a selector
- * list. A framework can bury an interactive pseudo inside one. Tailwind v4 compiles
- * `group-hover:` to `:is(:where(.group):hover *)`, so finding the element to force means
- * descending into these and locating the compound that actually carries the `:hover`.
+ * The functional pseudo-classes whose argument is itself a selector list, which a framework
+ * can bury an interactive pseudo inside. Tailwind v4 compiles `group-hover:` to
+ * `:is(:where(.group):hover *)`, so finding the element to force means descending into these.
  */
 const FORGIVING_FUNCTIONAL = new Set([':is', ':where', ':not', ':has']);
 
@@ -80,20 +77,17 @@ function isIdentChar(ch: string): boolean {
 }
 
 /**
- * Cheap pre-filter: whether a selector mentions any dynamic interactive pseudo-class
- * at all. Used to skip the full parse for the overwhelming majority of rules that
- * carry none. A false positive, where the token appears inside a string or comment,
- * only costs a parse that then finds nothing, never a wrong result.
+ * Cheap pre-filter: whether a selector mentions a dynamic pseudo at all, so the full parse is
+ * skipped for the great majority of rules. A false positive, the token inside a string, costs
+ * a parse that finds nothing and never a wrong result.
  */
 export function containsDynamicPseudo(selector: string): boolean {
 	return /:(?:hover|focus|focus-visible|focus-within|active)\b/.test(selector);
 }
 
 /**
- * Parses a selector list into its complex selectors. Splits on top-level commas, then
- * each complex selector into compounds and combinators.
+ * Parses a selector list: top-level commas, then each branch into compounds and combinators.
  *
- * @returns one Complex per comma branch
  * @throws SyntaxError on unbalanced parens, brackets, or quotes
  */
 export function parseSelectorList(selector: string): Complex[] {
@@ -110,18 +104,16 @@ export interface TriggerBearer {
 }
 
 /**
- * Finds every element a state rule's selector asks to force, as (structural selector,
- * pseudos) pairs. Measurement only needs the element carrying the dynamic pseudo, wherever
- * it sits, never the subject relationship. Forcing that element and reading the subtree
- * lets the engine resolve descendant/group-hover/sibling effects on its own. This is
- * strictly smaller than re-anchoring the whole combinator chain.
+ * Every element a state rule asks to force, as (structural selector, pseudos) pairs.
  *
- * A pseudo at a compound's top level (`.btn:hover`) yields the compound's structural part as
- * the bearer. A pseudo buried in a forgiving functional pseudo (`:is(:where(.group):hover *)`)
- * is found by descending into the argument and taking the inner bearer (`.group`). The
- * grammar a framework encodes the relationship in is never decoded, only stepped past.
+ * Measurement needs only the element carrying the pseudo, never the subject relationship.
+ * Force that element, read the subtree, and the engine resolves the descendant, group-hover,
+ * and sibling effects itself. Much smaller than re-anchoring the whole combinator chain.
  *
- * @returns one bearer per place a dynamic pseudo is carried, across every branch
+ * A top-level pseudo (`.btn:hover`) yields its compound's structural part. One buried in a
+ * functional pseudo (`:is(:where(.group):hover *)`) is found by descending into the argument
+ * and taking the inner bearer. The grammar the framework encoded is stepped past, not decoded.
+ *
  * @throws SyntaxError on unbalanced parens, brackets, or quotes
  */
 export function findTriggerBearers(selector: string): TriggerBearer[] {
@@ -133,11 +125,10 @@ export function findTriggerBearers(selector: string): TriggerBearer[] {
 }
 
 /**
- * Collects the bearers carried by one compound: its own top-level dynamic pseudos (with the
- * compound's structural part), plus any carried inside a forgiving functional pseudo whose
- * argument holds a dynamic pseudo (descended into recursively). A functional pseudo that
- * holds a dynamic pseudo is itself dropped from the structural part (it would never match at
- * rest), while a purely-structural one (`:where(.group)`, `:not(.disabled)`) is kept.
+ * The bearers one compound carries: its own top-level dynamic pseudos, plus any found by
+ * descending into a functional pseudo. A functional pseudo holding a dynamic one is dropped
+ * from the structural part, since it would never match at rest; a purely structural
+ * `:where(.group)` is kept.
  *
  * @param out - the accumulating bearer list, appended in place
  */
@@ -174,9 +165,8 @@ function functionalArgument(piece: string): string {
 }
 
 /**
- * Parses one complex selector, with no top-level comma, into compounds + combinators.
+ * Parses one complex selector, with no top-level comma, into compounds and combinators.
  *
- * @returns the parsed compounds and the combinators between them
  * @throws SyntaxError on unbalanced delimiters
  */
 export function parseComplex(complex: string): Complex {
@@ -186,9 +176,8 @@ export function parseComplex(complex: string): Complex {
 }
 
 /**
- * Splits a complex selector into compound texts and the combinators between them,
- * tracking delimiter depth so a combinator-looking character inside `[...]`, `(...)`,
- * or a string is never treated as a combinator.
+ * Splits a complex selector into compound texts and the combinators between them, tracking
+ * depth so a combinator-looking character inside brackets or a string is never one.
  *
  * @throws SyntaxError on unbalanced delimiters
  */
@@ -243,14 +232,12 @@ function splitCompounds(s: string): { compoundTexts: string[]; combinators: Comb
 }
 
 /**
- * Splits a selector on a single top-level delimiter, ignoring occurrences inside parens,
- * brackets, or strings.
+ * Splits a selector on one top-level delimiter, ignoring parens, brackets, and strings.
  *
- * Not the same operation as splitTopLevel in utils/css-split.ts, which splits css values.
- * This one honors backslash escapes, so `.hover\:bg-x` stays one selector; it trims each
- * branch and drops empty ones; and it throws on unbalanced input, because a selector that
- * does not parse must not be silently re-anchored onto the wrong element. The value
- * splitter does none of those. See test/unit.ts, which pins both.
+ * Not splitTopLevel from utils/css-split.ts, which splits css values. This one honors backslash
+ * escapes so `.hover\:bg-x` stays whole, and it trims and drops empty branches. It also throws
+ * on unbalanced input, because a selector that does not parse must never be re-anchored onto
+ * the wrong element. test/unit.ts pins both.
  *
  * @throws SyntaxError on unbalanced delimiters
  */
@@ -280,10 +267,9 @@ export function splitSelectorTopLevel(s: string, delim: string): string[] {
 }
 
 /**
- * Analyzes one compound into its structural part, its dynamic interactive
- * pseudo-classes, and any pseudo-element. The structural part is what binds the
- * compound to a live element. The dynamic pseudos and pseudo-element are what the
- * re-anchored output rule keeps after the structural part is replaced by a marker.
+ * Analyzes one compound into its structural part, its dynamic pseudo-classes, and any
+ * pseudo-element. The structural part binds the compound to a live element; the other two are
+ * what the re-anchored rule keeps once a marker replaces it.
  */
 function analyzeCompound(raw: string): Compound {
 	const structuralParts: string[] = [];
@@ -329,9 +315,8 @@ function normalizePseudoElement(piece: string): string {
 }
 
 /**
- * Splits a compound into its individual simple selectors (`*`, tag, `.class`, `#id`,
- * `[attr]`, `:pseudo`, `::pseudo-element`), tracking paren/bracket depth and escapes
- * so a delimiter inside `[...]` or `(...)` never starts a new piece.
+ * Splits a compound into its simple selectors, tracking depth and escapes so a delimiter
+ * inside brackets or parens never starts a new piece.
  */
 function tokenizeSimpleSelectors(compound: string): string[] {
 	const pieces: string[] = [];

@@ -9,15 +9,11 @@
  * would render empty.
  */
 import type { Captured } from '../../types';
-import { pairedSubtrees } from '../match';
+import { pairedSubtrees, setBaked } from '../match';
 
 const FORM_CONTROL = 'input, select, textarea, button, meter, progress, option';
 
-/**
- * Bakes form-control styling and mirrors live control state onto the clone.
- *
- * @param captured - bakedStyles + clone mutated in place
- */
+/** Bakes control styling and mirrors live state onto the clone. bakedStyles + clone mutate. */
 export function apply(captured: Captured): Captured {
 	for (const [original, clone] of pairedSubtrees(captured.root, captured.clone)) {
 		let isControl = false;
@@ -65,10 +61,5 @@ function mirrorState(original: Element, clone: Element): void {
 /** Bake a value onto the clone + baked map when a predicate says it is non-default. */
 function bake(clone: Element, baked: Map<string, string>, prop: string, value: string, isDefault: (v: string) => boolean): void {
 	if (baked.has(prop) || !value || isDefault(value)) return;
-	baked.set(prop, value);
-	try {
-		(clone as HTMLElement).style.setProperty(prop, value);
-	} catch {
-		// Invalid for this element, so skip it.
-	}
+	setBaked(clone, baked, prop, value);
 }

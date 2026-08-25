@@ -11,11 +11,12 @@
  *
  * Liveness is by construction, not oracle-gated. A transition paints no resting pixel, yet
  * getComputedStyle enumerates transition-property, so the oracle would read a dropped layer as
- * a render change. A layer for a property nothing changes is unobservable. The grouped form
+ * a change. A layer for a property nothing changes is unobservable, and the grouped form
  * cycles one timing across the list, which is the engine's own rule.
  */
 import { serializeRules, WITHHELD } from './declarations';
 import { splitTopLevelCommas, TIMING_LONGHANDS } from '../resolve/transition';
+import { parseCss } from '../utils/css-rules';
 
 /** The default each timing sub-list takes for a layer past its length, its css initial value. */
 const TIMING_DEFAULTS = ['0s', 'ease', '0s', 'normal'] as const;
@@ -31,22 +32,15 @@ interface Layer {
 
 /**
  * Drops every transition layer whose property no state rule or animation changes, and groups a
- * surviving list that shares one timing. Parses the css into a constructable stylesheet, the
- * same side-effect-free cssom parse the at-rule purge uses, so nothing touches the live page.
- * It is graceful by contract, returning the input unchanged when it will not parse or holds no
- * transition. It is deterministic, a pure function of the input text.
+ * surviving list that shares one timing. Graceful by contract: css that will not parse, or
+ * holds no transition, comes back unchanged. A pure function of the input text.
  *
  * @returns the stylesheet with dead transition layers dropped and shared timing grouped
  */
 export function foldTransitions(css: string): string {
 	if (!css.trim() || !/transition/.test(css)) return css;
-	let sheet: CSSStyleSheet;
-	try {
-		sheet = new CSSStyleSheet();
-		sheet.replaceSync(css);
-	} catch {
-		return css;
-	}
+	const sheet = parseCss(css);
+	if (!sheet) return css;
 	const rules = Array.from(sheet.cssRules);
 	const changed = changedLonghands(rules);
 	const reads = customPropertyReads(css);
@@ -64,11 +58,10 @@ function foldRules(rules: CSSRule[], changed: Set<string>, reads: Set<string>, s
 }
 
 /**
- * The set of longhands every withheld state or pseudo rule and every @keyframes changes,
- * lowercased. A transition layer whose property expands to one of these can produce motion,
- * while one that expands to none cannot. The cssom stores each rule's declarations as expanded
- * longhands, so a state rule's `background` shorthand contributes `background-color` and the
- * rest, matching a `background-color` transition layer correctly.
+ * Every longhand a withheld rule or a @keyframes changes. A transition layer expanding to one
+ * of these can produce motion; one expanding to none cannot. The cssom stores declarations as
+ * expanded longhands, so a state rule's `background` contributes `background-color` and the
+ * rest, matching that transition layer correctly.
  */
 function changedLonghands(rules: CSSRule[]): Set<string> {
 	const changed = new Set<string>();
@@ -101,10 +94,9 @@ function customPropertyReads(css: string): Set<string> {
 }
 
 /**
- * Folds one rule's transition in place. Reads the transition as its cssom longhands, cycles the
- * timing sub-lists to the property-list length so each layer carries its own timing, drops the
- * layers no state changes, and rewrites only when a layer was dropped or grouping the survivors
- * is shorter, so a rule whose transition is already minimal keeps its exact serialization.
+ * Folds one rule's transition in place. Read the cssom longhands, cycle the timing sub-lists
+ * out to the property-list length, then drop the layers no state changes. The rewrite happens
+ * only when a layer went or the grouped form is shorter, so a minimal rule keeps its text.
  */
 function foldRuleTransition(rule: CSSStyleRule, changed: Set<string>, reads: Set<string>, scratch: CSSStyleDeclaration): void {
 	const style = rule.style;
@@ -123,8 +115,7 @@ function foldRuleTransition(rule: CSSStyleRule, changed: Set<string>, reads: Set
 	const kept = layers.filter((layer) => producesMotion(layer.property, changed, reads, scratch));
 	const dropped = kept.length < layers.length;
 	const shareable = kept.length >= 2 && kept.every((layer) => sameTiming(layer, kept[0]!));
-	// Rewrite only when a layer was dropped, or grouping a shared-timing list is shorter than
-	// the current serialization. Otherwise leave the rule's transition exactly as it was.
+	// Otherwise leave the rule's transition exactly as it was.
 	if (!dropped && !(shareable && groupedText(kept, priority).length < currentText(style).length)) return;
 
 	clearTransition(style);
@@ -144,11 +135,9 @@ function sameTiming(a: Layer, b: Layer): boolean {
 }
 
 /**
- * Whether a transition layer for `property` can produce motion. It can when some state rule or
- * animation changes the property, or a longhand it expands to. A custom property additionally
- * must be read through a `var()`, since a value nothing paints from animates nothing visible.
- * The keywords `all` and `none` are always kept, since `all` is not an enumerable property to
- * test and `none` disables the transition outright.
+ * Whether a transition layer can produce motion: some state rule or animation changes the
+ * property, or a longhand it expands to. A custom property must also be read through a var(),
+ * since a value nothing paints from animates nothing. `all` and `none` are always kept.
  */
 function producesMotion(property: string, changed: Set<string>, reads: Set<string>, scratch: CSSStyleDeclaration): boolean {
 	const name = property.toLowerCase();
@@ -160,10 +149,9 @@ function producesMotion(property: string, changed: Set<string>, reads: Set<strin
 }
 
 /**
- * The longhand names a property expands to, lowercased. Setting the property to `inherit`, a
- * value valid for every property, makes the cssom store a shorthand as its longhands and a
- * longhand as itself, so `background` yields `background-color` and the rest while `color`
- * yields `color`. An unknown property stores nothing and yields an empty list.
+ * The longhands a property expands to. Setting it to `inherit`, valid for every property,
+ * makes the cssom store a shorthand as its longhands and a longhand as itself. `background`
+ * then yields `background-color` and the rest, while an unknown property stores nothing.
  */
 function expandToLonghands(scratch: CSSStyleDeclaration, property: string): string[] {
 	scratch.cssText = '';
@@ -185,10 +173,9 @@ function clearTransition(style: CSSStyleDeclaration): void {
 }
 
 /**
- * Sets the grouped form: the property list against one duration, easing, and, where not the
- * default, delay and behavior. The single timing values cycle across the property list, which
- * the cssom keeps as longhands rather than folding to the `transition` shorthand, exactly the
- * compact form a human writes for a list that shares one timing.
+ * Sets the grouped form: the property list against one duration and easing, plus delay and
+ * behavior where they are not the default. The single timing values cycle across the list, and
+ * the cssom keeps them as longhands, which is the compact form a human writes.
  */
 function applyGrouped(style: CSSStyleDeclaration, layers: Layer[], priority: string): void {
 	const first = layers[0]!;
@@ -200,9 +187,9 @@ function applyGrouped(style: CSSStyleDeclaration, layers: Layer[], priority: str
 }
 
 /**
- * Sets the `transition` shorthand as a per-layer list, each layer spelling out its property,
- * duration, easing, and, where not the default, its delay. A non-default behavior is carried on
- * the longhand list alongside, since it is not reliably part of the shorthand across engines.
+ * Sets the `transition` shorthand as a per-layer list, each spelling out property, duration,
+ * easing, and a non-default delay. A non-default behavior rides on the longhand list alongside,
+ * since engines do not reliably carry it in the shorthand.
  */
 function applyList(style: CSSStyleDeclaration, layers: Layer[], priority: string): void {
 	const list = layers.map((layer) => {

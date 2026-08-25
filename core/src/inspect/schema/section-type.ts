@@ -1,26 +1,23 @@
 /**
  * inspect/schema/section-type.ts: naming a section from what was measured about it.
  *
- * Runs during the page-scoped inspect pass, but performs no dom queries of its own. Everything
- * it reads was measured first in sections.ts and layout.ts and handed over as SectionEvidence.
+ * Runs during the page-scoped inspect pass but queries no dom of its own. Everything it reads
+ * was measured in sections.ts and layout.ts and handed over as SectionEvidence.
  *
- * That separation is the point. This pass used to grep class names for `stat|logo|price|hero`,
- * count question marks and currency symbols across a section's whole text, and match
- * `[class*="card"]`, which on a hashed-class or non-English page leaves most branches dead and
- * the surviving text branches misfiring. A hero whose copy said "1,900+ universities" came back
- * `stats`, and an agent trusts the label over the element list, so it built a stats band and
- * left the real hero as free space. A guess that can outrank a measurement is worse than no
- * guess, which is why anything under the confidence bar returns `content`.
+ * That separation is the point. This pass used to grep class names and count currency symbols
+ * across a section's whole text. That leaves most branches dead on a hashed-class or
+ * non-English page and the rest misfiring. A hero whose copy said "1,900+ universities" came
+ * back `stats`. An agent trusts the label over the element list, so it built a stats band and
+ * left the real hero as free space. A guess that can outrank a measurement is worse than
+ * no guess, which is why anything under the confidence bar returns `content`.
  */
 import { isBarShaped } from './discovery';
 import type { ItemsReading, LayoutReading } from './layout';
 import type { SectionType } from './types';
 
 // Type scale is read in multiples of the page's own body size, never in fixed pixels. A fixed
-// "32px is a headline" encodes one site's scale: a compact page whose h1 is 26px catalogs no
-// heading anywhere and can never type as a hero, and an oversized editorial page calls every h4
-// a headline. The body's computed font size is always defined, which the fitted type scale is
-// not, so it is the yardstick even on a page with too few sizes to fit a scale to.
+// "32px is a headline" encodes one site's scale: a compact page whose h1 is 26px would catalog
+// no heading at all. The body size is always defined, which a fitted type scale is not.
 /** Multiple of the page's base font size at or above which a heading is the section's headline. */
 export const HEADLINE_RATIO = 2;
 /** Multiple of the base size at or above which a heading is a subhead rather than body text. */
@@ -34,10 +31,9 @@ export const MAX_ITEM_FACTS = 12;
 /**
  * Share of the page past which a "section" is the page rather than a part of it.
  *
- * Discovery does not always resolve a wrapper, and when it hands back one box spanning everything
- * there is nothing to name: every reading below would be describing the page. Live pages showed
- * exactly this, a whole app root typed `hero` off its opening heading and a 196-post archive
- * typed `stats`. An unresolved page is honestly `content`.
+ * Discovery does not always resolve a wrapper, and one box spanning everything has nothing to
+ * name: every reading would be describing the page. Live pages showed a whole app root typed
+ * `hero` off its opening heading, and a 196-post archive typed `stats`.
  */
 export const WHOLE_PAGE_SHARE = 0.8;
 
@@ -64,9 +60,8 @@ const CTA_TAIL_SHARE = 0.7;
 /** Share of a run's items that must show a shape before the run counts as having it. */
 const ITEM_MAJORITY = 0.6;
 
-// Text shapes are script-neutral by construction. A hand-listed set of digits or currency signs
-// is patchwork with more members: it classifies an English page and fails a Hindi or Japanese
-// one for no reason the page itself contains.
+// Text shapes are script-neutral by construction. A hand-listed set of digits or currency
+// signs classifies an English page and fails a Hindi or Japanese one for no reason in the page.
 /** Digits in any script, so a stat reads the same in Devanagari as in Latin. */
 const NUMBER_LED = /^\p{Nd}/u;
 /** Currency signs in any script. */
@@ -108,16 +103,14 @@ export interface SectionEvidence {
 }
 
 /**
- * Names a section from what the measurements found, and returns `content` when they found
- * nothing conclusive.
+ * Names a section from what the measurements found, or `content` when nothing is conclusive.
  *
  * Structural readings run in order of confidence and answer on their own. Below that bar sit
- * the readings that are real but ambiguous, a run of heading-led blocks that is equally an faq
- * and a feature list, and those are settled by the section's class and id naming, which is
- * allowed to confirm a candidate the structure already produced and nothing else. A name can
- * never introduce a type by itself: on a hashed-class build there is no name to read, and on a
- * page in another language the words do not match, and in both cases the honest answer is the
- * generic one rather than a guess dressed as a measurement.
+ * readings that are real but ambiguous, such as a run of heading-led blocks that is equally an
+ * faq and a feature list. Class and id naming settles those, and only those: a name confirms a
+ * candidate the structure already produced and can never introduce one. A hashed-class build
+ * has no name to read and another language does not match the words. In both cases the generic
+ * answer beats a guess dressed as a measurement.
  */
 export function classifySectionType(ev: SectionEvidence): SectionType {
 	const structural = structuralType(ev);
@@ -131,18 +124,14 @@ export function classifySectionType(ev: SectionEvidence): SectionType {
 }
 
 /**
- * The readings confident enough to name a section on their own, in order of confidence.
- *
- * One table, so the order is visible in one place rather than spread across ten call sites.
- * The first test that answers wins, and every test reads only what is on the evidence.
+ * The readings confident enough to name a section on their own, in order of confidence. One
+ * table, so the order is visible in one place. First test that answers wins.
  */
 const STRUCTURAL_TESTS: Array<{ type: SectionType; test: (ev: SectionEvidence) => boolean }> = [
 	// The page's opening statement: a big heading in the first screen, before any other section
-	// claimed it. A cta raises confidence but is not required; blogs, portfolios, and docs open
-	// with button-less heroes, and demanding a button there left the page's most important
-	// section unlabelled, which is exactly the gap an agent fills with invention. Repetition
-	// disqualifies it the other way: a section holding thirty-five identical blocks is a feed
-	// with a heading on top, not one statement.
+	// claimed it. No button required, because blogs, portfolios, and docs open with button-less
+	// heroes and demanding one left the page's most important section unlabelled. Repetition
+	// disqualifies it: thirty-five identical blocks is a feed with a heading on top.
 	{
 		type: 'hero',
 		test: (ev) => !ev.heroClaimed && !ev.items
@@ -156,10 +145,9 @@ const STRUCTURAL_TESTS: Array<{ type: SectionType; test: (ev: SectionEvidence) =
 			&& ev.items.height <= ev.baseFontPx * LOGO_ITEM_HEIGHT_RATIO
 			&& majority(ev.itemFacts, (facts) => facts.lines.length <= 1 && isShort(facts.lines[0] ?? '')),
 	},
-	// A row of short, number-led blocks: "1,900+" over "universities". The row is load-bearing,
-	// not decoration on the rule: a dated archive stacks its entries in one column and every
-	// entry opens with its date, so read without the row a blog's post list came back as a
-	// hundred-and-ninety-six-item stats band.
+	// A row of short, number-led blocks: "1,900+" over "universities". The row matters. A dated
+	// archive stacks its entries in one column and each opens with its date. Without the row,
+	// a blog's post list came back as a 196-item stats band.
 	{
 		type: 'stats',
 		test: (ev) => !!ev.items && ev.items.count >= MIN_STAT_ITEMS && isRowOfItems(ev)
@@ -203,11 +191,8 @@ const STRUCTURAL_TESTS: Array<{ type: SectionType; test: (ev: SectionEvidence) =
 ];
 
 /**
- * The readings confident enough to name a section on their own, most confident first.
- *
- * The landmark tags answer above the table because they are not measurements of content: a
- * `nav` or `footer` element has said what it is, and the page's scored bar was already chosen
- * geometrically in discovery.ts.
+ * Runs the landmark tags, then the table. The tags answer first because they are not readings
+ * of content: a `nav` or `footer` element has already said what it is.
  */
 function structuralType(ev: SectionEvidence): SectionType | null {
 	if (ev.tag === 'nav') return 'nav';
@@ -223,21 +208,14 @@ function structuralType(ev: SectionEvidence): SectionType | null {
 	return null;
 }
 
-/**
- * True when a section's items sit side by side, which is what "in one row" measures to.
- *
- * A scroll track is a row by construction, whatever column count its layout reports.
- */
+/** True when items sit side by side. A scroll track is a row whatever its column count says. */
 function isRowOfItems(ev: SectionEvidence): boolean {
 	return ev.layout.columns >= 2 || ev.layout.pattern === 'horizontal-scroll';
 }
 
 /**
- * The readings that are real but ambiguous, which naming is allowed to settle.
- *
- * Each entry is a shape the measurements genuinely found; what they cannot say is which of two
- * things it is. A run of heading-led blocks is the same structure whether the page calls them
- * steps, questions, or features.
+ * The readings that are real but ambiguous, which naming is allowed to settle. A run of
+ * heading-led blocks is the same structure whether the page calls them steps or questions.
  */
 function weakCandidates(ev: SectionEvidence): SectionType[] {
 	const out: SectionType[] = [];
@@ -254,11 +232,9 @@ function weakCandidates(ev: SectionEvidence): SectionType[] {
 }
 
 /**
- * Lets naming choose between two readings of one structure.
- *
- * A features grid and a how-it-works sequence are the same measurement, a run of cards each
- * holding a mark, a heading, and a line. Only the page's own naming separates them, and this is
- * the one place a name is allowed to change a structural answer.
+ * Lets naming choose between two readings of one structure. A features grid and a how-it-works
+ * sequence measure identically, so only the page's own naming separates them. This is the one
+ * place a name may change a structural answer.
  */
 function refineByName(type: SectionType, ev: SectionEvidence): SectionType {
 	if (type === 'features' && /how[-_]?it[-_]?works|steps?|process/.test(ev.names)) return 'how-it-works';
@@ -292,11 +268,8 @@ function isShort(line: string): boolean {
 }
 
 /**
- * True when an item is a stat: a short block whose text leads with a number.
- *
- * The reading is on the item's own lines, never on the section's whole text. A hero whose copy
- * says "1,900+ universities" contains the same digits, and searching the section for them is
- * what voted that hero into `stats`.
+ * True when an item is a stat: a short block whose text leads with a number. Read on the item's
+ * own lines, never the section's whole text, which is what voted a hero into `stats`.
  */
 function isNumberLed(facts: ItemFacts): boolean {
 	const lines = facts.lines.slice(0, MAX_STAT_LINES);

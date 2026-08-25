@@ -3,7 +3,7 @@
  *
  * Post-processes the extracted schema: dedupe and cap the palette, sort and bound spacing, cap
  * the states, sections, and blueprints. Trimming is not free of meaning, because a cap can cut
- * the section an effect names, so anything pointing at a section is reconciled here rather
+ * the section an effect names. So anything pointing at a section is reconciled here rather
  * than left for the renderer to discover broken.
  */
 import { weightedContexts } from './tokens';

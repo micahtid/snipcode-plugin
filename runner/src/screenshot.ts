@@ -1,11 +1,10 @@
 /**
  * runner/src/screenshot.ts: page and element captures.
  *
- * Uses Playwright's own screenshot paths rather than an image library: a full-page
- * capture for candidates and schema, and an element-handle capture for a single
- * extracted element (the builder-gate crop the agent rebuilds from). The element
- * capture re-resolves the selector to a handle, which is independent of the in-page
- * core resolution but lands on the same node.
+ * Uses Playwright's own screenshot paths rather than an image library. A full-page capture
+ * serves candidates and schema, and an element-handle capture serves the builder-gate crop an
+ * agent rebuilds from. That one re-resolves the selector to a handle, independent of the
+ * in-page core resolution but landing on the same node.
  */
 import type { Page } from 'playwright';
 

@@ -1,13 +1,12 @@
 /**
  * convert/tw-palette.ts: matching a captured color to the tailwind palette.
  *
- * Tailwind names colors as tokens, so an arbitrary captured color has to map to the nearest
- * palette entry, but only when the match is perceptually faithful. Otherwise the converter
- * must emit an arbitrary value, so a brand color is never silently drifted.
+ * Tailwind names colors as tokens, so a captured color maps to the nearest palette entry, but
+ * only when the match is perceptually faithful. Otherwise the converter emits an arbitrary
+ * value, and a brand color never drifts silently.
  *
  * Matching uses ciede2000 with tight thresholds: under 1 is exact, 1 to 2 is an acceptable
- * nudge, 2 or more forces an arbitrary value. The palette table below is tailwind's own
- * vocabulary, a finite output-format table rather than a heuristic list.
+ * nudge, 2 or more forces the arbitrary value. The table below is tailwind's own vocabulary.
  */
 import { hexToRgb } from '../utils/color';
 
@@ -38,8 +37,7 @@ const TAILWIND_COLORS: Record<string, string> = {
 	'rose-50': '#fff1f2', 'rose-100': '#ffe4e6', 'rose-200': '#fecdd3', 'rose-300': '#fda4af', 'rose-400': '#fb7185', 'rose-500': '#f43f5e', 'rose-600': '#e11d48', 'rose-700': '#be123c', 'rose-800': '#9f1239', 'rose-900': '#881337', 'rose-950': '#4c0519',
 };
 
-// Above roughly 2.0 a brand color drifts visibly, so
-// force an arbitrary value (bg-[#hex]) instead of an approximate palette token.
+// Above roughly 2.0 a brand color drifts visibly, so an arbitrary value is forced.
 const DELTA_E_EXACT = 1;
 const DELTA_E_CLOSE = 2;
 
@@ -53,8 +51,8 @@ export interface PaletteMatch {
 }
 
 /**
- * Finds the nearest tailwind palette token to a css color, or null if no token
- * is within perceptual tolerance, in which case the caller should emit an arbitrary value.
+ * The nearest tailwind palette token to a css color, or null when none is within tolerance and
+ * the caller should emit an arbitrary value.
  *
  * @param colorValue - any css color string, hex, rgb, or hsl, while oklch returns null
  */
@@ -80,9 +78,8 @@ export function matchColor(colorValue: string): PaletteMatch | null {
 }
 
 /**
- * Parses a css color to a 6-digit #hex, or null for colors we cannot/should not
- * match, such as transparent, currentcolor, oklch/oklab, and keywords. Alpha is dropped,
- * the caller preserves opacity separately.
+ * Parses a css color to a 6-digit #hex, or null for one that should not match: transparent,
+ * currentcolor, oklch, and the keywords. Alpha is dropped, since the caller keeps opacity.
  */
 export function parseColor(value: string): string | null {
 	const v = value.trim().toLowerCase();

@@ -4,12 +4,10 @@
  * Runs during the convert phase, on a deep copy of the clone, so the canonical clone is
  * untouched and every format stays derivable from one capture.
  *
- * Serves the html and bem-css formats, which want semantic classes and a separate
- * stylesheet rather than inline styles. Identical declaration sets dedupe into shared
- * bem-named classes (block plus block__element). Beyond that it factors a shared base
- * class out of near-identical rules, so a family of button variants ships its common
- * reset once; that pass is convert/bem-factor.ts, and the naming both passes share is
- * convert/bem-classes.ts.
+ * Serves the html and bem-css formats, which want semantic classes and a separate stylesheet.
+ * Identical declaration sets dedupe into shared block and block__element classes. Then
+ * convert/bem-factor.ts factors a base class out of near-identical rules, so a family of
+ * button variants ships its reset once. convert/bem-classes.ts is the naming both share.
  */
 import type { Captured } from '../types';
 import { snapValue } from './snap';
@@ -51,9 +49,8 @@ export function emitBem(captured: Captured): HtmlOutput {
 		el.setAttribute('class', rule.className);
 	}
 
-	// Factor a shared base class out of near-identical rules, demoting each member to
-	// a modifier carrying only its differences. Render-neutral by construction, so it
-	// runs unconditionally.
+	// Factor a base class out of near-identical rules, demoting each member to a modifier
+	// carrying only its differences. Render-neutral by construction, so it always runs.
 	const { rules: finalRules, renames } = factorBaseClasses(block, rules, tagCounters);
 	applyBaseClasses(elements, renames);
 
@@ -62,14 +59,11 @@ export function emitBem(captured: Captured): HtmlOutput {
 }
 
 /**
- * Read an element's inline declarations, snapping values for cleaner output. Parses
- * the serialized `style.cssText` rather than enumerating `style.item(i)`: a shorthand
- * set to a `var()` value, for example `border-color: var(--border)` or `margin: var(--gap)`, is
- * stored by the cssom as pending-substitution longhands whose `getPropertyValue` returns
- * the empty string, so item-enumeration would emit `border-top-color: ;` and the css
- * parser would silently drop the whole declaration. The serialized text preserves the
- * shorthand verbatim, exactly as the clone renders it, which is what the class output
- * must reproduce.
+ * An element's inline declarations, values snapped for cleaner output. It parses the serialized
+ * `style.cssText` rather than enumerating item(i), because a shorthand set to a `var()` is
+ * stored as pending-substitution longhands whose getPropertyValue returns empty. Enumeration
+ * would emit `border-top-color: ;` and the parser would drop the whole declaration; the
+ * serialized text keeps the shorthand exactly as the clone renders it.
  */
 function readDecls(el: HTMLElement): Array<[string, string]> {
 	const out: Array<[string, string]> = [];
@@ -80,12 +74,9 @@ function readDecls(el: HTMLElement): Array<[string, string]> {
 }
 
 /**
- * Splits a serialized inline-style string into `[property, value]` pairs, using the shared
- * top-level scan in utils/css-split.ts, so a `;` or `:` inside parentheses, such as a
- * `url(data:...;base64,)` background or a nested function, or inside a quoted string is part
- * of the value and never a separator. An `!important` priority is stripped, matching the
- * prior getPropertyValue read. The class rules carry no competing selectors, so priority
- * changes nothing. A declaration with an empty property or an empty value is dropped.
+ * Splits a serialized inline style into `[property, value]` pairs with the shared top-level
+ * scan, so a `;` or `:` inside a data uri stays in the value. Priority is stripped, which
+ * changes nothing because the class rules carry no competing selectors.
  */
 function inlineDeclarations(cssText: string): Array<[string, string]> {
 	const out: Array<[string, string]> = [];

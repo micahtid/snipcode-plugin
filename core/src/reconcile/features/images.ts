@@ -10,13 +10,10 @@
  * absolutized. No fetching happens here; resolve/inline.ts does the embedding.
  */
 import type { Captured } from '../../types';
-import { absolutizeUrls } from './urls';
+import { absolutizeUrls } from '../../utils/css-urls';
+import { setBaked } from '../match';
 
-/**
- * Pins responsive images and absolutizes background-image urls.
- *
- * @param captured - clone + bakedStyles are mutated in place
- */
+/** Pins responsive images and absolutizes background urls. clone + bakedStyles mutate here. */
 export function apply(captured: Captured): Captured {
 	const base = document.baseURI || location.href;
 
@@ -29,10 +26,9 @@ export function apply(captured: Captured): Captured {
 			const cl = cloneImgs[i];
 			if (!orig || !cl) continue;
 			const resolved = orig.currentSrc || orig.src;
-			// Don't pin a placeholder over a real source: when a lazy image never loaded
-			// its real src on the live page (no loader ran), currentSrc is still the 1x1
-			// spacer, but cloneElement already promoted the clone's src from data-src. Keep
-			// that promoted real src rather than overwriting it with the spacer.
+			// Never pin a placeholder over a real source. When no loader ran, currentSrc is
+			// still the 1x1 spacer while cloneElement already promoted the clone's src from
+			// data-src, so the promoted one is what to keep.
 			if (resolved && !(isPlaceholder(resolved) && !isPlaceholder(cl.getAttribute('src') ?? ''))) {
 				cl.setAttribute('src', toAbsolute(resolved, base) ?? resolved);
 				// Drop responsive selectors so the pinned src is what renders.
@@ -42,8 +38,7 @@ export function apply(captured: Captured): Captured {
 		}
 	}
 
-	// Inside <picture>, <source>s override <img src>, so remove them and the pinned
-	// img src wins. The img was already pinned above.
+	// Inside <picture> a <source> overrides <img src>, so removing them lets the pin win.
 	for (const picture of Array.from(captured.clone.querySelectorAll('picture'))) {
 		for (const source of Array.from(picture.querySelectorAll('source'))) source.remove();
 	}
@@ -54,14 +49,7 @@ export function apply(captured: Captured): Captured {
 			const value = baked.get(prop);
 			if (!value || !value.includes('url(')) continue;
 			const rewritten = absolutizeUrls(value, base, captured.warnings, 'images');
-			if (rewritten !== value) {
-				baked.set(prop, rewritten);
-				try {
-					(clone as HTMLElement).style.setProperty(prop, rewritten);
-				} catch {
-					// Invalid for this element, so skip it.
-				}
-			}
+			if (rewritten !== value) setBaked(clone, baked, prop, rewritten);
 		}
 	}
 

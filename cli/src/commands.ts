@@ -120,8 +120,8 @@ export async function runSchema(args: Args): Promise<void> {
 	try {
 		await withPage(args.url, { headless: !args.headed }, async (driver) => {
 			const result = (await driver.schema()) as SchemaResult;
-			// Stamp every schema output with the version and time it was generated, so an agent
-			// can tell a fresh run from a stale file an older version left on disk.
+			// Stamp every schema output with the version and time it was generated. An agent
+			// can then tell a fresh run from a stale file an older version left on disk.
 			const stamp: SchemaStamp = { by: 'snipcode', version: __SNIPCODE_VERSION__, at: new Date().toISOString() };
 			const jsonPath = writeOut(outDir, 'schema.json', JSON.stringify({ generated: stamp, ...result.schema }, null, 2));
 			const mdPath = writeOut(outDir, 'schema.md', renderSchemaMd(result, stamp));

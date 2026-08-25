@@ -3,15 +3,15 @@
  *
  * ::before and ::after content, styled ::marker, ::placeholder, and ::file-selector-button
  * render no dom node, so a clone loses them entirely. An inline style cannot target a
- * pseudo-element, so the faithful fix is a real rule: the element is tagged and a
- * `[data-snip-pseudo="n"]::x` rule is added to the shared synthesized <style>.
+ * pseudo-element, so the faithful fix is a real rule. The element is tagged and a
+ * `[data-snip-pseudo="n"]::x` rule joins the shared synthesized <style>.
  *
  * The marker is a data-* attribute rather than a class, because the tailwind and bem emitters
  * rewrite class and keep data-*.
  */
 import type { Captured } from '../../types';
-import { pairedSubtrees, isRedundantDecl, transformContext, inheritsProperty } from '../match';
-import { pseudoDefaults, effectiveInherited, resolveCssWideKeyword } from '../denoise';
+import { pairedSubtrees, transformContext } from '../match';
+import { pseudoDefaults, isDroppableDecl } from '../denoise';
 import { appendSynthesizedRules } from '../synthesized';
 
 const MARKER = 'data-snip-pseudo';
@@ -29,11 +29,7 @@ const PSEUDO_PROPS = [
 	'overflow', 'vertical-align', 'list-style-type', '-webkit-text-fill-color', 'background-clip',
 ];
 
-/**
- * Materializes generated-content pseudo-elements as css rules on the clone.
- *
- * @param captured - clone is mutated in place
- */
+/** Materializes generated-content pseudo-elements as css rules on the clone. Clone is mutated in place. */
 export function apply(captured: Captured): Captured {
 	const rules: string[] = [];
 	let counter = 0;
@@ -82,16 +78,14 @@ function hasContent(el: Element, pseudo: string): boolean {
 /** Build one `[data-snip-pseudo="n"]pseudo {... }` rule from the live pseudo's computed style. */
 function ruleFor(el: Element, clone: Element, pseudo: string, id: number, captured: Captured): string | null {
 	const computed = getComputedStyle(el, pseudo);
-	// Every pseudo is de-noised against the same ground truth the element pass uses.
-	// The ua default for this pseudo on this element, read from a clean iframe probe so
-	// the page's author rules are stripped, is the baseline a non-inherited value falls
-	// back to. For an inherited value, the fallback is the originating element's
-	// effective snip value (effectiveInherited), never the live page. This drops the
-	// inert pseudo noise such as list-style-type: disc, vertical-align: baseline, and
-	// content: normal on a placeholder, while keeping the real ::placeholder and
-	// ::marker appearance.
+	// Every pseudo is de-noised against the ground truth the element pass uses. A non-inherited
+	// value falls back to the ua default for this pseudo on this element, read from a clean
+	// iframe probe with the page's author rules stripped. An inherited one falls back to the
+	// originating element's effective snip value, never the live page. That drops the inert
+	// noise, list-style-type: disc and vertical-align: baseline, while keeping the real
+	// ::placeholder and ::marker appearance.
 	const defaults = pseudoDefaults(el, pseudo);
-	const { hasTransform, hasPerspective } = transformContext(computed);
+	const box = transformContext(computed);
 	// Generated content is load-bearing for the box-generating pseudos and is always
 	// kept. For ::placeholder and ::file-selector-button, content is just `normal`
 	// noise, so it falls through to the inert-keyword check below and drops.
@@ -107,18 +101,7 @@ function ruleFor(el: Element, clone: Element, pseudo: string, id: number, captur
 		}
 		// The universally-inert keywords carry no box, spacing, or decoration.
 		if (value === 'normal' || value === 'auto' || value === 'none') continue;
-		const inherits = inheritsProperty(prop);
-		// Resolve a css-wide keyword to the value it produces first, so the same
-		// redundancy test sheds keyword-form defaults from the pseudo too.
-		const resolved = resolveCssWideKeyword(captured, clone, prop, value) ?? value;
-		const redundant = isRedundantDecl(prop, resolved, {
-			defaultValue: defaults.get(prop),
-			inheritedValue: inherits ? effectiveInherited(captured, clone, prop) : undefined,
-			inherits,
-			hasTransform,
-			hasPerspective,
-		});
-		if (!redundant) decls.push(`\t${prop}: ${value};`);
+		if (!isDroppableDecl(captured, clone, prop, value, defaults, box)) decls.push(`\t${prop}: ${value};`);
 	}
 	if (decls.length === 0) return null;
 	return `[${MARKER}="${id}"]${pseudo} {\n${decls.join('\n')}\n}`;

@@ -1,0 +1,62 @@
+name: release
+
+# Publishing is driven by the tag, so `npm version <bump> && git push --follow-tags` is the
+# whole release. The gate runs again here rather than trusting the ci run on the same commit:
+# a tag can be pushed to any commit, so this is the only place that proves the published
+# tarball passed.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  # Required for the provenance attestation npm publish --provenance requests.
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The registry url is what makes npm publish authenticate, whether the credential is a
+      # trusted-publisher token minted from id-token or NPM_TOKEN from the repo secrets.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - run: npm ci
+
+      # Keyed on the playwright version in the lockfile, matching ci.yml.
+      - name: Resolve the playwright version
+        id: pw
+        run: echo "version=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the chromium download
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - name: Install chromium
+        run: npx playwright install --with-deps chromium
+
+      # The tag has to name the version in package.json, or the release would publish
+      # something other than what the tag says.
+      - name: Check the tag matches package.json
+        run: |
+          tagged="${GITHUB_REF_NAME#v}"
+          packaged="$(node -p "require('./package.json').version")"
+          if [ "$tagged" != "$packaged" ]; then
+            echo "tag $GITHUB_REF_NAME does not match package.json version $packaged"
+            exit 1
+          fi
+
+      - run: npm run verify
+
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

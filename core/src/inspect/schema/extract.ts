@@ -1,13 +1,13 @@
 /**
  * inspect/schema/extract.ts: the order the page-schema passes run in.
  *
- * This file is the order of operations and nothing else. Discovery finds the sections, the
- * walk samples them, tokens.ts collects the design values, states.ts lifts the interactive
+ * This file is the order of operations and nothing else. Discovery finds the sections and the
+ * walk samples them. tokens.ts collects the design values, states.ts lifts the interactive
  * rules, sections.ts and section-type.ts describe and name each section, and the blueprint and
- * page-language passes read the components. optimize.ts trims the result and
+ * page-language passes read the components. optimize.ts trims the result, and
  * cli/src/schema-md.ts renders it.
  *
- * The pass is async for one reason: a site serving its css cross-origin hands the page context
+ * The pass is async for one reason. A site serving its css cross-origin hands the page context
  * sheets it may not read, and the hover rules and breakpoints live in exactly those. Recovering
  * them goes through the Host, and Host calls are round trips.
  */
@@ -24,12 +24,11 @@ import { extractCardBlueprints } from './blueprint-card';
 import { extractNavBlueprint } from './blueprint-nav';
 import { extractDecorativeInfo, extractResponsiveInfo } from './page-language';
 import type { PageSchema } from './types';
+import { readableRuleLists } from '../../utils/css-rules';
 
 /** Builds the complete page schema from the live dom. */
 export async function extractPageSchema(): Promise<PageSchema> {
-	// Discovery runs first and once. The walk stratifies its budget over these sections, the
-	// section pass describes them, the nav bar is scored among them, and the decorative pass
-	// says which one each effect was seen in, so every reading agrees on what a section is
+	// Discovery runs first and once, so every later reading agrees on what a section is
 	// instead of each deriving its own answer.
 	const sectionRoots = discoverSections();
 	const navBar = findNavBar(sectionRoots);
@@ -78,31 +77,19 @@ export async function extractPageSchema(): Promise<PageSchema> {
 /**
  * Every css rule on the page, from every stylesheet, at any nesting depth.
  *
- * Two things used to hide rules from this pass, and both left the schema reporting that a page
- * had no interactive states and no breakpoints when it had plenty. Cross-origin sheets were
- * skipped; they are now recovered through the Host, the same seam capture/cdp.ts already uses,
- * and reparsed into a constructable stylesheet that never touches the live page. And only the
- * top level of each sheet was read, which on any build that wraps its output in `@layer`, the
- * shape every current utility framework emits, is an empty list.
+ * Two things used to hide rules here, and both left the schema reporting no interactive states
+ * and no breakpoints on a page with plenty. Cross-origin sheets were skipped, and are now
+ * recovered through the Host and reparsed. And only each sheet's top level was read, which on
+ * any build wrapping its output in `@layer` is an empty list.
  *
- * Grouping blocks are flattened; `@media` is kept whole. A media rule is itself the answer the
- * responsive pass is looking for, and descending into one would hand the state pass rules that
- * apply only under a condition as though they always applied.
+ * Grouping blocks flatten, but `@media` is kept whole. A media rule is itself the answer the
+ * responsive pass wants, and descending into one would hand the state pass conditional rules
+ * as though they always applied.
  */
 async function allRules(): Promise<CSSRule[]> {
 	const out: CSSRule[] = [];
 	const unreadable: string[] = [];
-
-	for (const sheet of Array.from(document.styleSheets)) {
-		let rules: CSSRuleList;
-		try {
-			rules = sheet.cssRules;
-		} catch {
-			if (sheet.href) unreadable.push(sheet.href);
-			continue;
-		}
-		flatten(rules, out, 0);
-	}
+	for (const rules of readableRuleLists(unreadable)) flatten(rules, out, 0);
 
 	if (unreadable.length === 0) return out;
 	for (const text of await recoverSheetTexts(unreadable)) {

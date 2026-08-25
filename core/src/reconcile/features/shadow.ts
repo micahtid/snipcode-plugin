@@ -6,18 +6,13 @@
  * and <style> css with :host rescoped to a marker, then appends a clone of the shadow tree.
  *
  * Shadow content is appended after the host's light children, which keeps pairedSubtrees
- * aligned for the handlers that run later. Slot distribution is approximated, and ::part and
- * ::slotted styles ride along verbatim. A closed root cannot be read at all and is counted at
- * capture and surfaced as a warning.
+ * aligned for the later handlers. Slot distribution is approximated, and ::part and ::slotted
+ * ride along verbatim. A closed root cannot be read at all, so capture counts it and warns.
  */
 import type { Captured } from '../../types';
 import { pairedSubtrees } from '../match';
 
-/**
- * Flattens open shadow trees and their scoped styles into the clone.
- *
- * @param captured - clone is mutated in place
- */
+/** Flattens open shadow trees and their scoped styles into the clone. Clone is mutated in place. */
 export function apply(captured: Captured): Captured {
 	let hostId = 0;
 	let sawShadow = false;

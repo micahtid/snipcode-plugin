@@ -10,10 +10,9 @@ import { emitBem } from './bem';
 import type { HtmlOutput } from './document';
 
 /**
- * Emits the snip as a vue sfc string (template + scoped style).
+ * Emits the snip as a vue sfc: template plus scoped style.
  *
- * @param captured - read-only
- * @returns html = the.vue file contents, and css = the stylesheet, which is also embedded
+ * @returns html = the .vue file contents, css = the stylesheet, which is also embedded
  */
 export function emitVue(captured: Captured): HtmlOutput {
 	const base = emitBem(captured);

@@ -20,19 +20,9 @@
 
 <br>
 
-<!--
-  DEMO PLACEHOLDER. To drop in the real video:
-  1. Drag the .mp4 into any GitHub issue or PR comment. Do not submit it.
-  2. Copy the https://github.com/user-attachments/assets/... URL it hands back.
-  3. Replace this comment and the <p> block below with that bare URL on its own line.
-     GitHub turns an attachment URL on its own line into a player.
-  4. Delete assets/demo-placeholder.png and assets/demo-placeholder-dark.png.
--->
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/demo-placeholder-dark.png">
-    <img src="assets/demo-placeholder.png" alt="Demo Video Coming Soon" width="820">
-  </picture>
+  <img src="assets/demo-1.png" alt="Asking for a landing page built against another site's design" width="48%">
+  <img src="assets/demo-2.png" alt="The landing page that came back, one shot" width="48%">
 </p>
 
 <br>
@@ -135,6 +125,30 @@ Two things worth knowing.
 
 <br>
 
+## Errors
+
+Every failure is the same envelope, `{ error: { code, message } }`, with exit code 1. The code is
+the part to branch on.
+
+| Code | Means |
+| --- | --- |
+| `MISSING_URL` | No `<url>` was given. |
+| `BAD_URL` | The `<url>` was not http or https. A bare host is fine (`example.com` loads as `https://example.com`); `file:`, `data:`, and the rest are refused, so SnipCode cannot be aimed at a local file. |
+| `UNKNOWN_COMMAND` | Not one of `candidates`, `extract`, `schema`. |
+| `UNKNOWN_FLAG` | A flag that does not exist, usually a typo. Names the flag. |
+| `MISSING_SELECTOR` | `extract` was called without `--selector`. |
+| `BAD_FORMAT` | `--format` was not one of `html`, `jsx`, `tailwind`, `vue`. |
+| `BAD_EXPECT_RECT` | `--expect-rect` was not JSON with all of `x`, `y`, `w`, `h` as numbers. |
+| `SELECTOR_INVALID` | The selector is not valid CSS. |
+| `SELECTOR_NO_MATCH` | The selector matched nothing on the loaded page. |
+| `PAGE_SHIFTED` | The element no longer matches `--expect-text` or `--expect-rect`. Re-run `candidates`. |
+| `EXTRACT_FAILED` | The pipeline could not finish on that element. |
+| `BLOCKED` | The page is a bot wall or consent gate. A screenshot is written so you can see it. |
+| `RUNNER_ERROR` | The browser could not load the page: DNS, timeout, or a missing Chromium. |
+| `FATAL` | Anything unhandled. |
+
+<br>
+
 ## How The Code Is Organized
 
 ```
@@ -187,8 +201,9 @@ Golden snapshots live under `test/golden/<platform>/` because they carry text bo
 every operating system resolves `system-ui` to a font with different metrics. A platform with no
 committed baseline is reported and skipped rather than failed.
 
-Contributions are welcome. Open an issue at https://github.com/micahtid/snip-code-cli/issues to
-report a bug or suggest a feature.
+Contributions are welcome. [CONTRIBUTING.md](./CONTRIBUTING.md) has the house rules the suite
+enforces. Open an issue at https://github.com/micahtid/snip-code-cli/issues to report a bug or
+suggest a feature, and see [SECURITY.md](./SECURITY.md) to report a vulnerability privately.
 
 <br>
 

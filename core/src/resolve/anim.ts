@@ -19,11 +19,10 @@ export function resolveAnimations(captured: Captured): void {
 }
 
 /**
- * Collects every token that appears in an animation / animation-name value across
- * the baked styles. The animation shorthand lists name, duration, timing, and so
- * on, in any order, so rather than parse the grammar we gather all tokens and let
- * the keyframe-name intersection in the caller pick the real names. A duration like
- * "2s" can never collide with a keyframe identifier.
+ * Every token appearing in an animation or animation-name value across the baked styles. The
+ * shorthand lists name, duration, and timing in any order. Rather than parse that grammar,
+ * this gathers all tokens and lets the caller's keyframe-name intersection pick the real ones.
+ * A duration like "2s" can never collide with a keyframe identifier.
  */
 function referencedAnimationNames(captured: Captured): Set<string> {
 	const tokens = new Set<string>();

@@ -2,7 +2,7 @@
  * utils/css-split.ts: one quote and paren aware splitter for css text.
  *
  * Nearly every phase cuts a css string at its top-level separators, and each cut has the same
- * trap: the separator also appears inside url(data:...;base64,...), inside a function such as
+ * trap. The separator also appears inside a data uri, inside a function such as
  * cubic-bezier(0.4, 0, 0.2, 1), and inside a quoted family or attribute value. The scan lived
  * in a dozen near-identical copies, so it lives here once.
  *
@@ -16,11 +16,9 @@ export interface SplitOptions {
 }
 
 /**
- * Splits `text` at every separator that sits at the top level, meaning outside every
- * paren span, outside every bracket span when `brackets` is set, and outside every
- * quoted string. Separators are dropped, not kept with either side. Segments are
- * returned verbatim, untrimmed and including empties, so callers decide what an empty
- * segment means for their own grammar.
+ * Splits `text` at every top-level separator, meaning outside every paren span, every quoted
+ * string, and every bracket span when `brackets` is set. Segments come back verbatim,
+ * untrimmed and including empties, so each caller decides what an empty one means.
  *
  * @returns the segments, always at least one
  */
@@ -54,9 +52,8 @@ export function splitTopLevel(text: string, separator: string | RegExp, options:
 }
 
 /**
- * Splits a comma separated value list at its top level commas, trimming each entry and
- * dropping empty ones. This is how the engine reads a layered value such as a
- * transition or a shadow list, where a trailing or doubled comma contributes no layer.
+ * Splits a comma-separated list at its top-level commas, trimmed, empties dropped. This is how
+ * the engine reads a layered value: a trailing or doubled comma contributes no layer.
  */
 export function splitCommaList(value: string): string[] {
 	return splitTopLevel(value, ',')
@@ -75,24 +72,19 @@ export interface Declaration {
 }
 
 /**
- * Splits a serialized declaration block or inline style string into its declarations.
- * Cuts on top level semicolons only, then on each segment's first top level colon, so a
- * `;` or `:` inside a `url(data:image/png;base64,...)`, inside any other function, or
- * inside a quoted string stays part of the value. A segment carrying no top level colon
- * is not a declaration and is dropped.
+ * Splits a declaration block or inline style string into declarations. Top-level semicolons
+ * first, then each segment's first top-level colon, so a `;` or `:` inside a data uri stays in
+ * the value. A segment with no top-level colon is not a declaration.
  *
- * Nothing is normalized here: the property keeps its case and the value keeps its
- * priority, so a caller that re-emits the text reproduces it exactly, and a caller that
- * wants a lowercased property or a priority stripped value asks for it explicitly. See
- * stripImportant.
+ * Nothing is normalized. The property keeps its case and the value its priority, so re-emitting
+ * reproduces the text exactly; a caller wanting either stripped asks for it. See stripImportant.
  */
 export function parseDeclarations(cssText: string): Declaration[] {
 	const out: Declaration[] = [];
 	for (const segment of splitTopLevel(cssText, ';')) {
 		const decl = segment.trim();
 		if (!decl) continue;
-		// The first top level colon separates the property from the value. A colon inside a
-		// following url() or function belongs to the value, so the scan stops at the first one.
+		// The first top-level colon separates property from value; a later one is the value's.
 		const colon = splitTopLevel(decl, ':')[0];
 		if (colon === undefined || colon.length === decl.length) continue; // No top level colon: not a declaration.
 		out.push({

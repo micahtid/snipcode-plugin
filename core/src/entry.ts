@@ -4,9 +4,9 @@
  * Bundled to one self-contained iife the runner injects into a Playwright page, hanging the
  * three commands off window.__snipCore. Each returns a plain json-serializable object.
  *
- * extract owns the stateless re-resolution: it re-finds the element by selector in the freshly
- * loaded page and, when the caller passed the text and rect the candidate recorded, verifies
- * the match before snipping, so a shifted page fails loudly rather than extracting the wrong node.
+ * extract owns the stateless re-resolution. It re-finds the element by selector in the freshly
+ * loaded page and, given the text and rect a candidate recorded, verifies the match first. A
+ * shifted page then fails loudly rather than extracting the wrong node.
  */
 import type { OutputFormat } from './types';
 import { harvestCandidates, normalizedText, rectOf, type CandidateInventory, type CandidateRect } from './candidates';
@@ -40,10 +40,9 @@ const RECT_SHIFT_PX = 40;
 const RECT_SIZE_TOLERANCE = 0.35;
 
 /**
- * True when the resolved element is close enough to what the candidate recorded. Text
- * is compared by prefix (the recording is capped, so exact equality would over-reject);
- * rect is compared by center distance and relative size, tolerating layout jitter but
- * catching a genuine page shift onto a different node.
+ * Whether the resolved element is close enough to what the candidate recorded. Text compares by
+ * prefix, since the recording is capped and exact equality would over-reject. The rect compares
+ * by center distance and relative size, tolerating jitter but catching a real shift.
  */
 function matchesExpectation(el: Element, expect: ExtractExpectation): boolean {
 	if (expect.text) {

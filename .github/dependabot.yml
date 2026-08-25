@@ -1,0 +1,23 @@
+version: 2
+
+updates:
+  # Playwright is the one dependency whose version moves the golden snapshots, since a new
+  # chromium renders text a little differently. Grouping the rest keeps those bumps to one pr
+  # a week and leaves playwright on its own, where the diff is worth reading.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      dev-dependencies:
+        dependency-type: development
+        exclude-patterns: ['playwright']
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']

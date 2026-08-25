@@ -8,20 +8,17 @@
 import { parseDeclarations as parseCssDeclarations } from '../utils/css-split';
 
 /**
- * Selectors held out of every minimize phase: dynamic pseudo-classes, the measured-state
- * and pseudo-element markers, and any pseudo-element. These rules reproduce interactive and
- * generated-content states that are invisible at rest, so the resting-render oracle cannot
- * verify them and must not touch them. `:focus` also covers `:focus-visible` and
- * `:focus-within` as a substring, and `::` covers every pseudo-element.
+ * Selectors held out of every minimize phase: dynamic pseudo-classes, the state and pseudo
+ * markers, and any pseudo-element. They reproduce states invisible at rest, which a
+ * resting-render oracle cannot verify. `:focus` covers `:focus-visible` and `:focus-within`
+ * as a substring, and `::` covers every pseudo-element.
  */
 export const WITHHELD = /:hover|:focus|:active|\[data-snip-state|\[data-snip-pseudo|::/;
 
 /**
- * The rule as an in-scope style rule, or null when out of scope. In scope means a top-level
- * style rule whose selector is not withheld. The type is read from `rule.type` rather than
- * `instanceof`, because the rule belongs to the oracle iframe's realm and would fail an
- * `instanceof CSSStyleRule` against this window's constructor, while `CSSRule.STYLE_RULE` is
- * the same numeric constant in every realm.
+ * The rule as an in-scope style rule, meaning top-level and not withheld, or null. The type
+ * comes from `rule.type` rather than `instanceof`, because the rule belongs to the oracle
+ * iframe's realm and would fail an `instanceof` against this window's constructor.
  */
 export function inScopeRule(rule: CSSRule): CSSStyleRule | null {
 	if (rule.type !== CSSRule.STYLE_RULE) return null;
@@ -31,10 +28,9 @@ export function inScopeRule(rule: CSSRule): CSSStyleRule | null {
 }
 
 /**
- * Serializes a stylesheet's top-level rules back to text. A style rule is emitted only when
- * it still carries declarations, so a rule a phase emptied is dropped, whether it is in scope
- * or a withheld state or pseudo rule the merge collapsed into a selector list. At-rules and
- * grouping rules are emitted verbatim in their original position.
+ * Serializes a stylesheet's top-level rules back to text. A style rule is emitted only when it
+ * still carries declarations, so a rule some phase emptied is dropped. At-rules and grouping
+ * rules go out verbatim in their original position.
  */
 export function serializeRules(topRules: CSSRule[]): string {
 	const out: string[] = [];
@@ -60,11 +56,9 @@ export interface Segment {
 }
 
 /**
- * Splits a serialized declaration block into author declarations, keeping shorthands
- * whole. Splits on top-level semicolons only, so a `;` inside a url(), a function, or a
- * quoted string, such as a data-uri background, never splits a declaration. Each segment
- * keeps its verbatim text, priority included, so re-emitting the segments reproduces the
- * rule exactly.
+ * Splits a declaration block into author declarations, shorthands kept whole. Top-level
+ * semicolons only, so a `;` inside a data-uri never cuts a declaration, and each segment
+ * keeps its verbatim text so re-emitting them reproduces the rule exactly.
  */
 export function parseSegments(cssText: string): Segment[] {
 	return parseCssDeclarations(cssText).map((d) => ({ prop: d.prop.toLowerCase(), decl: d.decl, value: d.value }));

@@ -2,22 +2,17 @@
  * features/fonts.ts: variable-font axes, opentype features, and text metrics.
  *
  * Variable-font settings and opentype features usually arrive from a font's own @font-face or
- * a shorthand rather than as per-element declarations, so the per-element pass never bakes
- * them and the snip reverts to the wrong weight or width with lost ligatures.
+ * a shorthand rather than as per-element declarations. The per-element pass never bakes them,
+ * so the snip reverts to the wrong weight or width with its ligatures lost.
  *
- * The text micro-features here (text-overflow, text-decoration-skip-ink, word-break,
- * overflow-wrap, hyphens, text-wrap, white-space-collapse) change where lines break and what
- * truncates, so baking them keeps the captured text layout. writing-mode lives in
- * features/units.ts with the logical properties it governs.
+ * The text micro-features listed below change where lines break and what truncates, so baking
+ * them keeps the captured text layout. writing-mode lives in features/units.ts with the
+ * logical properties it governs.
  */
 import type { Captured } from '../../types';
 import { bakeNonDefaultProps } from '../match';
 
-/**
- * The font and text properties this handler preserves. This is the bounded css-spec
- * surface for variable and opentype fonts and text layout, a feature-handler spec
- * set rather than a hardcoded property list.
- */
+/** The font and text properties this handler preserves. */
 const FONT_AND_TEXT_PROPS = [
 	// Variable + opentype font metrics.
 	{ prop: 'font-variation-settings', isDefault: (v: string) => v === 'normal' },
@@ -34,11 +29,7 @@ const FONT_AND_TEXT_PROPS = [
 	{ prop: 'white-space-collapse', isDefault: (v: string) => v === 'collapse' },
 ];
 
-/**
- * Bakes non-default font-metric and text-layout settings onto each element.
- *
- * @param captured - bakedStyles + clone are mutated in place
- */
+/** Bakes non-default font-metric and text-layout settings. bakedStyles + clone mutated in place. */
 export function apply(captured: Captured): Captured {
 	bakeNonDefaultProps(captured, FONT_AND_TEXT_PROPS);
 	return captured;

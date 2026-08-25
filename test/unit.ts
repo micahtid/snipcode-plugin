@@ -1,20 +1,24 @@
 /**
  * test/unit.ts: table-driven tests for the helpers that look interchangeable.
  *
- * Three pairs of functions shared a name and a rough purpose, and the cleanup had to
- * decide whether each pair was one idea written twice or two ideas that collided. These
- * tables are how that was decided, and they stay so the answer cannot quietly change.
+ * Three pairs of functions shared a name and a rough purpose. The cleanup had to decide whether
+ * each pair was one idea written twice or two ideas that collided. These tables are how that
+ * was decided, and they stay so the answer cannot quietly change.
  *
  * The css-value and selector splitters disagree, so they stay separate under distinct
  * names. The two absolutizeUrls agreed and are now one function. The two isGroupingRule
  * checks classify @keyframes differently, so they also stay separate.
+ *
+ * normalizeUrl joined them because it is the same kind of function: one small gate whose
+ * exact accept and refuse sets are the whole of what it promises.
  *
  * Run with: npm test.
  */
 import { chromium } from 'playwright';
 import { splitTopLevel, splitCommaList } from '../core/src/utils/css-split';
 import { splitSelectorTopLevel } from '../core/src/reconcile/selector';
-import { absolutizeUrls } from '../core/src/reconcile/features/urls';
+import { absolutizeUrls } from '../core/src/utils/css-urls';
+import { normalizeUrl } from '../cli/src/output';
 import { Checks } from './harness';
 
 const checks = new Checks();
@@ -99,6 +103,68 @@ function checkAbsolutize(): void {
 }
 
 /**
+ * The <url> argument gate: what reaches page.goto and what never does.
+ *
+ * The refusals are the point. Anything but http or https would let a caller aim a page reader
+ * at the local disk, so those cases are listed one by one rather than sampled.
+ */
+function checkNormalizeUrl(): void {
+	process.stdout.write('\nnormalizeUrl:\n');
+
+	const accepted: [input: string, expected: string][] = [
+		['https://example.com/a', 'https://example.com/a'],
+		['http://example.com/a', 'http://example.com/a'],
+		['HTTPS://Example.com/A', 'https://example.com/A'],
+		['example.com', 'https://example.com/'],
+		['example.com/pricing?a=1#b', 'https://example.com/pricing?a=1#b'],
+		['  example.com  ', 'https://example.com/'],
+		['localhost:3000/app', 'https://localhost:3000/app'],
+		['127.0.0.1:8080', 'https://127.0.0.1:8080/'],
+	];
+	for (const [input, expected] of accepted) {
+		let actual = '';
+		try {
+			actual = normalizeUrl(input);
+		} catch (err) {
+			actual = `threw: ${(err as Error).message}`;
+		}
+		check(`${JSON.stringify(input)} normalizes to ${expected}`, actual === expected, actual);
+	}
+
+	const refused: [input: string, reason: string][] = [
+		['file:///C:/Users/x/.ssh/id_rsa', 'a local file'],
+		['file://server/share/x.html', 'a unc path'],
+		['data:text/html,<h1>x', 'an inline document'],
+		['javascript:alert(1)', 'a script url'],
+		['about:blank', 'a browser page'],
+		['chrome://settings', 'a browser page'],
+		['ftp://example.com/x', 'another transport'],
+		['C:/Users/x/page.html', 'a windows path'],
+		['', 'nothing at all'],
+		['   ', 'whitespace'],
+		['https://', 'a scheme with no host'],
+	];
+	for (const [input, reason] of refused) {
+		let message = '';
+		try {
+			message = `accepted as ${normalizeUrl(input)}`;
+		} catch (err) {
+			message = (err as Error).message;
+		}
+		check(`${JSON.stringify(input)} is refused (${reason})`, message.startsWith('<url> '), message);
+	}
+
+	// The message has to name the offending scheme, because BAD_URL is all the agent sees.
+	let named = '';
+	try {
+		normalizeUrl('file:///etc/passwd');
+	} catch (err) {
+		named = (err as Error).message;
+	}
+	check('the refusal names the scheme it refused', named.includes('"file"') && named.includes('http'), named);
+}
+
+/**
  * The two grouping-rule checks, run against a real stylesheet in a real engine.
  *
  * capture/sheets.ts asks whether a rule holds child rules; minimize/atrules.ts asks whether
@@ -139,8 +205,8 @@ async function checkGroupingRules(): Promise<void> {
 		check('the two grouping checks classify every rule type the same way', disagree.length === 0, JSON.stringify(disagree));
 		check('every rule type the engine offers is covered', rows.length >= 8, JSON.stringify(rows.map((r) => r.text)));
 
-		// Both accept a plain style rule, because a style rule can now nest child rules. That
-		// is why neither is a safe stand-alone test for "this is an at-rule block": each caller
+		// Both accept a plain style rule, because a style rule can now nest child rules. So
+		// neither is a safe stand-alone test for "this is an at-rule block". Each caller
 		// reaches its check only after the rule types it cares about are handled above it.
 		const style = rows.find((r) => r.text.startsWith('.c'));
 		check('a nesting-capable style rule satisfies both checks',
@@ -156,6 +222,7 @@ async function checkGroupingRules(): Promise<void> {
 async function main(): Promise<void> {
 	checkSplitters();
 	checkAbsolutize();
+	checkNormalizeUrl();
 	await checkGroupingRules();
 	if (!checks.report()) process.exitCode = 1;
 }

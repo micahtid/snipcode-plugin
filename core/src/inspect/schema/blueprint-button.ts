@@ -30,8 +30,8 @@ const CONTRAST_FLOOR = 0.25;
 /**
  * Extracts the top button variants with their full visual spec and hover/active states.
  *
- * Ranking is by prominence, the area a button occupies weighted by how far its fill sits from
- * what is behind it, rather than by how many times its fingerprint recurred. Frequency alone
+ * Ranking is by prominence rather than frequency: the area a button occupies, weighted by how
+ * far its fill sits from what is behind it. Frequency alone
  * picked out whatever tiny unstyled node a framework repeated most, and reported a
  * zero-padding grey box as the page's primary button.
  */

@@ -1,14 +1,13 @@
 /**
  * resolve/transition.ts: re-expanding a transition timing list the var pass collapsed.
  *
- * Runs during resolve, after vars. A utility build sets a many-entry transition-property
- * against a duration and timing function authored as a single var(), which css cycles across
- * every property. Resolving that var to its one literal leaves a one-entry timing list against
- * a many-entry property list, and the cssom then folds the shorthand with the timing on the
+ * Runs during resolve, after vars. A utility build pairs a many-entry transition-property with
+ * a duration authored as one var(), which css cycles across every property. Resolving that var
+ * leaves a one-entry timing list. The cssom then folds the shorthand with the timing on the
  * first layer only, so on hover the color eases while everything else snaps.
  *
- * Cycling the shorter list back out to full length is the engine's own rule, so this is
- * render-neutral. It only redistributes timing the author already wrote.
+ * Cycling the shorter list back out is the engine's own rule, so this is render-neutral: it
+ * only redistributes timing the author already wrote.
  */
 import type { Captured } from '../types';
 import { splitCommaList } from '../utils/css-split';
@@ -17,11 +16,9 @@ import { splitCommaList } from '../utils/css-split';
 export const TIMING_LONGHANDS = ['transition-duration', 'transition-timing-function', 'transition-delay', 'transition-behavior'] as const;
 
 /**
- * Pads every clone element's transition timing sub-lists to its `transition-property` length by
- * css cycling, so the later fold into the `transition` shorthand keeps each layer's timing
- * rather than dropping it onto the first. Mutates the clone inline styles and their baked maps
- * in place. It is a no-op for any element without a genuine multi-property transition whose
- * timing sub-list is shorter than its property list.
+ * Pads every clone's transition timing sub-lists out to its `transition-property` length by css
+ * cycling, so the later fold into the shorthand keeps each layer's timing. A no-op unless an
+ * element has a multi-property transition with a shorter timing list.
  *
  * @param captured - clone + bakedStyles are mutated in place
  */
@@ -50,9 +47,8 @@ export function resolveTransitionTiming(captured: Captured): void {
 }
 
 /**
- * Splits a comma-separated value list on top-level commas only, so a comma inside a function
- * such as `cubic-bezier(0.4, 0, 0.2, 1)` or `steps(4, end)` stays within its layer. Empty
- * entries are dropped, matching how the engine reads a transition sub-list.
+ * Splits on top-level commas only, so a comma inside `cubic-bezier(0.4, 0, 0.2, 1)` stays in
+ * its layer. Empty entries drop, matching how the engine reads a transition sub-list.
  */
 export function splitTopLevelCommas(value: string): string[] {
 	return splitCommaList(value);

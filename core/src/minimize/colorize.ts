@@ -1,45 +1,38 @@
 /**
  * minimize/colorize.ts: short hex colors and a sane pill radius.
  *
- * Runs last in minimize, after format, as a plain string transform. Rewrites rgb() and rgba()
- * to hex using a canvas 2d context as the authority, so the result is the engine's own
- * canonical form with no color math here. Wide-gamut notations keep their color space and are
- * only trimmed of float noise. A radius the engine saturated to 2.12676e+37rem becomes 9999px.
+ * Runs last in minimize, as a plain string transform. rgb() and rgba() become hex, with a
+ * canvas 2d context as the authority, so the result is the engine's own canonical form and no
+ * color math lives here. Wide-gamut notations keep their space and lose only float noise, and
+ * a radius the engine saturated to 2.12676e+37rem becomes 9999px.
  *
- * It runs on text, after format, because a cssom round-trip would re-serialize a hex back to
- * rgb() and undo the whole pass. Two boundaries keep it paint-exact: quoted strings and url()
- * spans are skipped, so an rgba( sequence that is content is never mistaken for a color; and a
- * color is only rewritten when a delimiter follows, since a bare hex packed against the next
- * token would glue into one invalid word.
+ * On text, and after format, because a cssom round-trip would re-serialize a hex back to rgb()
+ * and undo the pass. Two boundaries keep it paint-exact. Quoted strings and url() spans are
+ * skipped, so an rgba( inside content is never read as a color. And a color is rewritten only
+ * when a delimiter follows, since a bare hex against the next token glues into one bad word.
  */
 
 /** A length in a border radius at or beyond this magnitude saturates the corner; clamp it. */
 const RADIUS_SATURATION = 100000;
 
 /**
- * Rewrites every rgb()/rgba() color function to hex, trims the float noise from a wide-gamut
- * color's components, and clamps a saturating border radius to `9999px`. It is graceful by
- * contract, returning the input unchanged when a canvas context is unavailable, and leaving any
- * function the context does not accept as a color exactly as it was.
- *
- * @returns the stylesheet with colors canonicalized and saturating radii clamped
+ * Rewrites rgb()/rgba() to hex, trims float noise from a wide-gamut color, and clamps a
+ * saturating border radius to `9999px`. Graceful by contract: no canvas context, or a function
+ * the context does not accept, leaves the input exactly as it was.
  */
 export function colorizeCss(css: string): string {
 	if (!css.trim()) return css;
 	const ctx = colorContext();
 	if (!ctx) return css;
-	// Tokenize into quoted strings, url() spans, and color functions, in that order, so a
-	// string or url is consumed as one unit and any color-looking text inside it is never
-	// seen as a color. A color function never contains a nested paren in a computed value,
-	// so [^)]* delimits it exactly.
+	// Strings and url() spans are consumed whole first, so color-looking text inside one is
+	// never read as a color. A computed color function holds no nested paren, so [^)]* ends it.
 	const recolored = css.replace(COLOR_OR_PROTECTED, (match, offset: number, whole: string) => {
 		if (/^(?:oklab|oklch|lab|lch|color)\(/i.test(match)) return trimColorComponents(match); // Wide-gamut, so keep the space and trim the noise.
 		if (!/^rgba?\(/i.test(match)) return match; // Protected string or url span, so leave it verbatim.
 		const converted = colorize(match, ctx);
-		// A hex has no trailing delimiter, but the color function's `)` did. When the color
-		// abutted a name char with no delimiter (tailwind packs gradient stops as
-		// `rgb(25, 25, 29)0px`), the two were already separate tokens, so insert a space so the
-		// hex stays distinct rather than gluing into one invalid hash token.
+		// The function's `)` was a delimiter and a hex has none. So where the color abutted a
+		// name char, as tailwind packs gradient stops, a space goes back in. Otherwise two
+		// already-separate tokens glue into one invalid hash.
 		if (converted[0] === '#') {
 			const next = whole[offset + match.length];
 			if (next !== undefined && NAME_CHAR.test(next)) return `${converted} `;
@@ -50,20 +43,17 @@ export function colorizeCss(css: string): string {
 }
 
 /**
- * Matches, in priority order, a double-quoted string, a single-quoted string, a url() span,
- * an rgb()/rgba() color function, or a wide-gamut color function with only simple numeric
- * arguments. The string and url alternatives come first so their contents are swallowed
- * before a color function inside them can match on its own. The wide-gamut alternative rejects
- * a nested paren, so a relative-color or calc() argument is left untouched.
+ * A quoted string, a url() span, an rgb()/rgba() function, or a wide-gamut function with only
+ * numeric arguments, in that priority. Strings and urls come first so their contents are
+ * swallowed before a color inside them can match. The wide-gamut branch rejects a nested
+ * paren, leaving a relative-color or calc() argument untouched.
  */
 const COLOR_OR_PROTECTED = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\burl\((?:[^)"']|"[^"]*"|'[^']*')*\)|rgba?\([^)]*\)|\b(?:oklab|oklch|lab|lch|color)\([^()]*\)/gi;
 
 /**
- * Trims each numeric component of a wide-gamut color function to at most four decimal places,
- * removing the float noise a computed round-trip leaves. Four places is finer than a 24-bit
- * channel resolves, so the trimmed color paints the identical pixel. The color space is
- * untouched, so no gamut is clamped. Non-numeric tokens, such as a color-space keyword or an
- * angle unit, pass through.
+ * Trims each numeric component of a wide-gamut color to four decimals, dropping the float
+ * noise a computed round-trip leaves. Four places is finer than a 24-bit channel resolves, so
+ * the pixel is identical, and the color space is untouched so no gamut is clamped.
  *
  * @param fn - a wide-gamut color function with only simple numeric arguments
  */
@@ -75,11 +65,9 @@ function trimColorComponents(fn: string): string {
 }
 
 /**
- * Clamps a border radius the engine rounded past the saturation point to a plain `9999px`.
- * A radius at or beyond RADIUS_SATURATION units renders as a full corner on any element a
- * real layout can produce, and `9999px` renders the identical corner, so the swap is paint-
- * neutral. Only the border-radius family is touched, and only a length token whose magnitude
- * no real design reaches, so a legitimate radius is never rewritten.
+ * Clamps a saturated border radius to a plain `9999px`. Anything at or beyond
+ * RADIUS_SATURATION renders as a full corner on any real box, and so does 9999px, so the swap
+ * is paint-neutral. Only the border-radius family, and only a magnitude no design reaches.
  */
 function clampSaturatingRadii(css: string): string {
 	return css.replace(/border(?:-[a-z]+)*-radius\s*:\s*[^;{}]+/gi, (decl) =>
@@ -93,15 +81,14 @@ function clampSaturatingRadii(css: string): string {
 const NAME_CHAR = /[-\w\u0080-\uffff]/;
 
 /**
- * One rgb()/rgba() function rewritten to hex, or unchanged when the context does not accept
- * it as a lone color. The canvas context is the authority: assigning the function to
- * fillStyle yields the engine's canonical spelling, a #rrggbb hex for an opaque color and an
- * rgba() for a translucent one. An opaque color becomes the shortest hex and a translucent
- * one an eight-digit hex, both the same pixels the context would paint.
+ * One rgb()/rgba() rewritten to hex, or unchanged when the context will not take it as a
+ * color. The canvas context is the authority: assigning to fillStyle yields the engine's
+ * canonical spelling, which becomes the shortest hex when opaque and an eight-digit hex when
+ * not. Same pixels either way.
  */
 function colorize(fn: string, ctx: CanvasRenderingContext2D): string {
-	// Relative-color syntax, rgb(from ...), resolves against another color, and the [^)]* match
-	// can also clip one whose base is a var(). Leave any from-color exactly as written.
+	// Relative-color syntax resolves against another color, and the [^)]* match can clip one
+	// whose base is a var(), so any from-color is left exactly as written.
 	if (/\bfrom\b/i.test(fn)) return fn;
 	const probe = '#000001';
 	ctx.fillStyle = probe;
@@ -115,9 +102,8 @@ function colorize(fn: string, ctx: CanvasRenderingContext2D): string {
 }
 
 /**
- * An rgba() match as #rrggbbaa, dropping the alpha byte to #rrggbb when fully opaque. The
- * alpha byte is round(a*255), which is exactly how the engine quantizes a fractional alpha
- * to 8 bits, so #rrggbbaa paints the identical pixel the rgba() would.
+ * An rgba() match as #rrggbbaa, dropping the alpha byte when fully opaque. That byte is
+ * round(a*255), exactly how the engine quantizes alpha to 8 bits, so the pixel is identical.
  */
 function hex8(rgba: RegExpMatchArray): string {
 	const byte = (n: number): string => Math.round(n).toString(16).padStart(2, '0');

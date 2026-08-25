@@ -3,7 +3,7 @@
  *
  * Runs in convert, on a deep copy of the clone so every format stays derivable from one
  * capture. Each element's inline declarations become utilities: a curated map for the common
- * properties, and tailwind's arbitrary-value syntax for everything else, which guarantees full
+ * properties, and tailwind's arbitrary-value syntax for everything else. That guarantees full
  * coverage and exact fidelity without an exhaustive mapping table.
  */
 import type { Captured } from '../types';
@@ -12,9 +12,8 @@ import { matchColor } from './tw-palette';
 import { atRulesCss, type HtmlOutput } from './document';
 
 /**
- * Emits the snip as tailwind-classed markup plus the shared @font-face/@keyframes
- * block. Fidelity in a tailwind project comes from utilities + arbitrary values. The
- * output is meant to be pasted into a tailwind project, so it targets clean, usable classes.
+ * Emits the snip as tailwind-classed markup plus the shared at-rule block. The output is meant
+ * to be pasted into a tailwind project, so it aims for clean, usable classes.
  *
  * @param captured - read-only, so a deep copy of the clone is transformed
  */

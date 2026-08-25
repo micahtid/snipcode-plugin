@@ -1,15 +1,14 @@
 /**
  * inspect/schema/discovery.ts: finding the page's sections and its nav bar.
  *
- * Runs first in the page-scoped inspect pass, against the live dom. Everything downstream
- * agrees on what a section is because it is decided once, here: the walk spends its budget
- * per section, the section pass describes them, the nav is scored among them, and the
- * decorative pass says which one each effect sits in.
+ * Runs first in the page-scoped inspect pass, against the live dom. What a section is gets
+ * decided once, here, so everything downstream agrees. The walk spends its budget per section.
+ * The section pass describes them, the nav is scored among them, and the decorative pass says
+ * which one each effect sits in.
  *
  * Both readings are geometric. A framework build wraps the whole page in an app root, so
- * reading body's children alone finds one "section" that is the entire page; and taking the
- * first `nav` tag picks up whatever inner list the build emitted first rather than the bar a
- * reader means.
+ * body's children alone give one "section" that is the entire page. And the first `nav` tag is
+ * whatever inner list the build emitted first, not the bar a reader means.
  */
 import { isElementVisible, SKIP_TAGS } from './classify';
 import { contentChildren, hasDirectText } from './boxes';
@@ -35,14 +34,12 @@ const NAV_MAX_BAR_HEIGHT_SHARE = 0.25;
 const NAV_MIN_BAR_HEIGHT_PX = 200;
 
 /**
- * Finds the page's sections, descending through the wrappers that hide them.
+ * Finds the page's sections, descending through the wrappers that hide them, since a framework
+ * build makes them grandchildren of body rather than children.
  *
- * A framework build wraps the whole page in an app root, so the sections are grandchildren of
- * body rather than children, and reading body's children alone finds exactly one "section"
- * that is the entire page. Descent is deliberately narrow: only a transparent single-child
- * wrapper is skipped, and only an element whose children each span its full width and which
- * covers most of the document is opened up. A three-across card grid fails both tests, so
- * cards never get promoted to sections.
+ * Descent is deliberately narrow. Only a transparent single-child wrapper is skipped, and only
+ * an element whose children each span its full width and which covers most of the document is
+ * opened up. A three-across card grid fails both, so cards are never promoted to sections.
  */
 export function discoverSections(): Element[] {
 	const out: Element[] = [];
@@ -66,13 +63,11 @@ function expandSection(el: Element, depth: number, out: Element[]): void {
 }
 
 /**
- * Skips single-child wrapper divs, which carry no section of their own.
- *
- * The test is geometric: a wrapper is skipped only when its child fills its box, so a wrapper
- * that pads or insets what it holds is doing layout and stays. What it paints is not part of
- * the test, because the div a framework paints the page background on is still a wrapper, and
- * refusing to descend past it hid an entire page's sections behind one. The backdrop is not
- * lost either way: the section pass resolves what each section actually sits on.
+ * Skips single-child wrapper divs, which carry no section of their own. Geometric: a wrapper is
+ * skipped only when its child fills its box, so one that pads or insets is doing layout and
+ * stays. What it paints is not part of the test. The div a framework paints the page background
+ * on is still a wrapper, and refusing to descend past it hid a whole page's sections. The
+ * section pass resolves what each section sits on either way.
  */
 function unwrapForDiscovery(el: Element): Element {
 	let current = el;
@@ -119,12 +114,9 @@ function isPageWrapper(el: Element): boolean {
 }
 
 /**
- * Builds the lookup from any element to the section that contains it, or null when no section
- * does.
- *
- * The walk needs it to spend each section's budget, and the decorative pass needs it to say
- * where an effect was seen. Two climbs with two stopping rules would let the same element be
- * attributed to two different sections, so there is one climb.
+ * The lookup from any element to the section containing it, or null. The walk needs it to spend
+ * each section's budget and the decorative pass to say where an effect was seen. Two climbs
+ * with two stopping rules could attribute one element to two sections, so there is one climb.
  */
 export function sectionFinder(roots: Element[]): (el: Element) => Element | null {
 	const known = new Set(roots);
@@ -141,16 +133,14 @@ export function isBarShaped(rect: DOMRect): boolean {
 }
 
 /**
- * Picks the page's nav bar: the widest, topmost, most anchored candidate, then its outermost bar.
+ * Picks the page's nav bar: the widest, topmost, most anchored candidate, then its outermost
+ * bar. Geometry decides, not document order, because the first `nav` on the page is often an
+ * inner list a framework emitted, 24px tall with no background. What a reader means is the bar
+ * at the top: wide, near the top of the document, often sticky.
  *
- * Geometry decides, not document order. Taking the first `nav` on the page picked up whatever
- * inner list a framework emitted first, a 24px-tall element with no background and no layout,
- * and reported that as the page's navigation. What a reader means by the nav is the bar at the
- * top: wide, near the top of the document, often sticky or fixed.
- *
- * When a page names no landmark at all, which a div-only build does, the same geometry runs
- * over the discovered sections instead. A page with a bar still has a bar; refusing to look for
- * it anywhere but a `header` tag reported `nav: null` for a navigation that was plainly there.
+ * With no landmark at all, which a div-only build gives, the same geometry runs over the
+ * discovered sections. A page with a bar still has a bar, and looking only for a `header` tag
+ * reported `nav: null` for a navigation that was plainly there.
  */
 export function findNavBar(roots: Element[]): Element | null {
 	const landmarks = Array.from(document.querySelectorAll('header, nav, [role="navigation"]')).filter(isElementVisible);
@@ -172,8 +162,8 @@ export function findNavBar(roots: Element[]): Element | null {
 	}
 	if (!best) return null;
 
-	// Climb to the bar that contains the pick. An inner nav describes one part of a header;
-	// the header is the bar a redesign has to reproduce. Only climb while it is still a bar.
+	// Climb to the bar containing the pick, while it is still bar-shaped. An inner nav is one
+	// part of a header, and the header is what a redesign has to reproduce.
 	let chosen = best.el;
 	for (const el of candidates) {
 		if (el === chosen || !el.contains(chosen)) continue;

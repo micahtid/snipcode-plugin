@@ -46,14 +46,11 @@ export function authoredCascade(captured: Captured): Map<Element, Map<string, st
 }
 
 /**
- * Pairs each live original element with its clone counterpart, tolerant of nodes
- * that feature handlers inject into the clone, such as a pseudo <style> or an icons
- * sprite <svg>. Without this, index-based pairing drifts the moment any handler
- * mutates clone structure, and downstream handlers silently misalign.
+ * Pairs each live element with its clone counterpart, walking both trees in lockstep and
+ * skipping clone-only nodes a feature handler injected, such as a pseudo <style>.
  *
- * Walks both trees in lockstep, skipping injected clone-only children at each
- * level so the structural correspondence holds. Shared by every handler that
- * needs to read a live element's computed style while writing to its clone.
+ * Without the skip, index-based pairing drifts the moment a handler mutates clone structure
+ * and every later handler silently misaligns.
  *
  * @param clone - the working clone (may carry handler-injected nodes)
  * @returns aligned [original, clone] pairs, root first
@@ -75,6 +72,22 @@ export function pairedSubtrees(root: Element, clone: Element): Array<[Element, E
 	return out;
 }
 
+/**
+ * Records one value in the baked map and on the clone's inline style.
+ *
+ * Every feature handler ends in this pair of writes, so it lives here. setProperty throws for
+ * a property this element rejects; the baked-map entry is what the emitters read, so the throw
+ * is swallowed rather than losing the value.
+ */
+export function setBaked(clone: Element, baked: Map<string, string>, prop: string, value: string): void {
+	baked.set(prop, value);
+	try {
+		(clone as HTMLElement).style.setProperty(prop, value);
+	} catch {
+		// Invalid for this element, so skip it.
+	}
+}
+
 /** One property a feature handler bakes when its computed value is non-default. */
 export interface BakeSpec {
 	prop: string;
@@ -82,14 +95,11 @@ export interface BakeSpec {
 }
 
 /**
- * Shared helper for the "bake these computed properties when non-default" feature
- * handlers for tables, lists, forms, and text micro-features. Pairs each live element
- * with its clone, reads the live computed value, and bakes the non-default ones
- * onto the clone, both inline and bakedStyles, skipping any already baked by the
- * per-element pass.
+ * Bakes a list of computed properties onto every clone, wherever the live value is
+ * non-default and the per-element pass has not already baked it.
  *
- * Keeping the getComputedStyle read here, in the reconcile core, also keeps the
- * leaf handlers themselves free of it.
+ * This is the shape the tables, lists, forms, and text handlers all wanted. Keeping the
+ * getComputedStyle read here also keeps those leaf handlers free of it.
  *
  * @param captured - bakedStyles + clone mutated in place
  */
@@ -101,29 +111,19 @@ export function bakeNonDefaultProps(captured: Captured, specs: BakeSpec[]): void
 			if (baked.has(prop)) continue;
 			const value = computed.getPropertyValue(prop);
 			if (!value || isDefault(value)) continue;
-			baked.set(prop, value);
-			try {
-				(clone as HTMLElement).style.setProperty(prop, value);
-			} catch {
-				// Invalid for this element, so skip it.
-			}
+			setBaked(clone, baked, prop, value);
 		}
 		if (baked.size > 0) captured.bakedStyles.set(clone, baked);
 	}
 }
 
-/**
- * The fallback context for the redundancy test: the values a declaration would
- * resolve to if dropped, plus whether the element establishes a transform.
- */
+/** What a declaration would fall back to if dropped, plus the element's transform context. */
 export interface RedundancyContext {
-	/** The value a NON-inherited property falls back to with no declaration: the
-	 * per-tag ua default for denoise, or the css initial value for a pseudo-element.
-	 * Undefined when no baseline is available, which keeps the declaration. */
+	/** Fallback for a NON-inherited property: the per-tag ua default, or a pseudo's css
+	 * initial. Undefined means no baseline, which keeps the declaration. */
 	defaultValue: string | undefined;
-	/** The value an INHERITED property falls back to with no declaration: the
-	 * immediate parent's computed value for denoise, or the originating element's
-	 * computed value for a pseudo-element. Undefined when none, which keeps it. */
+	/** Fallback for an INHERITED property: the parent's computed value, or the originating
+	 * element's for a pseudo. Undefined means none, which keeps it. */
 	inheritedValue: string | undefined;
 	/** Whether this property inherits by default. See inheritsProperty. */
 	inherits: boolean;
@@ -134,17 +134,13 @@ export interface RedundancyContext {
 }
 
 /**
- * Pure test for a declaration that can be dropped without changing rendering. It
- * either has no effect in this context (such as an inert transition or an orphan
- * transform-origin), or it merely restates the value the element falls back to anyway.
- * That fallback is the ua default for a non-inherited property, or the inherited value
- * for an inherited one.
+ * Pure test for a declaration that can be dropped without changing rendering. Either it has
+ * no effect here (an inert transition, an orphan transform-origin), or it restates the value
+ * the element falls back to anyway.
  *
- * Every drop is render-identical by construction, so the caller can remove the
- * declaration with zero pixel change. The match is exact-string against a value the
- * caller resolved from ground truth, so an unrecognized form is kept, never guessed.
- * This is the same "validate against ground truth, never heuristics" stance bake.ts
- * takes. Here it decides removal instead of baking.
+ * The match is exact-string against a value the caller resolved from ground truth, so an
+ * unrecognized form is kept rather than guessed at. Same stance bake.ts takes, applied to
+ * removal instead of baking.
  *
  * @returns true when the declaration is safe to drop
  */
@@ -152,38 +148,27 @@ export function isRedundantDecl(prop: string, value: string, ctx: RedundancyCont
 	const v = value.trim();
 	// Custom properties never enumerate in getComputedStyle and carry author intent.
 	if (prop.startsWith('--')) return false;
-	// An empty value does not serialize anyway, so keep it. Removing it would mean
-	// calling removeProperty on the name. For a shorthand (above all the `all` reset),
-	// that cascades to every longhand and wipes the element's whole inline style.
+	// An empty value does not serialize anyway. Dropping it means removeProperty, and on a
+	// shorthand (the `all` reset above all) that wipes the element's whole inline style.
 	if (v === '') return false;
-	// A transition acts only on a state change, never at rest, so a zeroed one is
-	// pure noise. Real durations stay so a polish-added :hover still animates.
+	// A transition acts only on a state change, so a zeroed one is noise at rest. Real
+	// durations stay, so a polish-added :hover still animates.
 	if (prop === 'transition') return isInertTransition(v);
 	if (prop.startsWith('transition-')) return false;
-	// transform-origin/perspective-origin resolve to per-element pixels, so a probe
-	// default is not comparable, and act only on a box that has a transform or
-	// perspective. Without one they render identically whether present or not.
+	// The origin properties act only on a box that has a transform or perspective, and their
+	// per-element pixel values are not comparable to a probe default anyway.
 	if (prop === 'transform-origin') return !ctx.hasTransform;
 	if (prop === 'perspective-origin') return !ctx.hasTransform && !ctx.hasPerspective;
-	// Layout/used-value properties resolve to per-element pixels. A probe value is a
-	// different element's pixels, so equality is meaningless. Geometry is baked
-	// deliberately, so keep it.
+	// Layout properties resolve to this element's own pixels, so a probe value is a different
+	// element's pixels and equality means nothing. Geometry is baked on purpose.
 	if (LAYOUT_PROPS.has(prop)) return false;
-	// Inherited: redundant only when it equals the value the element inherits anyway.
-	// Compared against the immediate parent, never initial, so an explicit value that
-	// overrides an inheriting ancestor is never mistaken for a default.
+	// Inherited: redundant only against the immediate parent, never against initial, so a value
+	// that overrides an inheriting ancestor is never mistaken for a default.
 	if (ctx.inherits) return ctx.inheritedValue !== undefined && v === ctx.inheritedValue.trim();
-	// Non-inherited, non-layout: redundant when it equals the property's default,
-	// because dropping it falls back to exactly that default.
 	return ctx.defaultValue !== undefined && v === ctx.defaultValue.trim();
 }
 
-/**
- * Reads the transform/perspective context an element or pseudo-element establishes,
- * used to decide whether transform-origin/perspective-origin have any effect.
- *
- * @returns whether a transform and a perspective are present
- */
+/** Whether an element or pseudo establishes a transform and a perspective. */
 export function transformContext(cs: CSSStyleDeclaration): { hasTransform: boolean; hasPerspective: boolean } {
 	const present = (prop: string): boolean => {
 		const value = cs.getPropertyValue(prop);
@@ -194,10 +179,9 @@ export function transformContext(cs: CSSStyleDeclaration): { hasTransform: boole
 }
 
 /**
- * Whether a property inherits by default. This is a css-spec fact, the same one
- * bake.ts reads from the engine via a probe. It is listed here because the
- * override-trap-safe redundancy test must know inheritance independent of any value,
- * which a value-based probe cannot answer when the value equals the default.
+ * Whether a property inherits by default, from the list below rather than a probe. The
+ * redundancy test needs the answer independent of any value, which is what a value-based
+ * probe cannot give when the value happens to equal the default.
  */
 export function inheritsProperty(prop: string): boolean {
 	return INHERITED.has(prop);
@@ -215,15 +199,13 @@ export function isInjected(el: Element): boolean {
 }
 
 /**
- * Decides whether a rule contributes to an element's authored cascade.
+ * Whether a rule contributes to an element's authored cascade.
  *
- * Uses the browser's live matcher so descendant/child combinators resolve
- * against the real ancestor chain. Excludes pseudo-element rules, which target
- * ::before/::marker rather than the element and are owned by the pseudo handler, and
- * rules gated by an @media query that does not currently apply. @container/@supports
- * are not gated here. The bake probe validates every property against the
- * captured computed value, so an over-included rule can only fall back to
- * computed, never corrupt output.
+ * The browser's own matcher decides, so combinators resolve against the real ancestor chain.
+ * Pseudo-element rules are excluded (the pseudo handler owns those), as are rules under an
+ * @media that does not currently apply. @container and @supports are not gated here: the bake
+ * probe checks every property against the captured computed value, so an over-included rule
+ * can only fall back to computed.
  */
 function ruleApplies(rule: CssRule, el: Element): boolean {
 	if (rule.selector.includes('::')) return false; // Pseudo-element rule
@@ -238,9 +220,8 @@ function ruleApplies(rule: CssRule, el: Element): boolean {
 }
 
 /**
- * Evaluate an @media condition against the live environment. Exported so the
- * interactive-states handler gates its rules on the same frozen viewport the resting
- * cascade uses, for parity.
+ * Evaluate an @media condition against the live environment. Exported so the states handler
+ * gates its rules on the same frozen viewport the resting cascade used.
  */
 export function mediaApplies(query: string): boolean {
 	try {
@@ -302,9 +283,8 @@ function isInertTransition(value: string): boolean {
 }
 
 /**
- * Properties whose computed value is a per-element used value, resolved pixels,
- * which can never be compared against a probe default. Geometry is baked
- * deliberately by bake.ts, so it is kept rather than de-noised.
+ * Properties whose computed value is this element's own resolved pixels, so no probe default
+ * compares. bake.ts writes geometry on purpose, so it is kept rather than de-noised.
  */
 const LAYOUT_PROPS = new Set([
 	'width', 'height', 'min-width', 'min-height', 'max-width', 'max-height',
@@ -314,10 +294,9 @@ const LAYOUT_PROPS = new Set([
 ]);
 
 /**
- * Properties that inherit by default, per the css cascade specs: CSS2.2 plus the
- * text/font/list/table modules and their webkit aliases. Over- or under-stating
- * this set could drop a value that does not truly fall back, so it errs toward the
- * documented inherited list.
+ * Properties that inherit by default: CSS2.2 plus the text, font, list, and table modules
+ * and their webkit aliases. Getting this set wrong drops a value that does not truly fall
+ * back, so it follows the documented list rather than judgment.
  */
 const INHERITED = new Set([
 	// Color and visibility

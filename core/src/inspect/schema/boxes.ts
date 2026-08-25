@@ -1,10 +1,9 @@
 /**
  * inspect/schema/boxes.ts: the rendered-box primitives every geometric read is built on.
  *
- * Runs during the page-scoped inspect pass, against the live dom. Nothing here decides what
- * a section or a layout is; it answers the smaller questions those decisions rest on: which
- * children actually paint a box, where a wrapper chain ends, which boxes share a row, and
- * what text an element paints.
+ * Runs during the page-scoped inspect pass, against the live dom. Nothing here decides what a
+ * section or a layout is. It answers the smaller questions those rest on. Which children paint
+ * a box, where a wrapper chain ends, which boxes share a row, and what text an element paints.
  */
 import { isElementVisible, SKIP_TAGS } from './classify';
 
@@ -79,9 +78,9 @@ export function hasDirectText(el: Element): boolean {
 }
 
 /**
- * Skips the chain of single-child wrapper divs a framework build puts between a section and
- * its content, returning the first element that carries content or branches. Stops at a
- * content tag so unwrapping never descends inside a heading or a button.
+ * Skips the chain of single-child wrappers between a section and its content, returning the
+ * first element that carries content or branches. It stops at a content tag, so unwrapping
+ * never descends inside a heading or a button.
  */
 export function contentRoot(el: Element): Element {
 	let current = el;
@@ -92,8 +91,8 @@ export function contentRoot(el: Element): Element {
 		const only = kids[0]!;
 		if (CONTENT_TAGS.has(only.tagName.toLowerCase())) break;
 		if (only.children.length === 0) break;
-		// A child wider than its parent is a track being clipped or scrolled, and the parent is
-		// the window doing that. Stepping inside the track would make the track the section.
+		// A child wider than its parent is a track being scrolled, and the parent is the window
+		// doing it. Stepping inside would make the track the section.
 		if (only.getBoundingClientRect().width > current.getBoundingClientRect().width + OVERFLOW_SLACK_PX) break;
 		current = only;
 	}
@@ -150,11 +149,9 @@ export function median(values: number[]): number {
 }
 
 /**
- * The lines of text an element paints, each one the own text of a descendant, in document order.
- *
- * textContent is not usable for this: it concatenates every descendant's text with no separator,
- * so a stat block reads as "1,900+Universities" and the shape of its first line is lost. What a
- * classifier needs is the lines a reader sees, which is exactly one per text-carrying node.
+ * The lines of text an element paints, one per text-carrying descendant, in document order.
+ * textContent will not do: it concatenates with no separator, so a stat block reads as
+ * "1,900+Universities" and the shape of its first line is lost.
  */
 export function textLines(el: Element, max: number): string[] {
 	const lines: string[] = [];

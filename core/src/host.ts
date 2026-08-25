@@ -31,10 +31,7 @@ export interface Envelope<T> {
 	error?: { code?: string; message: string };
 }
 
-/**
- * The four privileged services core/ depends on. Every method is async because
- * the real implementation round-trips out of the page to the Node runner.
- */
+/** The privileged services core/ depends on. Async, because each round-trips to the runner. */
 export interface Host {
 	/** Authored inherited cascade for the node matched by selector, via the devtools protocol. */
 	cdpInherited(selector: string): Promise<Envelope<CdpInheritedResult>>;
@@ -53,10 +50,9 @@ export interface Host {
 }
 
 /**
- * The runner exposes exactly one Node function on the page, __snipHostSend, that
- * brokers a (type, payload) pair to the privileged implementation and resolves
- * with the envelope. Keeping it to one exposed binding, rather than one per
- * service, means the runner sets up the seam in a single call.
+ * The runner exposes exactly one Node function on the page, __snipHostSend, which brokers a
+ * (type, payload) pair and resolves with the envelope. One binding rather than one per service
+ * means the runner sets up the seam in a single call.
  */
 type Send = (type: string, payload: unknown) => Promise<unknown>;
 

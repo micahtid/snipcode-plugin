@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/micahtid/snip-code-cli/security/advisories/new
+    about: Report privately through a GitHub security advisory, never as a public issue.
+  - name: Chrome extension
+    url: https://github.com/micahtid/snip-code
+    about: For the point-and-click extension rather than the CLI and plugin.

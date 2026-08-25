@@ -1,9 +1,9 @@
 /**
  * inspect/schema/fingerprint.ts: compact style fingerprints and their abbreviations.
  *
- * A fingerprint is the sorted, abbreviated list of an element's non-default design properties,
- * so two elements with the same fingerprint share a style and the blueprint passes can group
- * by it. The abbreviations are also the keys of the property maps the passes read, so renaming
+ * A fingerprint is the sorted, abbreviated list of an element's non-default design properties.
+ * Two elements sharing one share a style, which is how the blueprint passes group them. The
+ * abbreviations are also the keys of the property maps the passes read, so renaming
  * one renames it everywhere.
  */
 

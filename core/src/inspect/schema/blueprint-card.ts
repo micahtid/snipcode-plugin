@@ -50,8 +50,8 @@ export function extractCardBlueprints(walked: WalkedElement[], states: StateRule
  * Describes a card's inner layout as an ordered "image + heading + text" string.
  *
  * Both the card and each of its children are unwrapped first. Reading direct children alone
- * made every framework card report "body + body", since its real content sits one or more
- * hashed divs below whatever the class-name match landed on.
+ * made every framework card report "body + body". Its real content sits one or more hashed
+ * divs below whatever the class-name match landed on.
  */
 function detectCardInnerLayout(el: Element): string {
 	const parts: string[] = [];

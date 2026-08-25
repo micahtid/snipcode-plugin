@@ -2,32 +2,28 @@
  * minimize/inline.ts: resolving var() to the value it actually holds.
  *
  * Runs in minimize, after the at-rule purge. Reconcile bakes a wall of custom properties onto
- * the rules and reads them back through var(); this resolves each reference over the elements
- * its rule matches, substitutes only when they all agree, and then drops the declarations
- * nothing references any more.
+ * the rules and reads them back through var(). This resolves each reference over the elements
+ * its rule matches, substitutes only when they all agree, then drops what nothing references.
  *
  * The substitution is oracle-gated and reverted whole if anything moved. The deletion is not,
- * and cannot be: getComputedStyle enumerates a custom property, so removing an unreferenced
+ * and cannot be. getComputedStyle enumerates a custom property, so removing an unreferenced
  * declaration changes its own computed value and the oracle would veto a no-op.
  *
- * A property carrying motion the resting frame cannot see is left alone entirely: named in
- * @keyframes, listed in a transition, or redefined by a state rule. That last case matters
- * most. Inlining a resting color: var(--x) that a :hover rule redefines would freeze the
- * color and strip the state change.
+ * A property carrying motion the resting frame cannot see is left alone: named in @keyframes,
+ * listed in a transition, or redefined by a state rule. That last matters most, since inlining
+ * a resting `color: var(--x)` a :hover redefines would freeze it and strip the state change.
  */
 import type { Captured } from '../types';
 import { withOracle, type RenderOracle } from './oracle';
 import { inScopeRule, parseSegments, serializeRules, WITHHELD } from './declarations';
 
 /**
- * Resolves `var()` references to their per-site values and drops the custom-property
- * declarations left unreferenced. It is graceful by contract, returning the input unchanged on
- * any infrastructure failure, and reverting the inlining alone if it is not render-neutral
- * while still dropping the dead declarations. It is deterministic, so rules and declarations
- * are processed in document order.
+ * Resolves `var()` to its per-site value and drops the custom properties left unreferenced.
+ * Any infrastructure failure returns the input unchanged, and inlining that is not
+ * render-neutral reverts on its own while the dead declarations still go. Document order
+ * throughout, so the result is deterministic.
  *
  * @param captured - source of the viewport size. Warnings are appended here on skip.
- * @returns the stylesheet with var() inlined and dead custom properties removed
  */
 export async function inlineVars(css: string, captured: Captured, markup: string): Promise<string> {
 	if (!css.includes('var(')) return css;
@@ -36,31 +32,27 @@ export async function inlineVars(css: string, captured: Captured, markup: string
 		const held = motionHeldNames(css);
 		addStateRedefinedNames(oracle.sheet, held);
 
-		// Inline every rule's var() references, then verify the whole batch against the render.
-		// A wrong substitution, or a value that varied across a rule's elements and slipped
-		// through, changes a computed longhand, so revert all inlining and keep the input rules.
+		// Inline every reference, then verify the batch. A wrong substitution changes a
+		// computed longhand, so the whole inlining reverts and the input rules stand.
 		const inScope = Array.from(oracle.sheet.cssRules).map(inScopeRule).filter((r): r is CSSStyleRule => r !== null);
 		const saved = inScope.map((r) => r.style.cssText);
 		for (const rule of inScope) inlineRule(oracle, rule, held);
 		if (!oracle.matchesReference()) inScope.forEach((r, i) => (r.style.cssText = saved[i]!));
 
-		// Drop custom-property declarations no longer referenced by any surviving var() and not
-		// held for motion. This is by construction, not oracle-gated. An unreferenced custom
-		// property paints nothing, so removing its declaration is render-neutral even though the
-		// oracle, which enumerates custom-property computed values, would read the change as one.
+		// Drop the custom properties no surviving var() references and no motion holds. By
+		// construction, not oracle-gated: an unreferenced custom property paints nothing, but
+		// the oracle enumerates its computed value and would read the removal as a change.
 		dropDeadCustomProps(oracle.sheet, inScope, held);
 		return serializeRules(Array.from(oracle.sheet.cssRules));
 	});
 }
 
 /**
- * The custom-property names that must not be inlined or dropped because their value carries
- * motion the resting frame cannot sample: a name written inside an @keyframes block, or a
- * name listed in a transition/animation value. A bare `@property` registration is not itself
- * a reason to hold, because a registered name nothing animates or reads governs no motion, and
- * holding it would keep alive the very dead pair the at-rule purge exists to drop. The real
- * motion carriers are keyframe writes, transition and animation mentions, and the withheld
- * state redefinitions addStateRedefinedNames adds below.
+ * The custom properties carrying motion the resting frame cannot sample, so they are neither
+ * inlined nor dropped. A name written inside @keyframes, or listed in a transition or
+ * animation value. A bare `@property` registration is not a reason to hold. A registered name
+ * nothing animates governs no motion, and holding it would keep alive the very dead pair the
+ * at-rule purge exists to drop. addStateRedefinedNames adds the third carrier below.
  */
 function motionHeldNames(css: string): Set<string> {
 	const held = new Set<string>();
@@ -75,10 +67,9 @@ function motionHeldNames(css: string): Set<string> {
 }
 
 /**
- * Adds to `held` every custom property a withheld state or pseudo rule declares. Such a
- * property changes value with the interactive state, so a resting rule that reads it through
- * var() is dynamic. Inlining that reference to the resting value would freeze it and drop the
- * state change the withheld rule reproduces.
+ * Adds every custom property a withheld state or pseudo rule declares. Such a property changes
+ * with the state, so a resting rule reading it through var() is dynamic. Inlining that
+ * reference would freeze it and drop the state change.
  *
  * @param held - the motion-held name set, extended in place
  */
@@ -92,10 +83,9 @@ function addStateRedefinedNames(sheet: CSSStyleSheet, held: Set<string>): void {
 }
 
 /**
- * Inlines one rule's var() references in place. For each declaration, each `var(--x)` whose
- * name is not motion-held is resolved to the value `--x` holds on every element the rule
- * matches. When they all agree on a non-empty value it is substituted, otherwise the
- * reference is left as written.
+ * Inlines one rule's var() references in place. Each reference whose name is not motion-held
+ * resolves to the value it holds on every element the rule matches. The substitution happens
+ * only when they all agree on a non-empty one.
  */
 function inlineRule(oracle: RenderOracle, rule: CSSStyleRule, held: Set<string>): void {
 	if (!rule.style.cssText.includes('var(')) return;
@@ -125,10 +115,9 @@ function inlineRule(oracle: RenderOracle, rule: CSSStyleRule, held: Set<string>)
 }
 
 /**
- * Substitutes the resolvable `var()` references in a declaration value. Walks the text,
- * matching each `var(` to its closing paren so a nested fallback or calc() is spanned whole,
- * and replaces the reference with `resolve(name)` when that returns a value, else leaves it.
- * Nested var() inside a kept reference's fallback is handled by re-walking the remainder.
+ * Substitutes the resolvable `var()` references in a value, walking the text and matching each
+ * `var(` to its closing paren so a nested fallback or calc() is spanned whole. A var() inside
+ * a kept reference's fallback is reached by re-walking the remainder.
  *
  * @param resolve - maps a custom-property name to its site value, or null to leave the ref
  */
@@ -186,11 +175,10 @@ function topLevelComma(inner: string): number {
 }
 
 /**
- * Removes every custom-property declaration from the in-scope rules whose name no longer
- * occurs in a `var()` anywhere in the sheet and is not motion-held. A name still read by a
- * var() in any rule, resting, withheld, or a fallback, is kept, since its declaration is
- * load-bearing. Removal is on the cssom, so a value carrying a `;` inside a url() or function
- * is handled by the parser rather than a text split.
+ * Removes every custom property whose name no longer appears in a `var()` anywhere in the
+ * sheet and is not motion-held. A name still read from any rule, or from a fallback, is
+ * load-bearing and stays. Removal runs on the cssom, so the parser handles a value carrying a
+ * `;` inside a url() rather than a text split.
  *
  * @param sheet - the mounted stylesheet, mutated in place
  */

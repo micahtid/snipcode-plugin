@@ -1,0 +1,56 @@
+name: Bug report
+description: Something snipcode did wrong on a real page.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The url and the exact command are what make a bug reproducible. Without them almost
+        nothing can be checked, because every answer snipcode gives is measured from a page.
+
+  - type: input
+    id: command
+    attributes:
+      label: The command you ran
+      placeholder: snipcode extract https://example.com --selector ".card" --format tailwind
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and what you got
+      description: Paste the JSON snipcode printed, or the part of the artifact that is wrong.
+    validations:
+      required: true
+
+  - type: textarea
+    id: warnings
+    attributes:
+      label: Warnings
+      description: The `warnings` array from the JSON output, if it carried any.
+      render: text
+
+  - type: input
+    id: version
+    attributes:
+      label: snipcode version
+      description: The output of `snipcode --version`.
+    validations:
+      required: true
+
+  - type: input
+    id: platform
+    attributes:
+      label: OS and Node version
+      placeholder: macOS 15, Node 20.11
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before filing
+      options:
+        - label: The page loads without a login or a bot wall.
+        - label: I ran `npx playwright install chromium` at least once on this machine.

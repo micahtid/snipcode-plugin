@@ -1,10 +1,9 @@
 /**
  * utils/color.ts: the color parsing, serializing, and perceptual math every phase shares.
  *
- * There was no home for this, so each phase that needed a hex parser or an rgb serializer
- * wrote its own. Domain-specific color work stays with its domain: the tailwind palette
- * table and deltaE2000 in convert/tw-palette.ts, normalizeColor and effectiveBackground in
- * inspect/schema/shared.ts, the canvas sampling in minimize/colorize.ts.
+ * There was no home for this, so each phase needing a hex parser wrote its own. Domain-specific
+ * color work stays with its domain: the tailwind palette in convert/tw-palette.ts,
+ * normalizeColor in inspect/schema/shared.ts, the canvas sampling in minimize/colorize.ts.
  */
 
 /** Parsed rgb channels 0-255, plus alpha 0-1. */
@@ -44,11 +43,9 @@ export function hexToRgb(hex: string): { r: number; g: number; b: number } | nul
 }
 
 /**
- * Whether a normalized color value is fully transparent, painting nothing.
- *
- * Only the two spellings a computed style actually produces for "nothing". A color that
- * merely carries a zero alpha in some other notation is not matched here; the caller that
- * needs that broader test is reconcile/standalone.ts, which has its own.
+ * Whether a normalized color paints nothing: only the two spellings a computed style produces.
+ * A zero alpha in another notation is not matched, and reconcile/standalone.ts, the one caller
+ * that needs the broader test, has its own.
  */
 export function isTransparentColor(value: string): boolean {
 	return value === 'transparent' || value === 'rgba(0, 0, 0, 0)';
@@ -61,10 +58,8 @@ function srgbToLinear(c: number): number {
 }
 
 /**
- * RGB to Oklab, the perceptually uniform model color clustering measures distance in.
- *
- * Clustering a page's palette needs a distance that matches what an eye calls "the same
- * color", which sRGB does not give.
+ * RGB to Oklab, the perceptually uniform model clustering measures distance in. Clustering a
+ * palette needs a distance matching what an eye calls the same color, which sRGB does not give.
  */
 export function rgbToOklab(r: number, g: number, b: number): Oklab {
 	const lr = srgbToLinear(r);

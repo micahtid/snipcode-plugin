@@ -2,8 +2,8 @@
  * inspect/schema/classify.ts: each element's semantic role.
  *
  * Runs during the page-scoped inspect pass, against the live dom. The walk and the blueprint
- * passes group by role, so it is decided once here: from the aria role first, then, for the
- * tags that only package what they hold, from visual evidence, and only then from the tag map.
+ * passes group by role, so the role is decided once here. The aria role answers first. Then,
+ * for the tags that only package what they hold, visual evidence does. The tag map is last.
  * A card has a visual container shape; a container is a flex or grid with children.
  */
 
@@ -38,10 +38,9 @@ const ARIA_ROLE_MAP: Record<string, SemanticRole> = {
 export const SKIP_TAGS = new Set(['script', 'noscript', 'style', 'template', 'iframe', 'link', 'meta', 'head', 'base', 'br', 'wbr']);
 
 /**
- * Tags that only package what they hold, so what the element visibly is outranks what it is
- * called. An `<article>` styled exactly like a card is a card; reading the tag map first said
- * `section` and the card blueprint never saw it, which is why the fixture had to use divs to
- * test cards at all.
+ * Tags that only package what they hold, so what an element visibly is outranks what it is
+ * called. An `<article>` styled like a card is a card; reading the tag map first said `section`
+ * and the card blueprint never saw it.
  */
 const CONTAINERISH_TAGS = new Set(['article', 'section', 'aside', 'li', 'div']);
 
@@ -53,8 +52,8 @@ export function classifyElement(element: Element): SemanticRole {
 	const ariaRole = element.getAttribute('role');
 	if (ariaRole && ARIA_ROLE_MAP[ariaRole]) return ARIA_ROLE_MAP[ariaRole];
 
-	// A tag that names what it is answers straight away. A tag that only packages what it holds
-	// waits for the visual evidence below, and takes its turn as the fallback afterwards.
+	// A tag that names what it is answers straight away. A packaging tag waits for the visual
+	// evidence below, then takes its turn as the fallback.
 	const mapped = TAG_ROLE_MAP[tag];
 	if (mapped && !CONTAINERISH_TAGS.has(tag)) return mapped;
 
@@ -84,11 +83,10 @@ export function isElementVisible(element: Element): boolean {
 /**
  * True when an opacity-0 element is authored to appear rather than to stay hidden.
  *
- * A scroll-reveal library holds its content at opacity 0 until it enters the viewport, so a
- * section below the last scroll step, or one a library re-hides, is at opacity 0 when the schema
- * reads it and vanishes from the page entirely. An element with an opacity transition or an
- * animation declared was written to fade in. Flow position is what tells it apart from a dropdown
- * or a tooltip hidden the same way: reveal content is in flow, an overlay is taken out of it.
+ * A scroll-reveal library holds content at opacity 0 until it enters the viewport, so a section
+ * below the last scroll step vanishes from the schema entirely. An opacity transition or a
+ * declared animation says it was written to fade in. Flow position separates it from a
+ * dropdown hidden the same way: reveal content is in flow, an overlay is not.
  */
 function isRevealPending(computed: CSSStyleDeclaration): boolean {
 	if (computed.position === 'absolute' || computed.position === 'fixed') return false;
@@ -98,9 +96,9 @@ function isRevealPending(computed: CSSStyleDeclaration): boolean {
 }
 
 /**
- * Card heuristic: a visual container, meaning border / shadow / radius / background
- * that differs from its parent, with structured children, excluding modals, dialogs,
- * pills, tiny boxes, and absolutely-positioned decorations.
+ * Card heuristic: a visual container, meaning a border, shadow, radius, or background that
+ * differs from its parent, with structured children. Modals, pills, tiny boxes, and
+ * absolutely-positioned decorations are excluded.
  */
 function isCard(element: Element, computed: CSSStyleDeclaration): boolean {
 	const hasBorder = computed.borderWidth !== '0px' && computed.borderStyle !== 'none';

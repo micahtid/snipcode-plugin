@@ -1,8 +1,8 @@
 /**
  * cli/src/schema-md.ts: rendering the schema as the markdown an agent reads.
  *
- * schema.json is the complete record; this is the part meant to be read in one pass, so it is
- * ordered by what a rebuild needs first: tokens, then the section sequence, then the component
+ * schema.json is the complete record. This is the part meant to be read in one pass. Its order
+ * is what a rebuild needs first: tokens, then the section sequence, then the component
  * blueprints, then the page's decorative and responsive language.
  *
  * Anything the schema measured as unknown is printed as unknown rather than omitted. A missing
@@ -178,10 +178,10 @@ function renderComponents(schema: PageSchema, push: (s?: string) => void): void 
  * The background effects that name a section, each rendered as "gradient (hero)".
  *
  * An effect the schema could not place is left out. With nowhere attached it reads as
- * permission to paint the effect wherever convention suggests, which is how a rebuild put
- * gradients into a hero whose measured background is flat. Nothing is lost by dropping it: a
- * section actually painted as a gradient states the whole gradient on its own bg line, and the
- * unplaced entries stay in schema.json for anyone inspecting the measurement.
+ * permission to paint the effect wherever convention suggests. That is how a rebuild put
+ * gradients into a hero whose measured background is flat. Nothing is lost by dropping it. A
+ * section actually painted as a gradient states it on its own bg line, and the unplaced
+ * entries stay in schema.json for anyone inspecting the measurement.
  */
 function locatedEffects(effects: BackgroundEffect[], sections: SectionBlueprint[]): string[] {
 	const names = sectionNames(sections);
@@ -194,8 +194,8 @@ function locatedEffects(effects: BackgroundEffect[], sections: SectionBlueprint[
 }
 
 /**
- * One name per section: its type, carrying its position among sections of the same type when
- * the page has more than one, so "logos 2" always points at exactly one section.
+ * One name per section, which is its type. Where the page has more than one of a type, the
+ * position rides along, so "logos 2" always points at exactly one section.
  */
 function sectionNames(sections: SectionBlueprint[]): string[] {
 	const totals = new Map<string, number>();

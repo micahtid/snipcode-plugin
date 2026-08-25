@@ -33,6 +33,37 @@ export function normalizeFormat(input: string | undefined): OutputFormat {
 	return format;
 }
 
+/** The only schemes the runner will load. snipcode reads web pages, never the local disk. */
+const URL_SCHEMES = ['http:', 'https:'];
+
+/** A leading `word:`, and the `host:port` form that looks like one but is not. */
+const SCHEME = /^[a-zA-Z][a-zA-Z0-9+.-]*:/;
+const HOST_PORT = /^[^/?#:]+:\d+(?:$|[/?#])/;
+
+/**
+ * Normalize a <url> argument to an absolute http or https url, or throw with the reason.
+ *
+ * Two jobs. A bare host gains https://, so `snipcode schema example.com` loads the page rather
+ * than dying inside Playwright with a stack trace that reads like a crash. Every other scheme
+ * is refused: file: and data: would turn a page reader into a way to read the caller's disk.
+ */
+export function normalizeUrl(input: string): string {
+	const raw = input.trim();
+	if (!raw) throw new Error('<url> is empty');
+	// `localhost:3000` matches the scheme shape, so the port form is checked first.
+	const bare = !SCHEME.test(raw) || HOST_PORT.test(raw);
+	let parsed: URL;
+	try {
+		parsed = new URL(bare ? `https://${raw}` : raw);
+	} catch {
+		throw new Error(`<url> is not a url: ${input}`);
+	}
+	if (!URL_SCHEMES.includes(parsed.protocol)) {
+		throw new Error(`<url> must be http or https, not "${parsed.protocol.slice(0, -1)}": ${input}`);
+	}
+	return parsed.href;
+}
+
 /** Print one success payload as JSON and exit 0. */
 export function emit(payload: unknown): void {
 	process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);

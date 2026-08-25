@@ -1,16 +1,15 @@
 /**
  * test/golden.ts: byte-for-byte snapshots of everything the cli writes.
  *
- * Runs each command over the fixture pages, normalizes the parts that are allowed to
- * differ between runs (the timestamp, the version, the ephemeral port, absolute paths),
- * and compares the result against a committed file. Any other difference fails.
+ * Runs each command over the fixture pages and compares the result against a committed file.
+ * The parts allowed to differ between runs, the timestamp, the version, the ephemeral port,
+ * and absolute paths, are normalized first. Any other difference fails.
  *
- * Snapshots are stored per platform, because they are not portable across one. Both the
- * extract artifacts and the schema measurements carry text box geometry, and system-ui
- * resolves to a different font with different glyph metrics on every operating system,
- * which moves those numbers by more than any tolerance worth having. The measurements
- * themselves are asserted portably in test/run.ts; this file pins the exact bytes. A
- * platform with no committed baseline is reported and skipped rather than failed.
+ * Snapshots are stored per platform, because they are not portable across one. The extract
+ * artifacts and the schema measurements both carry text box geometry, and system-ui resolves
+ * to a different font on every operating system. That moves the numbers by more than any
+ * tolerance worth having. test/run.ts asserts the measurements portably; this file pins the
+ * exact bytes. A platform with no committed baseline is reported and skipped rather than failed.
  *
  * Run with: npm test. Rewrite the snapshots with: npm run test:golden -- --update.
  * Updating a golden produces a reviewable diff, which is the point: a change that claims

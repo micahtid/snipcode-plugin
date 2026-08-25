@@ -2,13 +2,14 @@
  * capture/sheets.ts: every rule on the page, flattened.
  *
  * Runs during capture, over document.styleSheets. A snipped element's appearance comes from
- * rules scattered across every sheet, so all of them collapse into one CssRule list that keeps
- * each rule's grouping context (@media, @container, @layer, @supports) for later phases to
- * judge. Broadly scoped foundation rules (html, body, :root, *) are split from element-scoped
- * ones. A cross-origin sheet that throws on .cssRules is recorded here and recovered in cdp.ts.
+ * rules scattered across every sheet. All of them collapse into one CssRule list that keeps
+ * each rule's grouping context for later phases to judge. The broadly scoped foundation rules
+ * split from the element-scoped ones, and a cross-origin sheet that throws on .cssRules is
+ * recorded here and recovered in cdp.ts.
  */
 import type { CssRule, CssVariable, FontFace, Keyframes, Stylesheet } from '../types';
 import { holdsChildRules } from '../utils/css-rules';
+import { absolutizeUrls } from '../utils/css-urls';
 
 /** Everything sheets discovery contributes to Captured, returned for the orchestrator to assign. */
 export interface SheetDiscovery {
@@ -30,12 +31,8 @@ interface RuleContext {
 }
 
 /**
- * Walks every accessible stylesheet in the document and flattens it.
- *
- * Cross-origin sheets raise a SecurityError when their .cssRules is read. We
- * catch that and record the href for later background fetch rather than failing.
- *
- * @returns the discovered rules, variables, fonts, keyframes, and sheet metadata
+ * Walks every accessible stylesheet and flattens it. A cross-origin sheet raises on .cssRules,
+ * and its href is recorded for a later background fetch rather than failing the walk.
  */
 export function discoverStylesheets(): SheetDiscovery {
 	const out: SheetDiscovery = {
@@ -54,8 +51,7 @@ export function discoverStylesheets(): SheetDiscovery {
 		try {
 			rules = sheet.cssRules; // Throws SecurityError on cross-origin
 		} catch {
-			// Cannot read this sheet from the content script. Remember its href so
-			// capture/cdp.ts can recover it later through the Host.
+			// Unreadable from the content script, so capture/cdp.ts recovers it by href.
 			if (sheet.href) out.crossOriginStylesheets.push(sheet.href);
 			out.stylesheets.push({ href: sheet.href, origin: 'cross-origin', ruleCount: 0 });
 			continue;
@@ -63,10 +59,9 @@ export function discoverStylesheets(): SheetDiscovery {
 		const before = out.foundationRules.length + out.componentRules.length;
 		const fontsBefore = out.fonts.length;
 		walkRules(rules, {}, out, 'cssom');
-		// An @font-face src is relative to its own stylesheet, not the page, so absolutize
-		// the faces this sheet contributed against the sheet url, or the document url for an
-		// inline <style>. A relative src on a sheet served from a sub-path, such as the next.js
-		// /_next/static/css shape, otherwise resolves against the page root and 404s.
+		// A @font-face src is relative to its own stylesheet, not the page, so this sheet's
+		// faces absolutize against the sheet url. Otherwise a sheet served from a sub-path,
+		// the next.js /_next/static/css shape, resolves against the page root and 404s.
 		absolutizeFontSrcs(out.fonts, fontsBefore, sheet.href || document.baseURI);
 		const after = out.foundationRules.length + out.componentRules.length;
 		out.stylesheets.push({ href: sheet.href, origin, ruleCount: after - before });
@@ -76,15 +71,9 @@ export function discoverStylesheets(): SheetDiscovery {
 }
 
 /**
- * Parses a raw css string into the same discovery shape, for cross-origin sheets
- * recovered through the Host.
- *
- * Uses a constructable stylesheet so parsing never touches the live page. The
- * resulting rules carry the caller's `source` tag so downstream phases can tell
- * recovered rules from cssom-read ones.
- *
- *   the sheet, not the page. Omitted when the caller absolutizes itself
- * @returns the discovery deltas: rules, variables, fonts, keyframes
+ * Parses raw css into the same discovery shape, for a cross-origin sheet recovered through the
+ * Host. A constructable stylesheet keeps the parse off the live page. The rules carry the
+ * caller's `source` tag, so later phases can tell a recovered rule from a cssom-read one.
  */
 export async function parseCssText(cssText: string, source: CssRule['source'] = 'cssom', base?: string): Promise<SheetDiscovery> {
 	const out: SheetDiscovery = {
@@ -103,28 +92,17 @@ export async function parseCssText(cssText: string, source: CssRule['source'] = 
 	return out;
 }
 
-/** Matches each url() token in a css value, typically a font src, quote-tolerant. */
-const URL_IN_SRC = /url\(\s*(['"]?)([^'")]+)\1\s*\)/g;
-
 /**
  * Rewrites the src of every face from index `start` onward to an absolute url against
- * `base`, the owning stylesheet's url. data:/blob:/already-absolute urls and local()
- * sources are left untouched, so the rewrite is idempotent.
+ * `base`, the owning stylesheet's url. Idempotent, because absolutizeUrls leaves an
+ * already-resolved target alone and never matches a local() source.
  *
  * @param fonts - the discovered faces, mutated in place from `start`
  */
 function absolutizeFontSrcs(fonts: FontFace[], start: number, base: string): void {
 	for (let i = start; i < fonts.length; i++) {
 		const font = fonts[i];
-		if (!font) continue;
-		font.src = font.src.replace(URL_IN_SRC, (match, quote: string, url: string) => {
-			if (/^(data:|blob:|https?:)/i.test(url)) return match;
-			try {
-				return `url(${quote}${new URL(url, base).href}${quote})`;
-			} catch {
-				return match;
-			}
-		});
+		if (font) font.src = absolutizeUrls(font.src, base);
 	}
 }
 
@@ -140,10 +118,9 @@ function sheetOrigin(sheet: CSSStyleSheet): Stylesheet['origin'] {
 }
 
 /**
- * Recursively flattens a rule list, threading grouping context down into nested
- * blocks. Style rules become CssRule entries. @font-face and @keyframes are
- * lifted into their own collections, and custom properties are harvested as
- * CssVariable definitions.
+ * Flattens a rule list, threading grouping context into nested blocks. Style rules become
+ * CssRule entries, @font-face and @keyframes lift into their own collections, and custom
+ * properties are harvested as CssVariable definitions.
  */
 function walkRules(rules: CSSRuleList, ctx: RuleContext, out: SheetDiscovery, source: CssRule['source']): void {
 	for (const rule of Array.from(rules)) {
@@ -163,10 +140,9 @@ function walkRules(rules: CSSRuleList, ctx: RuleContext, out: SheetDiscovery, so
 					.join('\n'),
 			});
 		} else if (holdsChildRules(rule)) {
-			// @layer {... } and @container... {... }. These are recent rule
-			// types not always present in the dom lib, so detect structurally and read
-			// their identifying field defensively. The layers/units handlers refine
-			// this later. Here we just preserve the context.
+			// @layer and @container are recent enough that the dom lib may not declare them,
+			// so they are detected structurally. The layers and units handlers refine this
+			// later; here the context is only preserved.
 			const layer = readField(rule, 'name');
 			const containerQuery = readField(rule, 'conditionText');
 			walkRules(rule.cssRules, {
@@ -175,8 +151,7 @@ function walkRules(rules: CSSRuleList, ctx: RuleContext, out: SheetDiscovery, so
 				...(containerQuery ? { containerQuery } : {}),
 			}, out, source);
 		}
-		// CSSImportRule and others are ignored here. @import resolution for
-		// cross-origin sheets is handled at fetch time.
+		// CSSImportRule and the rest are ignored: @import resolves at fetch time.
 	}
 }
 
@@ -248,12 +223,9 @@ function readField(rule: CSSRule, field: string): string {
 }
 
 /**
- * Computes selector specificity as a*10000 + b*100 + c.
- *
- * A = id count, b = class/attribute/pseudo-class count, c = element/
- * pseudo-element count. This is the classic three-tuple flattened to one number,
- * good enough for cascade ordering in the reconcile phase. Pseudo-elements
- * (::before) count toward c, pseudo-classes (:hover) toward b.
+ * Selector specificity as a*10000 + b*100 + c: ids, then classes and attributes and
+ * pseudo-classes, then elements and pseudo-elements. The classic three-tuple flattened to one
+ * number, which is enough for cascade ordering in reconcile.
  */
 export function specificityOf(selector: string): number {
 	// Score the most specific comma-branch, matching querySelector semantics.

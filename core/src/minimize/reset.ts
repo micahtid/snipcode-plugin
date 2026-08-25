@@ -1,27 +1,22 @@
 /**
  * minimize/reset.ts: hoisting the lines everyone writes once to the top.
  *
- * Runs in minimize, after var inlining and before the closing prune rerun. Reconcile bakes
- * box-sizing onto every rule and repeats the same link, list, and button zeroing element after
- * element. This injects the canonical reset so the prune that follows can delete those
- * restatements.
+ * Runs in minimize, after var inlining and before the closing prune rerun. Reconcile repeats
+ * the same box-sizing, link, list, and button zeroing element after element, so injecting the
+ * canonical reset lets the prune that follows delete those restatements.
  *
  * Each line is an addition candidate, the reverse of prune's deletion: inserted at the top and
- * kept only when the oracle confirms no element's render moved. A low-specificity selector is
- * overridden by any real rule, so a deviant element keeps its own and vetoes nothing.
+ * kept only when the oracle sees no element move. Its selector is low-specificity, so a
+ * deviant element keeps its own rule and vetoes nothing.
  *
- * Lines stay one property wide, because acceptance is all or nothing per line and one deviant
- * element would otherwise veto a coarse line and lose the rest with it.
+ * Lines stay one property wide, because acceptance is all or nothing per line. A coarse line
+ * would let one deviant element veto the rest along with it.
  */
 import type { Captured } from '../types';
 import { withOracle, type RenderOracle } from './oracle';
 import { serializeRules } from './declarations';
 
-/**
- * The canonical minimal reset, each line a widely known human idiom kept fine grained so a
- * deviant element vetoes only its own line. Injected one at a time and kept only when
- * render-neutral, so the output never gains a rule that shifts it.
- */
+/** The canonical minimal reset, one idiom per line so a deviant element vetoes only that line. */
 const RESET_RULES = [
 	'*, *::before, *::after { box-sizing: border-box; }',
 	'button, input, select, textarea { font: inherit; color: inherit; }',
@@ -38,13 +33,11 @@ const RESET_RULES = [
 ];
 
 /**
- * Injects the canonical reset lines the oracle confirms are render-neutral at the top of the
- * sheet. It is graceful by contract, returning the input unchanged on any infrastructure
- * failure. It is deterministic, so the reset lines are tried in a fixed order. The redundant
- * per-rule restatements this makes removable are dropped by the prune pass that runs after it.
+ * Prepends the reset lines the oracle confirms are render-neutral. Tried in a fixed order, so
+ * the result is deterministic, and any infrastructure failure returns the input unchanged. The
+ * restatements this makes removable are dropped by the prune pass that runs after.
  *
  * @param captured - source of the viewport size. Warnings are appended here on skip.
- * @returns the stylesheet with the accepted reset lines prepended, or the input unchanged
  */
 export async function injectReset(css: string, captured: Captured, markup: string): Promise<string> {
 	return withOracle(css, captured, markup, 'minimize: reset skipped', (oracle) => {
@@ -65,12 +58,10 @@ export async function injectReset(css: string, captured: Captured, markup: strin
 }
 
 /**
- * Whether an injected reset line left the render unchanged. An element-scoped line, `a` or
- * `button`, can change only the elements its selector matches and their descendants, so it is
- * verified against just that subtree, far cheaper than reading the whole render for each of the
- * many element-scoped lines. The universal `*` line reaches every element, so it is checked
- * against the whole render. A selector that will not parse falls back to the same whole-render
- * check. Subtree soundness is the same one the prune and logical phases rely on (see subtreeTargets).
+ * Whether an injected reset line left the render unchanged. An element-scoped line reaches only
+ * what its selector matches, plus descendants, so it is checked against that subtree alone, far
+ * cheaper than reading the whole render each time. The universal `*` line, and any selector
+ * that will not parse, falls back to the whole render. Soundness is subtreeTargets'.
  */
 function renderNeutral(oracle: RenderOracle, rule: string): boolean {
 	const selector = rule.slice(0, rule.indexOf('{')).trim();

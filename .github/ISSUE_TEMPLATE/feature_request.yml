@@ -1,0 +1,38 @@
+name: Feature request
+description: Something snipcode should do that it does not.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        snipcode is deterministic eyes and hands: it loads a page, measures it, and converts
+        what it measured. It makes zero LLM calls and no judgment calls, so a request that
+        needs taste, naming, or design sense belongs with the agent rather than here.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you were trying to do
+      description: The task, not the feature. What did you want out of the page?
+    validations:
+      required: true
+
+  - type: textarea
+    id: gap
+    attributes:
+      label: Where the current commands fall short
+      description: What `candidates`, `extract`, or `schema` gives you today, and what is missing.
+    validations:
+      required: true
+
+  - type: input
+    id: page
+    attributes:
+      label: A page that shows it
+      description: A public url where the gap is visible.
+
+  - type: textarea
+    id: shape
+    attributes:
+      label: What the output would look like
+      description: Optional. A sketch of the JSON, the css, or the schema line you would want.

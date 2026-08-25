@@ -5,15 +5,15 @@
  * the JSON guidance fields, which read the same source. The plugin manifest comes from
  * package.json, because the version was hand written in both. Run via npm run gen:skill.
  *
- * Composing and writing are separate. They used to be one step that ran on import, so the only
- * way to see what the generator would produce was to let it rewrite the tracked files.
- * composeSkills returns them without touching disk, which is what lets the suite compare them
- * to what is committed.
+ * Composing and writing are separate. They used to be one step that ran on import, so seeing
+ * what the generator would produce meant letting it rewrite the tracked files. composeSkills
+ * returns them without touching disk, which is what lets the suite compare them to what is
+ * committed.
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { AUTHORITY, SETUP, SNIP_FLOW, SCHEMA_FLOW, CANDIDATES, EXTRACT, SCHEMA, NAMING, REDESIGN, RULES } from '../../instructions/guidance';
+import { AUTHORITY, SETUP, URLS, SNIP_FLOW, SCHEMA_FLOW, CANDIDATES, EXTRACT, SCHEMA, NAMING, REDESIGN, RULES } from '../../instructions/guidance';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SKILLS_DIR = join(ROOT, 'skill', 'skills');
@@ -42,6 +42,10 @@ function skillFile(name: string, description: string, sections: [title: string, 
 		'## Setup',
 		'',
 		SETUP,
+		'',
+		'## Urls',
+		'',
+		URLS,
 		...sections.flatMap(([title, text]) => ['', `## ${title}`, '', text]),
 		'',
 	].join('\n');
@@ -96,8 +100,8 @@ interface PackageFields {
  * The plugin manifest, built from package.json.
  *
  * The version used to be hand written here as well as in package.json and core/src/entry.ts.
- * On the first bump the manifest would have kept reporting the old number, and the schema
- * stamp an agent reads to spot a stale file would have been the thing that was stale.
+ * On the first bump the manifest would have kept reporting the old number. The schema stamp an
+ * agent reads to spot a stale file would itself have been stale.
  */
 function pluginManifest(): string {
 	const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as PackageFields;

@@ -1,11 +1,10 @@
 /**
  * test/parity.ts: extension-vs-cli parity bench.
  *
- * Confirms the port did not change behavior: it snips the same element two ways, the
- * built SnipCode extension (chrome.debugger + background fetch) and this plugin's cli
- * (Playwright CDPSession + node fetch), then renders both artifacts and pixel-compares
- * them. A low mismatch means the Host reimplementation reproduces the extension's
- * result. Render parity, not byte parity: generated class names differ harmlessly
+ * Confirms the port did not change behavior. It snips the same element two ways, through the
+ * built SnipCode extension and through this plugin's cli, then renders both artifacts and
+ * pixel-compares them. A low mismatch means the Host reimplementation reproduces the
+ * extension's result. Render parity, not byte parity: generated class names differ harmlessly
  * between runs, but the rendered pixels must match.
  *
  * Dev-only and optional: it reaches into the sibling chrome-extension test harness, so

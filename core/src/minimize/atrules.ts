@@ -4,16 +4,16 @@
  * Runs in minimize, after merge. A utility bundle registers dozens of custom properties, and
  * once prune has deleted the declarations that used them most govern nothing.
  *
- * Liveness is a read count, judged textually, never by the resting oracle. getComputedStyle
- * enumerates a registered custom property, so removing an unreferenced registration changes
- * that property's computed value and the oracle would veto a no-op. A name that is only
- * written, or appears only in its own registration, governs no paint and is dead.
+ * Liveness is a read count judged textually, never by the resting oracle. getComputedStyle
+ * enumerates a registered custom property, so dropping an unreferenced registration changes
+ * that computed value and the oracle would veto a no-op. A name only written, or appearing
+ * only in its own registration, governs no paint.
  *
- * Var inlining removes reference sites, so registrations can become newly dead after it. The
- * purge is idempotent and runs again there.
+ * Var inlining removes reference sites, so registrations can die after it. The purge is
+ * idempotent and runs again there.
  */
 import { serializeRules } from './declarations';
-import { holdsChildRules } from '../utils/css-rules';
+import { holdsChildRules, parseCss } from '../utils/css-rules';
 
 /** A grouping rule (@media/@layer/@supports) whose child rules can be walked and deleted. */
 type RuleContainer = CSSStyleSheet | CSSGroupingRule;
@@ -27,23 +27,16 @@ interface PropertyRuleRef {
 
 /**
  * Drops every `@property` registration whose custom-property name is never read, meaning no
- * var() reference and no transition or animation mention anywhere in the sheet. Parses the css
- * into a constructable stylesheet, the same side-effect-free cssom parse formatCss uses, so
- * nothing touches the live page. It is graceful by contract, returning the input unchanged when
- * the css will not parse or carries no registration. It is deterministic, a pure function of
- * the input text.
+ * var() reference and no transition or animation mention anywhere in the sheet. Graceful by
+ * contract: css that will not parse, or carries no registration, comes back unchanged. A pure
+ * function of the input text.
  *
  * @returns the stylesheet with dead registrations removed, or the input unchanged
  */
 export function purgeAtRules(css: string): string {
 	if (!css.trim() || !/@property\s/.test(css)) return css;
-	let sheet: CSSStyleSheet;
-	try {
-		sheet = new CSSStyleSheet();
-		sheet.replaceSync(css);
-	} catch {
-		return css;
-	}
+	const sheet = parseCss(css);
+	if (!sheet) return css;
 	const registrations: PropertyRuleRef[] = [];
 	collectPropertyRules(sheet, registrations);
 	const dead = registrations.filter((r) => nameReads(css, r.name) === 0);
@@ -53,10 +46,9 @@ export function purgeAtRules(css: string): string {
 }
 
 /**
- * Recursively collects every `@property` rule under a container, into `out`. A property rule
- * is detected structurally, by its `name`/`syntax` descriptor fields, because CSSPropertyRule
- * is absent from some dom lib versions. Grouping rules are descended so a registration nested
- * in an @layer or @media is found too.
+ * Collects every `@property` rule under a container. Detected structurally by its name and
+ * syntax descriptors, because CSSPropertyRule is absent from some dom lib versions. Grouping
+ * rules are descended, so a registration inside an @layer is found too.
  */
 function collectPropertyRules(container: RuleContainer, out: PropertyRuleRef[]): void {
 	const rules = container.cssRules;
@@ -72,9 +64,8 @@ function collectPropertyRules(container: RuleContainer, out: PropertyRuleRef[]):
 }
 
 /**
- * Deletes the given registrations from their containers. Grouped by container and deleted in
- * descending index order, so each deletion leaves the still-to-delete indices in that
- * container valid.
+ * Deletes registrations from their containers, grouped by container and in descending index
+ * order, so each deletion leaves the indices still to delete valid.
  */
 function deleteRules(refs: PropertyRuleRef[]): void {
 	const byContainer = new Map<RuleContainer, number[]>();
@@ -89,13 +80,13 @@ function deleteRules(refs: PropertyRuleRef[]): void {
 }
 
 /**
- * How many times a custom-property name is read in the sheet. A read is a `var()` reference to
- * it, or a mention of it in a transition or animation property list, where it names a property
- * to interpolate. A write, meaning a declaration that sets the name, is not a read and keeps no
- * registration alive, because a value nothing reads governs no paint. The name's own
- * `@property` line is not a read either. A registration with zero reads is therefore dead. The
- * token boundary rejects a name that is a prefix of another (`--tw-ring` inside
- * `--tw-ring-color`), because a hyphen is a name character, not a word boundary.
+ * How many times a custom-property name is read: a `var()` reference, or a mention in a
+ * transition or animation list, where it names a property to interpolate.
+ *
+ * A declaration that sets the name is a write, not a read, and keeps no registration alive,
+ * because a value nothing reads governs no paint. Its own `@property` line is not a read
+ * either. The token boundary rejects a name that prefixes another, `--tw-ring` inside
+ * `--tw-ring-color`, since a hyphen is a name character rather than a word boundary.
  */
 function nameReads(css: string, name: string): number {
 	const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

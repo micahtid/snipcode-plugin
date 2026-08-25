@@ -3,17 +3,17 @@
  *
  * Runs during capture, through the Host. The rest of the pipeline establishes fidelity by
  * measuring, and this is states doing the same. Copying authored :hover rules instead misses
- * what a framework buries out of reach (Tailwind compiles group-hover: to
- * :is(:where(.group):hover *)) and replays parent rules the resting bake already flattened.
+ * what a framework buries (Tailwind compiles `group-hover:` to `:is(:where(.group):hover *)`)
+ * and replays parent rules the resting bake already flattened.
  *
  * Forcing the state and reading what computes lets the engine resolve group-hover, descendant,
  * sibling, and inherited effects for free, with no selector grammar to decode. Each scoped
- * element is read on two layers, its own box and any ::before/::after that generates one,
- * which is where the common glow and underline idioms live.
+ * element is read on two layers, its own box and any generating pseudo, which is where the
+ * common glow and underline idioms live.
  *
- * Values are read under a temporary transitions-off shim, so each is the state's final value
- * rather than a mid-flight frame. The page is restored even on error. If the protocol is
- * unavailable the snip proceeds and reconcile falls back to copying rules.
+ * Reads run under a temporary transitions-off shim, so each value is the state's final one
+ * rather than a mid-flight frame, and the page is restored even on error. With no protocol the
+ * snip proceeds and reconcile falls back to copying rules.
  */
 import type { Captured, MeasuredAffected, MeasuredState, MeasuredStateDecl } from '../types';
 import { mediaApplies } from '../reconcile/match';
@@ -28,11 +28,10 @@ const FORCE_TAG = 'data-snipcode-force';
 const SHIM_TEXT = '*, *::before, *::after { transition: none !important; animation: none !important; }';
 
 /**
- * Work budget: measurement makes a CDP round-trip per trigger-and-state pair and reads computed styles
- * across every scoped element, so both scale with the snip. Beyond these bounds, such as a very
- * large snip like a whole site nav with hundreds of hover rules, measurement degrades to the copy
- * path, the prior behavior, rather than risk timing out. The bounds are counts, so the
- * measure-or-copy decision is a deterministic function of the page.
+ * Work budget. Measurement costs a CDP round-trip per trigger-and-state pair plus a computed
+ * read per scoped element, so both scale with the snip. Past these bounds, a whole site nav
+ * with hundreds of hover rules say, it degrades to the copy path rather than risk a timeout.
+ * The bounds are counts, so the measure-or-copy decision is deterministic.
  */
 const MAX_MEASURED_UNITS = 200;
 const MAX_MEASURED_SCOPE = 2000;
@@ -53,9 +52,8 @@ export async function measureInteractiveStates(captured: Captured): Promise<void
 		return;
 	}
 
-	// Bound the forcing work before doing any of it. Too many state units would mean too many CDP
-	// round-trips, so degrade to copying authored rules. This is counted before scopes are computed,
-	// since that walk is itself proportional to the snip.
+	// Bound the work before doing any of it: too many units means too many round-trips, so
+	// degrade to copying rules. Counted before scopes, since that walk also scales with the snip.
 	let unitCount = 0;
 	for (const states of triggers.values()) unitCount += states.size;
 	if (unitCount > MAX_MEASURED_UNITS) {
@@ -64,9 +62,8 @@ export async function measureInteractiveStates(captured: Captured): Promise<void
 		return;
 	}
 
-	// Each trigger reads only its re-anchorable scope of descendants + following siblings, so the
-	// resting baseline is needed for just those elements, not the whole subtree. A large snip
-	// with few triggers stays cheap.
+	// Each trigger reads only its re-anchorable scope, so the resting baseline covers those
+	// elements rather than the whole subtree. A large snip with few triggers stays cheap.
 	const scopes = new Map<Element, Element[]>();
 	const toBaseline = new Set<Element>();
 	for (const trigger of triggers.keys()) {
@@ -74,10 +71,10 @@ export async function measureInteractiveStates(captured: Captured): Promise<void
 		scopes.set(trigger, scope);
 		for (const el of scope) toBaseline.add(el);
 	}
-	// Likewise bound the computed-style reads. A generating ::before/::after adds a read at the
-	// baseline and under every forced state, so each is weighted toward the bound. A budget sized
-	// for element-only reads would otherwise be undercounted on a pseudo-heavy snip. The generating
-	// layers are resolved once here, since content does not depend on the shim, and reused for every read.
+	// Bound the computed reads too. A generating pseudo adds a read at the baseline and under
+	// every forced state, so it counts toward the bound; an element-only budget would
+	// undercount a pseudo-heavy snip. The layers resolve once here, since content does not
+	// depend on the shim, and are reused for every read.
 	const generating = new Map<Element, string[]>();
 	let scopeCost = 0;
 	for (const el of toBaseline) {
@@ -117,29 +114,27 @@ export async function measureInteractiveStates(captured: Captured): Promise<void
 		captured.warnings.push(`states: live measurement failed (${(err as Error).message}); falling back to copying authored rules`);
 		captured.measuredStates = null;
 	} finally {
-		// Detach, done in endForce, has already cleared every forced state. Force one synchronous
-		// recalc while the shim still suppresses transitions, so the page is materialized at rest
-		// before the shim is removed and the later resting bake reads only resting values.
+		// endForce has already cleared every forced state. One synchronous recalc while the shim
+		// still suppresses transitions materializes the page at rest, so the later resting bake
+		// reads resting values only.
 		void document.body?.offsetHeight;
 		shim.remove();
 	}
 }
 
 /**
- * Discovers which elements to force and the states to force on each, entirely from the page's
- * own state rules, never a guess about which elements "look interactive". For every rule
- * whose selector carries a dynamic interactive pseudo and whose @media gate applies, each
- * trigger bearer's structural selector is matched against the subtree. A match is an element
- * to force, keyed to the canonical set of pseudos to force together.
+ * Which elements to force and which states on each, read entirely from the page's own state
+ * rules rather than any guess about what looks interactive. Every rule carrying a dynamic
+ * pseudo, under an applying @media, has its bearer's structural selector matched against the
+ * subtree. A match is an element to force, keyed to the pseudos to force together.
  *
- * Bearers are grouped by their structural selector and resolved with one native
- * querySelectorAll per distinct selector rather than testing every rule against every element,
- * so discovery stays fast on a large snip.
+ * Bearers group by structural selector, so discovery is one querySelectorAll per distinct
+ * selector rather than every rule against every element.
  *
  * @returns each trigger element to the distinct pseudo-sets, in colon form, to force on it
  */
 function discoverTriggers(captured: Captured, subtree: Set<Element>): Map<Element, Map<string, string[]>> {
-	// Collect the distinct bearers, keyed by structural selector to pseudo-sets, across every state rule.
+	// The distinct bearers across every state rule, keyed by structural selector.
 	const byStructural = new Map<string, Map<string, string[]>>();
 	const unparseable = new Set<string>(); // Warn once per selector.
 	for (const rule of [...captured.foundationRules, ...captured.componentRules]) {
@@ -177,8 +172,8 @@ function discoverTriggers(captured: Captured, subtree: Set<Element>): Map<Elemen
 }
 
 /**
- * Resolves a structural selector to the elements in the snip subtree that match it, the root
- * included, since querySelectorAll only returns descendants, so the root is tested separately.
+ * The subtree elements a structural selector matches. querySelectorAll returns descendants
+ * only, so the root is tested separately.
  */
 function matchInSubtree(root: Element, structural: string, subtree: Set<Element>): Element[] {
 	const out: Element[] = [];
@@ -194,12 +189,12 @@ function matchInSubtree(root: Element, structural: string, subtree: Set<Element>
 }
 
 /**
- * Forces each trigger-and-state pair one at a time, reading the trigger scope's computed delta under
- * the force, so descendant/sibling/inherited effects are captured without parsing any
- * relationship. States are isolated: each is cleared before the next is forced.
+ * Forces each trigger-and-state pair one at a time and reads the scope's computed delta, so
+ * descendant, sibling, and inherited effects are captured with no relationship parsed. Each
+ * state is cleared before the next is forced.
  *
  * @param captured - warnings mutated in place
- * @returns one MeasuredState per trigger-and-state pair that changed at least one element
+ * @returns one MeasuredState per pair that changed at least one element
  */
 async function measureAll(
 	triggers: Map<Element, Map<string, string[]>>,
@@ -228,11 +223,10 @@ async function measureAll(
 }
 
 /**
- * The elements a forced trigger can restyle in a way the standalone emit can re-anchor: the
- * trigger itself, its descendants via a descendant combinator, and its following same-parent
- * siblings via a general-sibling combinator. A change anywhere else cannot be expressed by a
- * single combinator between two markers, so it would be dropped at emit. Not reading it keeps
- * the per-trigger cost proportional to the trigger's own scope rather than the whole snip.
+ * The elements a forced trigger can restyle in a way emit can re-anchor: itself, its
+ * descendants, and its following same-parent siblings. A change anywhere else needs more than
+ * one combinator between two markers and would be dropped at emit. Not reading it keeps the
+ * per-trigger cost proportional to that trigger's scope.
  */
 function triggerScope(trigger: Element, subtree: Set<Element>): Element[] {
 	const scope: Element[] = [trigger];
@@ -241,17 +235,16 @@ function triggerScope(trigger: Element, subtree: Set<Element>): Element[] {
 	return scope;
 }
 
-/** One scoped element's resting computed values, split by layer: the element box and each
- * generating pseudo, so a pseudo delta is diffed against its own baseline, not the element's. */
+/** One scoped element's resting values, split by layer. A pseudo delta then diffs against its
+ * own baseline rather than the element's. */
 interface MeasuredBaseline {
 	element: Map<string, string>;
 	pseudos: Map<string, Map<string, string>>;
 }
 
 /**
- * Reads one scoped element's resting computed values across its layers: the element box always,
- * plus each ::before/::after that generates a box at rest, passed in and pre-resolved. Run under
- * the shim, so the values match the forced reads they will be diffed against.
+ * One scoped element's resting values across its layers: the element box, plus each generating
+ * pseudo passed in pre-resolved. Read under the shim, so it matches the forced reads.
  */
 function readMeasuredLayers(el: Element, pseudos: string[] | undefined): MeasuredBaseline {
 	const layers: MeasuredBaseline = { element: readMeasuredProps(el), pseudos: new Map() };
@@ -260,12 +253,11 @@ function readMeasuredLayers(el: Element, pseudos: string[] | undefined): Measure
 }
 
 /**
- * Reads each scoped element's computed values under the currently-forced state and returns the
- * layers that differ from the resting baseline. The element box is one entry. Each generating
- * pseudo is its own entry diffed against its own baseline. The trigger itself is included when
- * one of its layers changed. A layer whose style is unchanged contributes nothing.
+ * The layers that differ from the resting baseline under the currently forced state. The
+ * element box is one entry and each generating pseudo is its own, diffed against its own
+ * baseline. An unchanged layer contributes nothing.
  *
- * @returns one entry per changed element-and-layer, with the changed properties and forced values
+ * @returns one entry per changed element-and-layer, with its changed properties
  */
 function collectAffected(scope: Element[], baseline: Map<Element, MeasuredBaseline>): MeasuredAffected[] {
 	const affected: MeasuredAffected[] = [];
@@ -290,10 +282,8 @@ function diffMeasured(rest: Map<string, string>, forced: Map<string, string>): M
 }
 
 /**
- * The ::before/::after layers that actually generate a box on this element at rest, meaning
- * content is not `none`, the same test the resting pseudo pass (features/pseudo.ts) uses to decide a pseudo is
- * worth shipping. Only these layers carry a resting rule for a hover override to ride on, so a
- * pseudo that does not generate at rest is not measured.
+ * The pseudo layers that generate a box at rest, the same test features/pseudo.ts uses. Only
+ * these carry a resting rule for a hover override to ride on, so the rest go unmeasured.
  */
 function generatingPseudos(el: Element): string[] {
 	const out: string[] = [];
@@ -305,12 +295,10 @@ function generatingPseudos(el: Element): string[] {
 }
 
 /**
- * Reads the measurable computed properties of one element layer into a property->value map. The
- * indexed enumeration is the engine's own stable property list, so the read order, and thus
- * the recorded artifact, is deterministic. Excludes the timing metadata the shim
- * deliberately suppresses, the transition and animation longhands, which would otherwise read
- * as a spurious change, and custom properties, whose resolved properties are measured
- * directly, so no var() ever needs resolving downstream.
+ * The measurable computed properties of one layer, as a property to value map. Indexed
+ * enumeration is the engine's own stable list, so the read order and the artifact are
+ * deterministic. It excludes the timing metadata the shim suppresses, which would read as a
+ * spurious change, and custom properties, whose resolved values are measured directly.
  */
 function readMeasuredProps(el: Element, pseudo?: string): Map<string, string> {
 	const cs = pseudo ? getComputedStyle(el, pseudo) : getComputedStyle(el);
@@ -333,12 +321,10 @@ function isMeasurableProperty(name: string): boolean {
 }
 
 /**
- * Whether a property is a flow-relative, or logical, alias whose physical equivalent
- * getComputedStyle also enumerates with the same value: `inline-size`/`width`,
- * `padding-inline-start`/`padding-left`, `inset-block-end`/`bottom`, and so on. The physical form is
- * always co-measured and universally supported, so reading the logical alias too would emit a
- * redundant second declaration of the same change. The writing mode is frozen in the snip, so
- * the physical form is a faithful stand-in.
+ * Whether a property is a logical alias whose physical equivalent getComputedStyle enumerates
+ * with the same value, such as `inline-size` against `width`. The physical form is always
+ * co-measured, so reading the alias too would emit the same change twice. The snip's writing
+ * mode is frozen, so the physical form stands in faithfully.
  */
 function isLogicalAlias(name: string): boolean {
 	return (
