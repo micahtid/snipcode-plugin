@@ -1,6 +1,6 @@
 {
   "name": "snipcode",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Deterministic eyes and hands for AI agents: load a page, harvest its elements, extract any one into clean self-contained code, or read a whole-page design schema. Zero LLM calls, zero API keys.",
   "license": "MIT",
   "author": {
@@ -42,7 +42,7 @@
     "CHANGELOG.md"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "scripts": {
     "build:core": "vite build --config core/vite.config.ts",

@@ -28,6 +28,10 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: npm
 
+      # Node 20 ships npm 10, and trusted publishing mints its token over OIDC, which
+      # needs npm 11.5.1 or newer. Without this the publish step falls back to NPM_TOKEN.
+      - run: npm install -g npm@latest
+
       - run: npm ci
 
       # Keyed on the playwright version in the lockfile, matching ci.yml.

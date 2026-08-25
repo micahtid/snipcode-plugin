@@ -14,7 +14,7 @@
 <p align="center">
   <img src="https://img.shields.io/npm/v/snipcode?style=flat-square&color=111111&label=npm" alt="npm">
   <img src="https://img.shields.io/badge/claude%20code-plugin-111111?style=flat-square" alt="Claude Code plugin">
-  <img src="https://img.shields.io/badge/node-%E2%89%A5%2018-111111?style=flat-square" alt="Node 18 or newer">
+  <img src="https://img.shields.io/badge/node-%E2%89%A5%2020-111111?style=flat-square" alt="Node 20 or newer">
   <img src="https://img.shields.io/badge/license-MIT-111111?style=flat-square" alt="MIT license">
 </p>
 

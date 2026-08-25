@@ -1,6 +1,6 @@
 {
   "name": "snipcode",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Extract a component from any live web page into clean self-contained code, or read a whole-page design schema. Deterministic, zero LLM calls.",
   "author": {
     "name": "micahtid",
