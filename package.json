@@ -1,7 +1,7 @@
 {
   "name": "snipcode",
   "version": "0.2.0",
-  "description": "Deterministic eyes and hands for AI agents: load a page, harvest its elements, extract any one into clean self-contained code, or read a whole-page design schema. Zero LLM calls, zero API keys.",
+  "description": "Your agent just got scissors. Cut any element from a live web page into clean code, or take the whole page's design. No LLM calls, no API keys.",
   "license": "MIT",
   "author": {
     "name": "micahtid",
