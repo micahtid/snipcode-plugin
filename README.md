@@ -62,7 +62,7 @@ Installing the plugin does not bring the CLI along with it.
 Inside Claude Code:
 
 ```
-/plugin marketplace add micahtid/snip-code-cli
+/plugin marketplace add micahtid/snipcode-plugin
 /plugin install snipcode@snipcode
 ```
 
@@ -202,7 +202,7 @@ every operating system resolves `system-ui` to a font with different metrics. A 
 committed baseline is reported and skipped rather than failed.
 
 Contributions are welcome. [CONTRIBUTING.md](./CONTRIBUTING.md) has the house rules the suite
-enforces. Open an issue at https://github.com/micahtid/snip-code-cli/issues to report a bug or
+enforces. Open an issue at https://github.com/micahtid/snipcode-plugin/issues to report a bug or
 suggest a feature, and see [SECURITY.md](./SECURITY.md) to report a vulnerability privately.
 
 <br>

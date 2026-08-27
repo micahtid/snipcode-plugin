@@ -5,7 +5,7 @@
 Report privately, not as a public issue.
 
 Use GitHub's private vulnerability reporting:
-[Report a vulnerability](https://github.com/micahtid/snip-code-cli/security/advisories/new).
+[Report a vulnerability](https://github.com/micahtid/snipcode-plugin/security/advisories/new).
 That opens a private advisory only the maintainers can see. If the form is unavailable, open a
 public issue titled "security contact request" with no details, and a maintainer will reply with
 a private channel.
