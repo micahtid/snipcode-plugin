@@ -29,8 +29,8 @@ jobs:
           cache: npm
 
       # Node 20 ships npm 10, and trusted publishing mints its token over OIDC, which
-      # needs npm 11.5.1 or newer. Without this the publish step falls back to NPM_TOKEN.
-      - run: npm install -g npm@latest
+      # needs npm 11.5.1 or newer. Pinned to the 11 line because npm 12 requires node 22.
+      - run: npm install -g npm@^11
 
       - run: npm ci
 
