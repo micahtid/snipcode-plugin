@@ -10,9 +10,9 @@
   "homepage": "https://snipcode.micahtid.com",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/micahtid/snip-code-cli.git"
+    "url": "git+https://github.com/micahtid/snipcode-plugin.git"
   },
-  "bugs": "https://github.com/micahtid/snip-code-cli/issues",
+  "bugs": "https://github.com/micahtid/snipcode-plugin/issues",
   "keywords": [
     "claude-code",
     "claude-code-plugin",

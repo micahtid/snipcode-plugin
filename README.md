@@ -62,7 +62,7 @@ Installing the plugin does not bring the CLI along with it.
 Inside Claude Code:
 
 ```
-/plugin marketplace add micahtid/snip-code-cli
+/plugin marketplace add micahtid/snipcode-plugin
 /plugin install snipcode@snipcode
 ```
 
@@ -125,30 +125,6 @@ Two things worth knowing.
 
 <br>
 
-## Errors
-
-Every failure is the same envelope, `{ error: { code, message } }`, with exit code 1. The code is
-the part to branch on.
-
-| Code | Means |
-| --- | --- |
-| `MISSING_URL` | No `<url>` was given. |
-| `BAD_URL` | The `<url>` was not http or https. A bare host is fine (`example.com` loads as `https://example.com`); `file:`, `data:`, and the rest are refused, so SnipCode cannot be aimed at a local file. |
-| `UNKNOWN_COMMAND` | Not one of `candidates`, `extract`, `schema`. |
-| `UNKNOWN_FLAG` | A flag that does not exist, usually a typo. Names the flag. |
-| `MISSING_SELECTOR` | `extract` was called without `--selector`. |
-| `BAD_FORMAT` | `--format` was not one of `html`, `jsx`, `tailwind`, `vue`. |
-| `BAD_EXPECT_RECT` | `--expect-rect` was not JSON with all of `x`, `y`, `w`, `h` as numbers. |
-| `SELECTOR_INVALID` | The selector is not valid CSS. |
-| `SELECTOR_NO_MATCH` | The selector matched nothing on the loaded page. |
-| `PAGE_SHIFTED` | The element no longer matches `--expect-text` or `--expect-rect`. Re-run `candidates`. |
-| `EXTRACT_FAILED` | The pipeline could not finish on that element. |
-| `BLOCKED` | The page is a bot wall or consent gate. A screenshot is written so you can see it. |
-| `RUNNER_ERROR` | The browser could not load the page: DNS, timeout, or a missing Chromium. |
-| `FATAL` | Anything unhandled. |
-
-<br>
-
 ## How The Code Is Organized
 
 ```
@@ -202,7 +178,7 @@ every operating system resolves `system-ui` to a font with different metrics. A 
 committed baseline is reported and skipped rather than failed.
 
 Contributions are welcome. [CONTRIBUTING.md](./CONTRIBUTING.md) has the house rules the suite
-enforces. Open an issue at https://github.com/micahtid/snip-code-cli/issues to report a bug or
+enforces. Open an issue at https://github.com/micahtid/snipcode-plugin/issues to report a bug or
 suggest a feature, and see [SECURITY.md](./SECURITY.md) to report a vulnerability privately.
 
 <br>
