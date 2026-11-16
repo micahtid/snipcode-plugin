@@ -29,64 +29,49 @@
 
 ## What It Does
 
-SnipCode reads what a page is actually made of, and cuts any single element out of it as clean
-code. This is the Claude Code plugin, so your agent does the pointing.
+SnipCode extracts designs and components from any live web page. It gives your agent two
+capabilities:
 
-It hands an agent two things it cannot get on its own.
+1. **Extract a design.** Get a page's design tokens (colors, typography, spacing, border radii,
+   shadows) and a layout blueprint.
 
-1. **Take a whole design.** Name a page. Back come its real design tokens, the colors, fonts,
-   spacing, radii, and shadows, plus a layout blueprint. Your agent redesigns against a
-   measurement instead of a memory.
+2. **Extract a component.** Get any element as self-contained code: markup plus a single
+   stylesheet, with fonts and images inlined. Supports HTML, JSX, Tailwind, and Vue.
 
-2. **Take a component.** Name a page and an element. Back comes self contained code: the markup
-   plus one stylesheet, fonts and images inlined. HTML, JSX, Tailwind, or Vue.
+SnipCode uses the browser's computed styles, not the source CSS, so the output matches what
+renders on screen. It makes no LLM calls, leaving every decision to your agent.
 
-SnipCode reads the styles the browser actually painted, not the ones written in the markup, so
-the result matches what you saw.
-
-Nothing goes to a model. Every judgment call stays with the agent: which element to take, what to
-name it, how to make it yours.
-
-There is also a [Chrome extension](https://github.com/micahtid/snip-code) if you would rather
-point at elements yourself.
+Check out the [Chrome extension](https://github.com/micahtid/snip-code) too.
 
 <br>
 
 ## Installing
 
-Two pieces, because they ship on different channels. The Claude Code marketplace serves the skill.
-npm publishes the CLI that the skill shells out to.
-
-Installing the plugin does not bring the CLI along with it.
-
-Inside Claude Code:
+Install the plugin in Claude Code:
 
 ```
 /plugin marketplace add micahtid/snipcode-plugin
 /plugin install snipcode@snipcode
 ```
 
-Then the CLI and the browser, once per machine:
+Then install the CLI and Chromium:
 
 ```bash
-npm install -g snipcode           # Or let the skill reach it as: npx snipcode
-npx playwright install chromium   # One time download
+npm install -g snipcode           # Optional: the skill falls back to npx
+npx playwright install chromium
 ```
-
-Chromium is its own step because Playwright ships the driver, not the browser. A "command not
-found" or a missing browser error means one of those two lines, not a broken page.
 
 <br>
 
 ## Using It
 
-Just ask.
+Describe what you want, for example:
 
 > Make this landing page look like linear.app.
 
 > Snip the pricing card off stripe.com/pricing as Tailwind.
 
-Your agent finds the element, drives the CLI, and hands back the code. Behind those two sentences:
+Your agent picks the element and runs the CLI:
 
 ```bash
 snipcode schema https://linear.app
@@ -94,56 +79,35 @@ snipcode candidates https://stripe.com/pricing
 snipcode extract https://stripe.com/pricing --selector ".PricingCard" --format tailwind
 ```
 
-The first command measures a whole design. The second maps a page's elements. The third cuts the
-one your agent picked.
-
-Three commands, and that is the entire surface.
-
 <br>
 
 ## Commands
 
-Every command prints one JSON object to stdout. Errors are JSON too, `{ error: { code, message } }`
-with a nonzero exit code, so an agent never has to read prose.
+Every command writes one JSON object to stdout, including errors (`{ error: { code, message } }`
+with a nonzero exit code). Files go to `--out` (default: `./snipcode-out`).
 
-Files land under `--out`, which defaults to `./snipcode-out`.
-
-| Command | What it does | Writes |
+| Command | Description | Output |
 | --- | --- | --- |
-| `schema <url>` | The blueprint. Design tokens and page layout, stamped with the version and time that made them. | `schema.json` and `schema.md`. |
-| `candidates <url>` | The map. Every element worth aiming at: controls, headings, landmarks, and one stand in per repeated block. Each one carries a durable selector, its text, and its rect. | A full page screenshot. |
-| `extract <url> --selector "<css>"` | The cut. One element, one self contained artifact. Add `--format html\|jsx\|tailwind\|vue`. | Markup plus a stylesheet. |
+| `schema <url>` | Returns design tokens and page layout. | `schema.json`, `schema.md` |
+| `candidates <url>` | Lists targetable elements, each with a stable selector, text content, and bounding box. | Full-page screenshot |
+| `extract <url> --selector "<css>"` | Extracts one element. Set the format with `--format html\|jsx\|tailwind\|vue`. | Markup and stylesheet |
 
-Two things worth knowing.
-
-- Feed `--expect-text` and `--expect-rect` from a candidate into `extract`. If the page moved under
-  you, it fails loudly with `PAGE_SHIFTED` rather than cutting the wrong element quietly.
-
-- Site builders like Framer and Wix keep their real styling out of the DOM. SnipCode will not guess
-  at it. It hands back a screenshot crop of the element instead, so your agent can rebuild it by
-  eye, which is the one job the pipeline cannot do.
+Site builders like Framer and Wix don't expose their styling in the DOM, so SnipCode returns a
+screenshot crop for your agent to rebuild visually.
 
 <br>
 
 ## How The Code Is Organized
 
 ```
-core/            The in page pipeline, bundled to one injectable IIFE
-runner/          The Node host: Playwright Chromium, navigation, waits, injection
-cli/             Arg parsing, command dispatch, schema.md rendering, the file generator
-instructions/    One source of agent facing guidance, reused in the skill, --help, and JSON output
-skill/           The Claude Code plugin: skill files plus .claude-plugin/plugin.json
-.claude-plugin/  marketplace.json, which points the marketplace at skill/
-test/            End to end CLI tests, unit tests, golden snapshots, and the fidelity bench
+core/            In-page extraction pipeline, bundled as a single injectable IIFE
+runner/          Node host: Playwright Chromium, navigation, waits, and script injection
+cli/             Argument parsing, command dispatch, schema.md rendering, and file output
+instructions/    Agent-facing guidance, shared by the skill, --help, and JSON output
+skill/           Claude Code plugin: skill files and .claude-plugin/plugin.json
+.claude-plugin/  Marketplace manifest (marketplace.json), pointing at skill/
+test/            End-to-end, unit, golden snapshot, and fidelity tests
 ```
-
-`core/` knows only a `Host` interface: CDP commands and cross origin fetch. The runner implements
-that interface over a Playwright `CDPSession`. Holding that line is what keeps `core/` free of
-Playwright.
-
-Both `skill/skills/*/SKILL.md` and `skill/.claude-plugin/plugin.json` are generated, from
-`instructions/guidance.ts` and `package.json`. The test suite fails if either drifts from its
-source, so neither is edited by hand.
 
 <br>
 
@@ -152,34 +116,22 @@ source, so neither is edited by hand.
 ```bash
 npm install
 npx playwright install chromium
-npm run verify          # The whole gate: typecheck, build, unit, end to end, golden, fidelity
+npm run verify          # Runs the full check: typecheck, build, unit, end-to-end, golden, fidelity
 ```
 
-`npm run verify` is what CI runs, so a green local run means a green pull request. The pieces run
-on their own too:
+CI runs `npm run verify`. Each step also runs on its own:
 
 ```bash
 npm run typecheck       # Typechecks core (browser) and runner plus CLI (Node)
-npm run build           # Builds the core IIFE plus the Node CLI bundle
-npm run gen:skill       # Rebuilds the skill files and the plugin manifest
-npm test                # Builds, then unit, end to end, golden, and fidelity
-npm run test:golden -- --update       # Rewrites the golden baselines for this platform
-npm run verify:comments -- --record   # Run before a comment only pass, then again after
-
-claude --plugin-dir ./skill           # Loads the plugin locally so you can test it
+npm run build           # Builds the core IIFE and the Node CLI bundle
+npm run gen:skill       # Regenerates the skill files and the plugin manifest
+npm test                # Builds, then runs unit, end-to-end, golden, and fidelity tests
+claude --plugin-dir ./skill  # Loads the plugin locally for testing
 ```
 
-The suite also holds the house rules: no module unreachable from an entry point, no em or en
-dashes, a comment share ceiling per directory, and a size warning on any shipped module past 400
-lines.
-
-Golden snapshots live under `test/golden/<platform>/` because they carry text box geometry, and
-every operating system resolves `system-ui` to a font with different metrics. A platform with no
-committed baseline is reported and skipped rather than failed.
-
-Contributions are welcome. [CONTRIBUTING.md](./CONTRIBUTING.md) has the house rules the suite
-enforces. Open an issue at https://github.com/micahtid/snipcode-plugin/issues to report a bug or
-suggest a feature, and see [SECURITY.md](./SECURITY.md) to report a vulnerability privately.
+Contributions are welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md) for project conventions,
+report bugs or request features in [issues](https://github.com/micahtid/snipcode-plugin/issues),
+and report vulnerabilities privately through [SECURITY.md](./SECURITY.md).
 
 <br>
 
